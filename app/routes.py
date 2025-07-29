@@ -3,9 +3,11 @@ import os
 import time
 
 import jax
+import jax.numpy as jnp
 from flask import render_template, request
 from markupsafe import Markup
 
+import environment
 from app import app
 from config import BoardShapes, RENDER_CONFIG
 from environment import LudaxEnvironment
@@ -27,6 +29,63 @@ def cube_round(q, r, s):
         s_round = -q_round - r_round
 
     return q_round, r_round, s_round
+
+
+def display_board(state, env):
+
+    # Display the board
+    if env.game_info.board_shape != BoardShapes.HEXAGON:
+        shaped_board = state.game_state.board.reshape(env.obs_shape[:2])
+        for row in shaped_board:
+            pretty_row = ' '.join(str(cell) for cell in row + 1)
+            print(pretty_row.replace('0', '.').replace('1', 'X').replace('2', 'O'))
+        print()
+        if hasattr(state.game_state, "connected_components"):
+            shaped_components = state.game_state.connected_components.reshape(env.obs_shape[:2])
+            print(shaped_components)
+    else:
+        print(f"Observation shape: {env.obs_shape}")
+        print(f"Board: {state.game_state.board}")
+        if hasattr(state.game_state, "connected_components"):
+            print(f"Components: {state.game_state.connected_components}")
+
+def count(state):
+    board = state.game_state.board  # ints, shape (...cells...)
+    labels = state.game_state.connected_components  # same shape as board, int labels
+    player = state.game_state.current_player
+
+    # Keep labels only on the current player's stones; 0 elsewhere.
+    # ToDo why !=
+    flat = jnp.where(board != player, labels, 0).ravel().astype(jnp.int32)
+
+    # Count presence of each label. Use a static length: #cells + 1 (for label 0).
+    n_cells = flat.shape[0]  # static at trace time
+    counts = jnp.bincount(flat, length=n_cells + 1)
+
+    # Number of non‑empty component labels, excluding label 0.
+    num_components = jnp.count_nonzero(counts[1:] > 0)
+    return num_components
+
+def debug_state(state: environment.State, env: environment.LudaxEnvironment):
+    """Debug the current state of the game."""
+    print(f"state.global_step_count: {state.global_step_count}")
+    print(f"state.first_player: {state.first_player}")
+    print(f"state.winner: {state.winner}")
+    print(f"state.terminated: {state.terminated}")
+    print(f"state.truncated: {state.truncated}")
+    print(f"state.mover_reward: {state.mover_reward}")
+    print(f"state.legal_action_mask: {state.legal_action_mask}")
+    print(f"state.observation: \n{state.observation}")
+
+    print(f"state.game_state: \n{state.game_state}")
+
+
+    if hasattr(state.game_state, "connected_components"):
+        print(f"Connected components: {jnp.unique(jnp.where(state.game_state.board != state.game_state.current_player, state.game_state.connected_components, 0)).size - 1}")
+        print(count(state))
+    #     print(f"Connected components: {state.game_state.connected_components}")
+
+    # display_board(state, env)
 
 @app.route('/') 
 def index():
@@ -77,21 +136,6 @@ def step():
 
     STATE = ENV.step(STATE, action_idx)
 
-    if ENV.game_info.board_shape != BoardShapes.HEXAGON:
-        shaped_board = STATE.game_state.board.reshape(ENV.obs_shape[:2])
-        for row in shaped_board:
-            pretty_row = ' '.join(str(cell) for cell in row + 1)
-            print(pretty_row.replace('0', '.').replace('1', 'X').replace('2', 'O'))
-        print()
-        if hasattr(STATE.game_state, "connected_components"):
-            shaped_components = STATE.game_state.connected_components.reshape(ENV.obs_shape[:2])
-            print(shaped_components)
-    else:
-        print(f"Observation shape: {ENV.obs_shape}")
-        print(f"Board: {STATE.game_state.board}")
-        if hasattr(STATE.game_state, "connected_components"):
-            print(f"Components: {STATE.game_state.connected_components}")
-
     HANDLER.render(STATE)
     time.sleep(0.1)
 
@@ -103,8 +147,11 @@ def step():
     else:
         scores = [0.0, 0.0]
 
+    print("\n" + "-" * 40)
     print(f"Current player: {STATE.game_state.current_player}")
-    print(f"Scores: {scores}")
+    print(f"Scores: {scores}\n")
+
+    debug_state(STATE, ENV)
 
     return {"svg": svg_data, "terminated": terminated, "winner": winner, "current_player": int(STATE.game_state.current_player),
             "scores": scores}
@@ -121,6 +168,6 @@ def reset():
     HANDLER.render(STATE)
     time.sleep(0.1)
 
-    svg_data = open(f"renders/test.svg").read()
+    svg_data = ""
 
     return {"svg": svg_data}
