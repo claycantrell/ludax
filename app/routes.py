@@ -4,7 +4,7 @@ import time
 
 import jax
 import jax.numpy as jnp
-from flask import render_template, request
+from flask import render_template, request, jsonify
 from markupsafe import Markup
 
 import environment
@@ -125,13 +125,37 @@ def step():
 
     action_idx = HANDLER.pixel_to_action((x, y))
 
+    # Check if the action is legal
+    legal_action_mask = STATE.legal_action_mask
+
     # Temporary workaround: if there is only one legal action, then
     # we always take it
-    legal_action_mask = STATE.legal_action_mask
     if legal_action_mask.sum() == 1:
         action_idx = int(legal_action_mask.argmax())
         print(f"Only one legal action available, taking action {action_idx}!")
     else:
+        # Check if the selected action is legal
+        if action_idx >= len(legal_action_mask) or not legal_action_mask[action_idx]:
+            print(f"Illegal action selected: {action_idx}")
+            # Return current state with an error message
+            HANDLER.render(STATE)
+            time.sleep(0.1)
+            svg_data = open(RENDER_CONFIG['output_filename']).read()
+
+            if hasattr(STATE.game_state, "scores"):
+                scores = list(map(float, STATE.game_state.scores))
+            else:
+                scores = [0.0, 0.0]
+
+            return jsonify({
+                "svg": svg_data,
+                "terminated": bool(STATE.terminated),
+                "winner": int(STATE.winner),
+                "current_player": int(STATE.game_state.current_player),
+                "scores": scores,
+                "error": "Illegal move! Please select a valid action."
+            })
+
         action = HANDLER.action_indices[action_idx]
 
     STATE = ENV.step(STATE, action_idx)

@@ -22,6 +22,24 @@
             });
 
             var data = await response.json();
+
+            // Check if there was an error (illegal move)
+            if (data.hasOwnProperty('error')) {
+                // Display error message
+                document.getElementById('error_message').textContent = data.error;
+                document.getElementById('error_message').style.display = 'block';
+
+                // Hide error message after 3 seconds
+                setTimeout(() => {
+                    document.getElementById('error_message').style.display = 'none';
+                }, 3000);
+
+                return; // Don't process the move
+            }
+
+            // Clear any previous error messages
+            document.getElementById('error_message').style.display = 'none';
+
             document.getElementById('game_board').innerHTML = data['svg'];
             document.getElementById("game_board").innerHTML += "";
 
@@ -69,16 +87,28 @@
             }
         }
     </script>  
-  
-</head>  
-<body>  
+    <style>
+        #error_message {
+            display: none;
+            color: red;
+            font-weight: bold;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #ffeeee;
+            border: 1px solid #ffcccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
     <h1>Game Rendering</h1>  
     <div id="svg_container">
         {{ game_svg }}
     </div>  
+    <div id="error_message"></div>
     <h2 id="cur_player">Current player: Player 1</h2>
     <h2 id="p1_score">Player 1 score: 0</h2>
     <h2 id="p2_score">Player 2 score: 0</h2>
 </body>
 
-</html> 
+</html>
