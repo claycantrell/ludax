@@ -67,20 +67,12 @@ def one_ply_policy(step_b, heuristic=None):
     return jax.jit(one_step_lookahead_f)
 
 
-def mcts_policy(step_b, heuristic=None, num_simulations=100):
-    """
-    MCTX-based implementation
-    """
-
-    if heuristic is None:
-        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
-
-
+def ludax_recurrent(heuristic):
 
     def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state):
         """
         Recurrent function for MCTS. This function is called at each step of the MCTS search to update the state based on the action taken.
-        :param model: The MCTS model.
+        :param model: The MCTX model parameters (not used here, but required by the interface).
         :param rng_key: JAX PRNG key.
         :param action: Action to take.
         :param state: Current state of the game.
@@ -93,7 +85,7 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
 
         rewards = state.rewards
         reward = rewards[jnp.arange(rewards.shape[0]), state.game_state.current_player]
-        value = -heuristic(state)
+        value = heuristic(state) # TODO why not -heuristic(state)? Isn't it the next player's perspective?
         value = jnp.where(state.terminated, 0.0, value)
         discount = -1.0 * jnp.ones_like(value)
         discount = jnp.where(state.terminated, 0.0, discount)
@@ -108,6 +100,16 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
         )
         return recurrent_fn_output, state
 
+    return jax.jit(recurrent_fn)
+
+
+def mcts_policy(step_b, heuristic=None, num_simulations=100):
+    """
+    MCTX-based implementation
+    """
+
+    if heuristic is None:
+        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
 
     def mcts_policy_f(state_b, key):
         """
@@ -117,8 +119,8 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
         :return: Selected action.
         """
         root = mctx.RootFnOutput(
-            prior_logits=jnp.log(state_b.legal_action_mask.astype(jnp.float32)),
-            value=-heuristic(state_b),
+            prior_logits=state_b.legal_action_mask.astype(jnp.float32),
+            value=heuristic(state_b),
             embedding=state_b
         )
 
@@ -127,7 +129,7 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
             params=None,
             rng_key=key,
             root=root,
-            recurrent_fn=recurrent_fn,
+            recurrent_fn=ludax_recurrent(heuristic=heuristic),
             num_simulations=num_simulations,
             # max_depth=200,
             dirichlet_fraction=0.0,
@@ -193,19 +195,22 @@ if __name__ == "__main__":
     # GAME_PATH = "games/tic_tac_toe.ldx"
     GAME_PATH = "games/hex.ldx"
     # GAME_PATH = "games/connect_four.ldx"
+    # GAME_PATH = "games/reversi.ldx"
 
     env = LudaxEnvironment(GAME_PATH)
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=10, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=100, seed=42)
 
     # AGENT1 = random_policy()
-    # AGENT1 = one_ply_policy(step_b)
+    AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, distance_heuristic)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
-    AGENT1 = mcts_policy(step_b)
+    # AGENT1 = mcts_policy(step_b, num_simulations=100)
 
-    AGENT2 = random_policy()
+    # AGENT2 = random_policy()
+    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
+    # AGENT2 = mcts_policy(step_b, num_simulations=10)
     # AGENT2 = one_ply_policy(step_b)
 
 

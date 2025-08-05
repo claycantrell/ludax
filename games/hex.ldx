@@ -1,4 +1,4 @@
-(game "Tic-Tac-Toe" 
+(game "Hex"
     (players 2)
     (equipment 
         (board (hex_rectangle 11 11))
