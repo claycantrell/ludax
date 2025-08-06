@@ -67,7 +67,7 @@ def one_ply_policy(step_b, heuristic=None):
     return jax.jit(one_step_lookahead_f)
 
 
-def ludax_recurrent(heuristic):
+def ludax_recurrent(step_b, heuristic):
 
     def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state):
         """
@@ -129,7 +129,7 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
             params=None,
             rng_key=key,
             root=root,
-            recurrent_fn=ludax_recurrent(heuristic=heuristic),
+            recurrent_fn=ludax_recurrent(step_b, heuristic=heuristic),
             num_simulations=num_simulations,
             # max_depth=200,
             dirichlet_fraction=0.0,
@@ -139,6 +139,74 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
         return policy_output.action.astype(jnp.int16)
 
     return jax.jit(mcts_policy_f)
+
+def ludax_recurrent2(step_b, heuristic):
+    def recurrent_fn(params, rng_key, action, emb):
+        # Embedding carries (state, root_player)
+        state, root_player = emb
+
+        next_state = step_b(state, action.astype(jnp.int16))
+
+        # Reward from the root player's perspective
+        # If your env stores per-player rewards, pick the root_player's component.
+        r = next_state.rewards[jnp.arange(next_state.rewards.shape[0]), root_player]
+
+        # Heuristic for the side to move, flipped to root perspective
+        to_play = next_state.game_state.current_player
+        sign = jnp.where(to_play == root_player, 1.0, -1.0)
+        v = sign * heuristic(next_state)
+
+        # Terminal handling
+        v = jnp.where(next_state.terminated, 0.0, v)
+        d = jnp.where(next_state.terminated, 0.0, 1.0)  # 1.0 non-terminal, 0.0 terminal
+
+        # Uniform logits over legal moves
+        logits = jnp.where(next_state.legal_action_mask, 0.0, -jnp.inf)
+
+        out = mctx.RecurrentFnOutput(
+            reward=r,
+            discount=d,
+            prior_logits=logits,
+            value=v,
+        )
+        # Keep carrying root_player down the tree
+        return out, (next_state, root_player)
+    return jax.jit(recurrent_fn)
+
+def gumbel_policy(step_b, heuristic=None, num_simulations=100):
+    if heuristic is None:
+        heuristic = lambda s: jnp.zeros(s.legal_action_mask.shape[0], dtype=jnp.float32)
+
+    def policy_f(state_b, key):
+        # Root player per batch element
+        root_player = state_b.game_state.current_player  # shape [B]
+
+        # Root priors: 0 on legal, -inf on illegal
+        root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
+
+        root = mctx.RootFnOutput(
+            prior_logits=root_logits,
+            value=jnp.where(state_b.game_state.current_player == root_player, 1.0, -1.0) * heuristic(state_b),
+            embedding=(state_b, root_player),
+        )
+
+        num_actions = state_b.legal_action_mask.shape[1]
+
+        # Option A: Gumbel MuZero – ensures each legal root action is expanded once
+        policy_output = mctx.gumbel_muzero_policy(
+            params=None,
+            rng_key=key,
+            root=root,
+            recurrent_fn=ludax_recurrent2(step_b, heuristic),
+            num_simulations=num_actions,
+            max_num_considered_actions=num_actions,
+            invalid_actions=~state_b.legal_action_mask,
+            # (leave qtransform default unless you know you need something else)
+        )
+
+        return policy_output.action.astype(jnp.int16)
+
+    return jax.jit(policy_f)
 
 
 def initialize(env: LudaxEnvironment, batch_size: int = 10 ** 3, seed: int = 0) -> tuple:
@@ -191,32 +259,36 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     return (wins, draws, losses), key
 
 
-if __name__ == "__main__":
+def main():
     # GAME_PATH = "games/tic_tac_toe.ldx"
     GAME_PATH = "games/hex.ldx"
     # GAME_PATH = "games/connect_four.ldx"
     # GAME_PATH = "games/reversi.ldx"
+    # GAME_PATH = "games/complexity_demo.ldx"
 
     env = LudaxEnvironment(GAME_PATH)
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=100, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=10, seed=42)
 
     # AGENT1 = random_policy()
-    AGENT1 = one_ply_policy(step_b)
+    # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, distance_heuristic)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
-    # AGENT1 = mcts_policy(step_b, num_simulations=100)
+    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=1000)
 
     # AGENT2 = random_policy()
-    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
-    # AGENT2 = mcts_policy(step_b, num_simulations=10)
+    # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
+    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=1000)
     # AGENT2 = one_ply_policy(step_b)
-
 
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
     (w2, d2, l2), key = evaluate_policy(AGENT2, AGENT1, state_b, step_b, key)
 
     print(f"Evaluating {GAME_PATH}:")
-    print(f"Agent 1 - Rate:{(w1+l2) / (w1+l2 + l1+w2) :.4f}, Wins: {w1}+{l2}, Draws: {d1}+{d2}")
-    print(f"Agent 2 - Rate:{(l1+w2) / (w1+l2 + l1+w2) :.4f}, Wins: {l1}+{w2}, Draws: {d1}+{d2}")
+    print(f"Agent 1 - Rate:{(w1 + l2) / (w1 + l2 + l1 + w2) :.4f}, Wins: {w1}+{l2}, Draws: {d1}+{d2}")
+    print(f"Agent 2 - Rate:{(l1 + w2) / (w1 + l2 + l1 + w2) :.4f}, Wins: {l1}+{w2}, Draws: {d1}+{d2}")
+
+
+if __name__ == "__main__":
+    main()
