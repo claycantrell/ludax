@@ -15,6 +15,7 @@ Ludax is a domain specific language for board games that compiles into hardware-
 - It doesn't feel intuitive that the mover_reward is in `state.mover_reward` but the current_player is hidden in `state.game_state.current_player`. Is game_state supposed to represent internal variables who's API can change from game to game? If so, it should not be part of the public API.
 - We need to make a decision about whether we intend to support non-two player games and games where the same player can play multiple times in a row. If we don't support this, we can simplify the API, e.g. by guaranteeing that if global step is even, the current player is P1 (unless the game is over, but then it doesn't matter what action you take).
 - We really need to demonstrate that fp16 is faster than fp32 on our target hardware. If it isn't then we should stick to fp32 since that's what most other libraries use.
+- config.State should inherit from pgx_core.PGXState no?
 
 ## Installation
 Ludax requires a Python version of at least `3.11`. First, install the JAX library (see [here](https://docs.jax.dev/en/latest/installation.html) for instructions). Then, create a new Python environment and run

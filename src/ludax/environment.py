@@ -9,7 +9,7 @@ from .config import Array, PRNGKey, State, EMPTY
 from .game_info import GameInfoExtractor
 from .game_parser import GameRuleParser
 
-class LudaxEnvironment(core.Env):
+class LudaxEnvironment(core.PGXEnv):
     def __init__(self,
                  game_path: str = None,
                  game_str: str = None):
@@ -137,7 +137,7 @@ class LudaxEnvironment(core.Env):
 
         return state
 
-    def _observe(self, state: core.State, player_id: Array) -> Array:
+    def _observe(self, state: core.PGXState, player_id: Array) -> Array:
         return jnp.zeros(self.obs_shape, dtype=jnp.bool_)
 
     @property

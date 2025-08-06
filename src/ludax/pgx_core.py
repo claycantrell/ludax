@@ -24,8 +24,9 @@ import jax.numpy as jnp
 from .config import Array, PRNGKey, TRUE, FALSE
 from .pgx_struct import dataclass
 
+
 @dataclass
-class State(abc.ABC):
+class PGXState(abc.ABC):
     """Base state class of all Pgx game environments. Basically an immutable (frozen) dataclass.
     A basic usage is generating via `Env.init`:
 
@@ -66,10 +67,11 @@ class State(abc.ABC):
     legal_action_mask: Array
     _step_count: Array
 
-class Env(abc.ABC):
+
+class PGXEnv(abc.ABC):
     def __init__(self): ...
 
-    def init(self, key: PRNGKey) -> State:
+    def init(self, key: PRNGKey) -> PGXState:
         """Return the initial state. Note that no internal state of
         environment changes.
 
@@ -77,7 +79,7 @@ class Env(abc.ABC):
             key: pseudo-random generator key in JAX. Consumed in this function.
 
         Returns:
-            State: initial state of environment
+            PGXState: initial state of environment
 
         """
         state = self._init(key)
@@ -86,10 +88,10 @@ class Env(abc.ABC):
 
     def step(
         self,
-        state: State,
+        state: PGXState,
         action: Array,
         key: Optional[Array] = None,
-    ) -> State:
+    ) -> PGXState:
         """Step function."""
         is_illegal = ~state.legal_action_mask[action]
         current_player = state.game_state.current_player
@@ -123,23 +125,23 @@ class Env(abc.ABC):
 
         return state
 
-    def observe(self, state: State, player_id: Array) -> Array:
+    def observe(self, state: PGXState, player_id: Array) -> Array:
         """Observation function."""
         obs = self._observe(state, player_id)
         return jax.lax.stop_gradient(obs)
 
     @abc.abstractmethod
-    def _init(self, key: PRNGKey) -> State:
+    def _init(self, key: PRNGKey) -> PGXState:
         """Implement game-specific init function here."""
         ...
 
     @abc.abstractmethod
-    def _step(self, state, action, key) -> State:
+    def _step(self, state, action, key) -> PGXState:
         """Implement game-specific step function here."""
         ...
 
     @abc.abstractmethod
-    def _observe(self, state: State, player_id: Array) -> Array:
+    def _observe(self, state: PGXState, player_id: Array) -> Array:
         """Implement game-specific observe function here."""
         ...
 
@@ -167,7 +169,7 @@ class Env(abc.ABC):
         """Negative reward given when illegal action is selected."""
         return -1.0
 
-    def _step_with_illegal_action(self, state: State, loser: Array) -> State:
+    def _step_with_illegal_action(self, state: PGXState, loser: Array) -> PGXState:
         penalty = self._illegal_action_penalty
         reward = jnp.ones_like(state.rewards) * (-1 * penalty) * (self.num_players - 1)
         reward = reward.at[loser].set(penalty)

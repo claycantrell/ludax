@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from ludax.environment import LudaxEnvironment
+from ludax import LudaxEnvironment
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
 

@@ -1,4 +1,4 @@
-from ludax.environment import LudaxEnvironment
+from ludax import LudaxEnvironment
 import jax
 import jax.numpy as jnp
 import random

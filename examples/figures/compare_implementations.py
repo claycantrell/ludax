@@ -13,7 +13,7 @@ import pgx
 from thefuzz import process
 from tqdm import tqdm
 
-from ludax.environment import LudaxEnvironment
+from ludax import LudaxEnvironment
 
 def parse_args():
     parser = argparse.ArgumentParser()
