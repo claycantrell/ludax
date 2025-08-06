@@ -1,47 +1,40 @@
-from functools import partial
-
-from ludax import LudaxEnvironment
 import jax
 import jax.numpy as jnp
 
+from ludax import LudaxEnvironment
 
-@partial(jax.jit, static_argnames=["seed", "batch_size"])
-def play_batch(seed, batch_size):
-    """Play a batch of games in the Ludax environment."""
 
-    # Initialize the environment
-    env = LudaxEnvironment(game_path="games/tic_tac_toe.ldx")
-    init_b = jax.jit(jax.vmap(env.init))
-    step_b = jax.jit(jax.vmap(env.step))
-    key = jax.random.PRNGKey(seed)
-    key, init_key = jax.random.split(key)
-    state_b = init_b(jax.random.split(init_key, batch_size))
+GAME_PATH = "games/tic_tac_toe.ldx"
+BATCH_SIZE = 1024
 
+env = LudaxEnvironment(GAME_PATH)
+init = jax.jit(jax.vmap(env.init))
+step = jax.jit(jax.vmap(env.step))
+
+
+def _run_batch(state, key):
     def cond_fn(args):
-        """Condition function for while loop."""
-        state_b, _ = args
-        return ~(state_b.terminated | state_b.truncated).all()
+        state, _ = args
+        return ~(state.terminated | state.truncated).all()
 
     def body_fn(args):
-        """Body function for while loop."""
-        state_b, key = args
-
-        # Sample an action
+        state, key = args
         key, subkey = jax.random.split(key)
-        logits = jnp.log(state_b.legal_action_mask.astype(jnp.float32))
-        action = jax.random.categorical(subkey, logits=logits, axis=1).astype(jnp.int16)
+        logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
+        action = jax.random.categorical(key, logits=logits, axis=1)
+        state = step(state, action)
+        return state, key
 
-        # Step the environment
-        state_b = step_b(state_b, action)
+    state, key = jax.lax.while_loop(cond_fn, body_fn, (state, key))
 
-        return state_b, key
-
-    # Run the batch until all games are terminated or truncated
-    state_b, key = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
-
-    return state_b
+    return state, key
 
 
-if __name__ == "__main__":
-    state_b = play_batch(seed=0, batch_size=16)
-    print("Winner (0: first player, 1: second player, -1: draw):", state_b.winner)
+run_batch = jax.jit(_run_batch)
+
+key = jax.random.PRNGKey(42)
+key, subkey = jax.random.split(key)
+keys = jax.random.split(subkey, BATCH_SIZE)
+
+state = init(keys)
+state, key = run_batch(state, key)
