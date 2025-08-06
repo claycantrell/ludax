@@ -3,7 +3,7 @@ import math
 import svgwrite
 from svgwrite import cm, mm
 
-from config import BoardShapes, P1, P2, RENDER_CONFIG
+from ..config import BoardShapes, P1, P2, RENDER_CONFIG
 
 
 class InteractiveBoardHandler():
@@ -19,6 +19,7 @@ class InteractiveBoardHandler():
         self.render_config = render_config
         self.cell_size = render_config['cell_size']
         self.padding = self.cell_size / 2
+        self.rendered_svg = ""
         
 
         if self.game_info.board_shape == BoardShapes.SQUARE or self.game_info.board_shape == BoardShapes.RECTANGLE:
@@ -253,7 +254,7 @@ class InteractiveBoardHandler():
         legal_actions = state.legal_action_mask
 
         # Initialize drawing and draw boarder
-        drawing = svgwrite.Drawing(filename=RENDER_CONFIG['output_filename'], size=(self.total_width, self.total_height), id="game_board")
+        drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
         drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), stroke='black', stroke_width=1, fill='none'))
 
         for i, occupant in enumerate(board):
@@ -277,4 +278,4 @@ class InteractiveBoardHandler():
         if add_button:
             drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), class_="btn", onclick="handleClick(event)"))
 
-        drawing.save()
+        self.rendered_svg = drawing.tostring()

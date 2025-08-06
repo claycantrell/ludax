@@ -3,9 +3,9 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, PlayerAndMoverRefs, OptionalArgs
-from game_info import GameInfo
-import utils
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, PlayerAndMoverRefs, OptionalArgs
+from .game_info import GameInfo
+from . import utils
 
 class GameRuleParser(Transformer):
     def __init__(self, game_info: GameInfo):

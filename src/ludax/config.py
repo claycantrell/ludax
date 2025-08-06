@@ -3,7 +3,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from pgx_struct import dataclass
+from .pgx_struct import dataclass
 
 Array = Any
 PRNGKey = Any
@@ -155,7 +155,6 @@ RENDER_CONFIG = {
     "piece_radius": 35,
     "legal_radius": 15,
     "hexagon_orientation": "pointy",
-    "output_filename": "renders/interactive_output.svg",
 
     # Colors
     "light_blue": "#d2e6ff",

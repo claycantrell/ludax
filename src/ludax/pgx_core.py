@@ -21,8 +21,8 @@ from typing import Literal, Optional, Tuple, get_args
 import jax
 import jax.numpy as jnp
 
-from config import Array, PRNGKey, TRUE, FALSE
-from pgx_struct import dataclass
+from .config import Array, PRNGKey, TRUE, FALSE
+from .pgx_struct import dataclass
 
 @dataclass
 class State(abc.ABC):

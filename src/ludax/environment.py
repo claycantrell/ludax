@@ -1,24 +1,29 @@
 import jax
 import jax.numpy as jnp
 from lark import Lark
+from importlib.resources import files
 
-import pgx_core as core
 
-from config import Array, PRNGKey, State, EMPTY
-from game_info import GameInfoExtractor
-from game_parser import GameRuleParser
+from . import pgx_core as core
+from .config import Array, PRNGKey, State, EMPTY
+from .game_info import GameInfoExtractor
+from .game_parser import GameRuleParser
 
 class LudaxEnvironment(core.Env):
     def __init__(self,
                  game_path: str = None,
-                 game_str: str = None,
-                 grammar_path: str = 'grammar.lark'):
+                 game_str: str = None):
         super().__init__()
         
         assert game_path is not None or game_str is not None, "Must provide either a game path or a game string!"
-        game_str = open(game_path).read() if game_str is None else game_str
+        assert game_path is None or game_str is None, "Cannot provide both a game path and a game string!"
 
-        parser = Lark(open(grammar_path).read(), start='game')
+        if game_path is not None:
+            with open(game_path, 'r') as f:
+                game_str = f.read()
+
+        with files(__package__).joinpath('grammar.lark').open('r') as f:
+            parser = Lark(f.read(), start='game')
 
         game_tree = parser.parse(game_str)
         self.game_info = GameInfoExtractor()(game_tree)

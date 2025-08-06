@@ -3,6 +3,8 @@
 Ludax is a domain specific language for board games that compiles into hardware-accelerated learning environments using [JAX](https://github.com/jax-ml/jax). Ludax draws inspiration from the [Ludii](https://ludii.games/index.php) game description language as well as [PGX](https://github.com/sotetsuk/pgx), a library of JAX implementations for classic board games and video games. Ludax supports a variety of two-player perfect-information board games and can run at tens of millions of steps per second on modern GPUs.
 
 ![Throughput of Ludax environments compared to PGX and Ludii implementations](/renders/throughput_comparison.png)
+## ToDo before merge
+- Fix compare_implementations.py and other scripts
 
 ## Issues
 - Confusingly, 'state.game_state.current_player' is not the current player? See connectivity test.

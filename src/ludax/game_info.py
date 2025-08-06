@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from lark import Lark
 from lark.visitors import Visitor
 
-from config import BoardShapes
+from .config import BoardShapes
 
 @dataclass
 class GameInfo:

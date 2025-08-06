@@ -7,11 +7,11 @@ import jax.numpy as jnp
 from flask import render_template, request, jsonify
 from markupsafe import Markup
 
-import environment
-from app import app
-from config import BoardShapes, RENDER_CONFIG
-from environment import LudaxEnvironment
-from app.render import InteractiveBoardHandler
+from .. import environment
+from ..config import BoardShapes, RENDER_CONFIG
+
+from . import app
+from .render import InteractiveBoardHandler
 
 ENV, HANDLER, STATE = None, None, None
 
@@ -99,16 +99,15 @@ def render_game(id):
     global HANDLER
     global STATE
 
-    ENV = LudaxEnvironment(f"games/{id}.ldx")
+    ENV = environment.LudaxEnvironment(f"games/{id}.ldx")
     HANDLER = InteractiveBoardHandler(ENV.game_info)
 
     STATE = ENV.init(jax.random.PRNGKey(42))
     
     HANDLER.render(STATE)
     time.sleep(0.1)
-    game_svg = open(RENDER_CONFIG['output_filename']).read()
 
-    return render_template('game.html', game_svg=Markup(game_svg))
+    return render_template('game.html', game_svg=Markup(HANDLER.rendered_svg))
 
 @app.route('/step', methods=['POST'])
 def step():
@@ -140,7 +139,6 @@ def step():
             # Return current state with an error message
             HANDLER.render(STATE)
             time.sleep(0.1)
-            svg_data = open(RENDER_CONFIG['output_filename']).read()
 
             if hasattr(STATE.game_state, "scores"):
                 scores = list(map(float, STATE.game_state.scores))
@@ -148,7 +146,7 @@ def step():
                 scores = [0.0, 0.0]
 
             return jsonify({
-                "svg": svg_data,
+                "svg": HANDLER.rendered_svg,
                 "terminated": bool(STATE.terminated),
                 "winner": int(STATE.winner),
                 "current_player": int(STATE.game_state.current_player),
@@ -163,7 +161,6 @@ def step():
     HANDLER.render(STATE)
     time.sleep(0.1)
 
-    svg_data = open(RENDER_CONFIG['output_filename']).read()
     terminated = bool(STATE.terminated)
     winner = int(STATE.winner)
     if hasattr(STATE.game_state, "scores"):
@@ -177,7 +174,7 @@ def step():
 
     debug_state(STATE, ENV)
 
-    return {"svg": svg_data, "terminated": terminated, "winner": winner, "current_player": int(STATE.game_state.current_player),
+    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "winner": winner, "current_player": int(STATE.game_state.current_player),
             "scores": scores}
 
 @app.route('/reset', methods=['POST'])

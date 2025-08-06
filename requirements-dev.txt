@@ -1,9 +1,9 @@
-flask
-flax
-lark
+# Ludax in development mode
+-e .[gui]
+
+# Graphs
 matplotlib
 pandas
-svgwrite
 thefuzz
 tqdm
 

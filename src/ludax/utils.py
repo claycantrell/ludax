@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from config import EMPTY, INVALID, BoardShapes, Directions, EdgeTypes, Orientations, OptionalArgs
-from game_info import GameInfo
+from .config import EMPTY, INVALID, BoardShapes, Directions, EdgeTypes, Orientations, OptionalArgs
+from .game_info import GameInfo
 
 BOARD_SHAPE_TO_DIRECTIONS = {
     BoardShapes.SQUARE: [

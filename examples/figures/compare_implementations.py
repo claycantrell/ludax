@@ -13,7 +13,7 @@ import pgx
 from thefuzz import process
 from tqdm import tqdm
 
-from environment import LudaxEnvironment
+from ludax.environment import LudaxEnvironment
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -113,7 +113,7 @@ def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_s
 
 def cached_eval(args):
     cache_file = (
-        f"./data/benchmarks/cache-"
+        f"examples/figures/data/benchmarks/connect6/{args.game}/cache-"
         f"{args.game}-{args.num_games}-{args.num_warmup_games}-"
         f"{args.batch_size_step}-{args.num_batch_sizes}.npz"
     )

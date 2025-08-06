@@ -3,3 +3,4 @@ __pycache__/
 renders/
 .venv
 .idea
+*.egg-info/

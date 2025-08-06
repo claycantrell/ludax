@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from environment import LudaxEnvironment
+from ludax.environment import LudaxEnvironment
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
 
@@ -275,11 +275,11 @@ def main():
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, distance_heuristic)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
-    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=1000)
+    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
 
     # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
-    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=1000)
+    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=100)
     # AGENT2 = one_ply_policy(step_b)
 
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
