@@ -1,9 +1,10 @@
 from ludax import LudaxEnvironment
+from ludax.games import tic_tac_toe
 import jax
 import jax.numpy as jnp
 import random
 
-env = LudaxEnvironment(game_path="games/tic_tac_toe.ldx")
+env = LudaxEnvironment(game_str=tic_tac_toe)
 init = jax.jit(env.init)
 step = jax.jit(env.step)
 

@@ -18,7 +18,7 @@ Ludax is a domain specific language for board games that compiles into hardware-
 
 ## Installation
 > [!IMPORTANT]
-> Ludax requires a Python version of at least `3.11`.
+> Ludax requires a Python version of at least `3.9`.
 > We recommend first installing the JAX library (see [here](https://docs.jax.dev/en/latest/installation.html) for instructions) and then installing Ludax, otherwise JAX will run on the CPU instead of your accelerator.
 
 ### Package Installation
@@ -79,6 +79,7 @@ keys = jax.random.split(subkey, BATCH_SIZE)
 
 state = init(keys)
 state, key = run_batch(state, key)
+print(f"Winner (0: first player, 1: second player, -1: draw): {state.winner}")
 ```
 
 ## Comparisons

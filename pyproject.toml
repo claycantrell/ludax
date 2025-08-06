@@ -1,6 +1,6 @@
 [project]
 name = "ludax"
-version = "0.0.1"
+version = "0.0.3"
 authors = [
   { name="Graham Todd", email="gdrtodd@gmail.com" }, { name="Alexander Padula", email="alexpadula2001@gmail.com"}
 ]
@@ -12,7 +12,7 @@ classifiers = [
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "jax",
     "lark",
@@ -33,3 +33,6 @@ Issues = "https://github.com/gdrtodd/ludax/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"*" = ["*.lark", "*.html", "*.css"]

@@ -21,7 +21,7 @@ def _run_batch(state, key):
         state, key = args
         key, subkey = jax.random.split(key)
         logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-        action = jax.random.categorical(key, logits=logits, axis=1)
+        action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
         state = step(state, action)
         return state, key
 
@@ -38,3 +38,4 @@ keys = jax.random.split(subkey, BATCH_SIZE)
 
 state = init(keys)
 state, key = run_batch(state, key)
+print(f"Winner (0: first player, 1: second player, -1: draw): {state.winner}")

@@ -1,5 +1,12 @@
-from enum import StrEnum
 from typing import Any
+try:
+    from enum import StrEnum  # Python ≥ 3.11
+except ImportError: # Python ≤ 3.10
+    from enum import Enum
+    class StrEnum(str, Enum):
+        """Minimal stand-in for the 3.11 enum.StrEnum."""
+        def _generate_next_value_(name, start, count, last_values):
+            return name.lower()
 
 import jax.numpy as jnp
 

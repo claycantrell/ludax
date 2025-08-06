@@ -1,4 +1,4 @@
-(game "Yavalax" 
+(game "Connect-Six"
     (players 2)
     (equipment 
         (board (square 19))

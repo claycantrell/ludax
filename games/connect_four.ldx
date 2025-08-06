@@ -1,4 +1,4 @@
-(game "Tic-Tac-Toe" 
+(game "Connect-Four"
     (players 2)
     (equipment 
         (board (rectangle 6 7))

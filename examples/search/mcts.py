@@ -118,18 +118,29 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
         :param key: JAX PRNG key for random number generation.
         :return: Selected action.
         """
+        # Root player per batch element
+        root_player = state_b.game_state.current_player  # shape [B]
+
+        # Root priors: 0 on legal, -inf on illegal
+        root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
+
         root = mctx.RootFnOutput(
-            prior_logits=state_b.legal_action_mask.astype(jnp.float32),
-            value=heuristic(state_b),
-            embedding=state_b
+            prior_logits=root_logits,
+            value=jnp.where(state_b.game_state.current_player == root_player, 1.0, -1.0) * heuristic(state_b),
+            embedding=(state_b, root_player),
         )
+        # root = mctx.RootFnOutput(
+        #     prior_logits=state_b.legal_action_mask.astype(jnp.float32),
+        #     value=heuristic(state_b),
+        #     embedding=state_b
+        # )
 
         # Initialize MCTX model
         policy_output = mctx.muzero_policy(
             params=None,
             rng_key=key,
             root=root,
-            recurrent_fn=ludax_recurrent(step_b, heuristic=heuristic),
+            recurrent_fn=ludax_recurrent2(step_b, heuristic=heuristic),
             num_simulations=num_simulations,
             # max_depth=200,
             dirichlet_fraction=0.0,
@@ -198,7 +209,7 @@ def gumbel_policy(step_b, heuristic=None, num_simulations=100):
             rng_key=key,
             root=root,
             recurrent_fn=ludax_recurrent2(step_b, heuristic),
-            num_simulations=num_actions,
+            num_simulations=num_simulations,
             max_num_considered_actions=num_actions,
             invalid_actions=~state_b.legal_action_mask,
             # (leave qtransform default unless you know you need something else)
@@ -269,7 +280,7 @@ def main():
     env = LudaxEnvironment(GAME_PATH)
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=10, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=20, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b)
@@ -279,7 +290,7 @@ def main():
 
     # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
-    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=100)
+    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = one_ply_policy(step_b)
 
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
