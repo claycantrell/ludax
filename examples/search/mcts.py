@@ -67,94 +67,8 @@ def one_ply_policy(step_b, heuristic=None):
     return jax.jit(one_step_lookahead_f)
 
 
-def ludax_recurrent(step_b, heuristic):
-
-    def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state):
-        """
-        Recurrent function for MCTS. This function is called at each step of the MCTS search to update the state based on the action taken.
-        :param model: The MCTX model parameters (not used here, but required by the interface).
-        :param rng_key: JAX PRNG key.
-        :param action: Action to take.
-        :param state: Current state of the game.
-        :return: Updated state after taking the action.
-        """
-
-        del rng_key # Idk why, but pgx did this
-
-        state = step_b(state, action.astype(jnp.int16))
-
-        rewards = state.rewards
-        reward = rewards[jnp.arange(rewards.shape[0]), state.game_state.current_player]
-        value = heuristic(state) # TODO why not -heuristic(state)? Isn't it the next player's perspective?
-        value = jnp.where(state.terminated, 0.0, value)
-        discount = -1.0 * jnp.ones_like(value)
-        discount = jnp.where(state.terminated, 0.0, discount)
-
-        logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-
-        recurrent_fn_output = mctx.RecurrentFnOutput(
-            reward=reward,
-            discount=discount,
-            prior_logits=logits,
-            value=value,
-        )
-        return recurrent_fn_output, state
-
-    return jax.jit(recurrent_fn)
-
-
-def mcts_policy(step_b, heuristic=None, num_simulations=100):
-    """
-    MCTX-based implementation
-    """
-
-    if heuristic is None:
-        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
-
-    def mcts_policy_f(state_b, key):
-        """
-        MCTS policy function that uses the MCTX library to select an action based on the current state.
-        :param state_b: Current state of the game.
-        :param key: JAX PRNG key for random number generation.
-        :return: Selected action.
-        """
-        # Root player per batch element
-        root_player = state_b.game_state.current_player  # shape [B]
-
-        # Root priors: 0 on legal, -inf on illegal
-        root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
-
-        root = mctx.RootFnOutput(
-            prior_logits=root_logits,
-            value=jnp.where(state_b.game_state.current_player == root_player, 1.0, -1.0) * heuristic(state_b),
-            embedding=(state_b, root_player),
-        )
-        # root = mctx.RootFnOutput(
-        #     prior_logits=state_b.legal_action_mask.astype(jnp.float32),
-        #     value=heuristic(state_b),
-        #     embedding=state_b
-        # )
-
-        # Initialize MCTX model
-        policy_output = mctx.muzero_policy(
-            params=None,
-            rng_key=key,
-            root=root,
-            recurrent_fn=ludax_recurrent2(step_b, heuristic=heuristic),
-            num_simulations=num_simulations,
-            # max_depth=200,
-            dirichlet_fraction=0.0,
-            invalid_actions=~state_b.legal_action_mask
-        )
-
-        return policy_output.action.astype(jnp.int16)
-
-    return jax.jit(mcts_policy_f)
-
-def ludax_recurrent2(step_b, heuristic):
-    def recurrent_fn(params, rng_key, action, emb):
-        # Embedding carries (state, root_player)
-        state, root_player = emb
+def ludax_recurrent(root_player, step_b, heuristic):
+    def recurrent_fn(params, rng_key, action, state):
 
         next_state = step_b(state, action.astype(jnp.int16))
 
@@ -180,25 +94,63 @@ def ludax_recurrent2(step_b, heuristic):
             prior_logits=logits,
             value=v,
         )
-        # Keep carrying root_player down the tree
-        return out, (next_state, root_player)
+
+        return out, next_state
     return jax.jit(recurrent_fn)
+
+
+def mcts_policy(step_b, heuristic=None, num_simulations=100):
+    """
+    MCTX-based implementation
+    """
+
+    if heuristic is None:
+        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
+
+    def mcts_policy_f(state_b, key):
+        """
+        MCTS policy function that uses the MCTX library to select an action based on the current state.
+        :param state_b: Current state of the game.
+        :param key: JAX PRNG key for random number generation.
+        :return: Selected action.
+        """
+        root_player = state_b.game_state.current_player
+        root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
+
+        root = mctx.RootFnOutput(
+            prior_logits=root_logits,
+            value=jnp.where(state_b.game_state.current_player == root_player, 1.0, -1.0) * heuristic(state_b),
+            embedding=state_b,
+        )
+
+        # Initialize MCTX model
+        policy_output = mctx.muzero_policy(
+            params=None,
+            rng_key=key,
+            root=root,
+            recurrent_fn=ludax_recurrent(root_player, step_b, heuristic),
+            num_simulations=num_simulations,
+            # dirichlet_fraction=0.0,
+            invalid_actions=~state_b.legal_action_mask
+        )
+
+        return policy_output.action.astype(jnp.int16)
+
+    return jax.jit(mcts_policy_f)
+
 
 def gumbel_policy(step_b, heuristic=None, num_simulations=100):
     if heuristic is None:
         heuristic = lambda s: jnp.zeros(s.legal_action_mask.shape[0], dtype=jnp.float32)
 
     def policy_f(state_b, key):
-        # Root player per batch element
         root_player = state_b.game_state.current_player  # shape [B]
-
-        # Root priors: 0 on legal, -inf on illegal
         root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
 
         root = mctx.RootFnOutput(
             prior_logits=root_logits,
             value=jnp.where(state_b.game_state.current_player == root_player, 1.0, -1.0) * heuristic(state_b),
-            embedding=(state_b, root_player),
+            embedding=state_b,
         )
 
         num_actions = state_b.legal_action_mask.shape[1]
@@ -208,11 +160,10 @@ def gumbel_policy(step_b, heuristic=None, num_simulations=100):
             params=None,
             rng_key=key,
             root=root,
-            recurrent_fn=ludax_recurrent2(step_b, heuristic),
+            recurrent_fn=ludax_recurrent(root_player, step_b, heuristic),
             num_simulations=num_simulations,
             max_num_considered_actions=num_actions,
             invalid_actions=~state_b.legal_action_mask,
-            # (leave qtransform default unless you know you need something else)
         )
 
         return policy_output.action.astype(jnp.int16)
