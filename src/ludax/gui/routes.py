@@ -75,7 +75,6 @@ def debug_state(state: environment.State, env: environment.LudaxEnvironment):
     print(f"state.truncated: {state.truncated}")
     print(f"state.mover_reward: {state.mover_reward}")
     print(f"state.legal_action_mask: {state.legal_action_mask}")
-    print(f"state.observation: \n{state.observation}")
 
     print(f"state.game_state: \n{state.game_state}")
 

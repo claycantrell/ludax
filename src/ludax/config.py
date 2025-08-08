@@ -30,7 +30,7 @@ class State():
 
     Attributes:
     - game_state: a custom class that contains all the information necessary to advance the game state (e.g. board, current player, ...)
-    - observation: the current observation of the environment, used for artificial agents
+    - current_player: the identity of the current player (copied from game_state for convenience)
     - legal_action_mask: a mask indicating which actions are legal
     - winner: the player who won the game
     - rewards: the rewards for each player
@@ -40,7 +40,7 @@ class State():
     - global_step_count: the number of steps taken in the game
     '''
     game_state: type
-    observation: Array
+    current_player: Array
     legal_action_mask: Array
     winner: Array = EMPTY
     rewards: Array = jnp.float32([0.0, 0.0])

@@ -61,18 +61,17 @@ class LudaxEnvironment(core.PGXEnv):
             previous_actions=jnp.int16([-1, -1]),
         )
 
-        # Compute the actual starting player, using the global player offset
+        # Compute the actual starting player
         current_player = self._get_next_player(game_state)
         game_state = game_state._replace(current_player=current_player)
 
         state = State(
             game_state=game_state,
-            observation=jnp.zeros(self.obs_shape, dtype=jnp.bool_),
             legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_)
         )
 
         legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
-        state = state.replace(legal_action_mask=legal_action_mask)
+        state = state.replace(current_player=current_player, legal_action_mask=legal_action_mask)
 
         return state
     
@@ -129,7 +128,7 @@ class LudaxEnvironment(core.PGXEnv):
         )
 
         # Update the game state in the state
-        state = state.replace(game_state=game_state)
+        state = state.replace(game_state=game_state, current_player=game_state.current_player)
 
         # Increment the global step count
         state = state.replace(global_step_count=state.global_step_count + 1)
