@@ -1,5 +1,3 @@
-from typing_extensions import Unpack
-
 from functools import partial
 
 import jax
@@ -227,13 +225,13 @@ def _get_mask_board_conversion_fns(game_info: GameInfo):
         base_board = jnp.ones_like(base, dtype=jnp.int16) * INVALID
 
         def mask_to_board(mask):
-            return base_board.at[Unpack[valid_hex_indices]].set(mask)
+            return base_board.at[tuple(valid_hex_indices)].set(mask)
         
         def mask_idx_to_board_pos(idx):
             return valid_hex_indices.T[idx]
         
         def board_to_mask(board):
-            return board[Unpack[valid_hex_indices]].flatten()
+            return board[tuple(valid_hex_indices)].flatten()
         
         return mask_to_board, mask_idx_to_board_pos, board_to_mask
 
