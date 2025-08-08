@@ -106,14 +106,3 @@ class GameInfoExtractor(Visitor):
         if "scores" not in self.game_state_attributes:
             self.game_state_attributes.append("scores")
             self.defaults.append(jnp.zeros(2, dtype=jnp.float32))
-
-if __name__ == '__main__':
-    grammar = open('grammar.lark').read()
-    parser = Lark(grammar, start='game')
-
-    game = open('games/tic_tac_toe.ldx').read()
-    tree = parser.parse(game)
-
-    info = GameInfoExtractor()(tree)
-
-    print(info)
