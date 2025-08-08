@@ -6,15 +6,14 @@ Ludax is a domain specific language for board games that compiles into hardware-
 - Fix compare_implementations.py and other scripts
 
 ## Issues
-- Confusingly, 'state.game_state.current_player' is not the current player? See connectivity test.
-- `state.first_player` should be removed, why not define P1 as the first player? Graphically, we can still encode the first player as black or some other color, but it should not be part of the state.
+- Confusingly, 'state.game_state.current_player' in the final state
+- `state.first_player` should be removed, why not define P1 as the first player? Graphically, we can still encode the first player as black or some other color, but it should not be part of the state. -> P1 will e the first player while metadata will specify color.
 - remove `state.truncated`, that should be handled by the client.
 - `state.observation` should be removed, we can provide a function to convert game state to an observation instead.
-- `state.legal_action_mask` should be False for all actions after the game is over, no? Right now it's True for all actions.
 - It doesn't feel intuitive that the mover_reward is in `state.mover_reward` but the current_player is hidden in `state.game_state.current_player`. Is game_state supposed to represent internal variables who's API can change from game to game? If so, it should not be part of the public API.
-- We need to make a decision about whether we intend to support non-two player games and games where the same player can play multiple times in a row. If we don't support this, we can simplify the API, e.g. by guaranteeing that if global step is even, the current player is P1 (unless the game is over, but then it doesn't matter what action you take).
 - We really need to demonstrate that fp16 is faster than fp32 on our target hardware. If it isn't then we should stick to fp32 since that's what most other libraries use.
 - config.State should inherit from pgx_core.PGXState no?
+
 
 ## Installation
 > [!IMPORTANT]

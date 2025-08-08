@@ -7,9 +7,13 @@ import numpy as np
 from ludax import LudaxEnvironment
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
+from heuristics.test import bad_heuristic, zero_heuristic
 import mctx
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
+
+BIG = 10**6
+SMALL = 10**-3
 
 def random_policy():
     def random_policy_f(state_b, key):
@@ -27,11 +31,7 @@ def random_policy():
     return jax.jit(random_policy_f)
 
 
-def one_ply_policy(step_b, heuristic=None):
-
-    if heuristic is None:
-        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
-
+def one_ply_policy(step_b, heuristic=zero_heuristic):
     def one_step_lookahead_f(state_b, key):
         """
         Pick the move with the best one‑ply value for the *current* mover (i.e. maximise next_state.mover_reward).
@@ -41,40 +41,53 @@ def one_ply_policy(step_b, heuristic=None):
 
         # (batch, num_actions) repeat each action for each state in the batch
         all_actions = jnp.broadcast_to(jnp.arange(num_actions), (batch_size, num_actions))
-        flat_actions = all_actions.reshape(-1)
+        actions_flat = all_actions.reshape(-1)
 
         # Repeat every state `num_actions` times
-        flat_state = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
+        state_flat = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
 
         # Step every (state, action) pair in one call
-        flat_next_state = step_b(flat_state, flat_actions.astype(jnp.int16))
+        flat_next_state = step_b(state_flat, actions_flat.astype(jnp.int16))
 
         # Sum the next_state.mover_reward with the heuristic
         # Note: even in games where the players always alternate, this is necessary since the terminal state doesn't
         # switch the current player, and thus the heuristic will be with respect to wrong player.
         # In fact `polarity = jnp.where(next_state.terminated, 1, -1)` is equivalent in Hex
-        polarity = jnp.where(flat_next_state.game_state.current_player == flat_state.game_state.current_player, 1.0, -1.0)
-
+        polarity = jnp.where(flat_next_state.game_state.current_player == state_flat.game_state.current_player, 1.0, -1.0)
         # debug_polarity = jnp.where(flat_next_state.terminated, 0.0, polarity)
         # jax.debug.print("polarity: {polarity}", polarity=debug_polarity, ordered=True)
 
-        action_values = 10 * flat_next_state.mover_reward + polarity * heuristic(flat_next_state)  # TODO don't recompute heuristic for every action
-        jax.debug.print("p2: {action_values}", action_values=action_values, ordered=True)
+        # Add some noise to the heuristic to break ties non-deterministically
+        noise = jax.random.uniform(key, shape=flat_next_state.mover_reward.shape, minval=-SMALL, maxval=SMALL)
 
+        action_values_flat = BIG * flat_next_state.mover_reward + polarity * heuristic(flat_next_state) + noise
 
-        # Unflatten back to (batch, num_actions)
-        action_values = action_values.reshape(batch_size, num_actions)
-
-        # Mask illegal moves with –inf so argmax will never pick them
+        # Mask out illegal actions. Som
+        action_values = action_values_flat.reshape(batch_size, num_actions)
         action_values = jnp.where(state_b.legal_action_mask, action_values, -jnp.inf)
 
-        # Best action for each state in the batch
         return jnp.argmax(action_values, axis=1).astype(jnp.int16)
 
     return jax.jit(one_step_lookahead_f)
 
 
-# def arbitrary_lookahead_policy(step_b, heuristic=None, lookahead_depth=1):
+def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10):
+
+    def beam_search_f(state_b, key):
+        """Expand the top-k actions at each iteration. Rank the best action based on the heuristic."""
+
+
+    def beam_step_f(top_states_b, key, ):
+        """
+        Perform one step of the beam search.
+        :param top_states_b: Current top-k descendant states for each root_state in the batch.
+        :param key: JAX PRNG key for random number generation.
+        :return: New top-k descendant states after one step.
+        """
+
+
+    return jax.jit(beam_search_f)
+
 
 
 def ludax_recurrent(root_player, step_b, heuristic):
@@ -109,13 +122,10 @@ def ludax_recurrent(root_player, step_b, heuristic):
     return jax.jit(recurrent_fn)
 
 
-def mcts_policy(step_b, heuristic=None, num_simulations=100):
+def mcts_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
     """
     MCTX-based implementation
     """
-
-    if heuristic is None:
-        heuristic = lambda state_b: jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
 
     def mcts_policy_f(state_b, key):
         """
@@ -149,10 +159,7 @@ def mcts_policy(step_b, heuristic=None, num_simulations=100):
     return jax.jit(mcts_policy_f)
 
 
-def gumbel_policy(step_b, heuristic=None, num_simulations=100):
-    if heuristic is None:
-        heuristic = lambda s: jnp.zeros(s.legal_action_mask.shape[0], dtype=jnp.float32)
-
+def gumbel_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
     def policy_f(state_b, key):
         root_player = state_b.game_state.current_player  # shape [B]
         root_logits = jnp.where(state_b.legal_action_mask, 0.0, -jnp.inf)
@@ -205,10 +212,10 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     :param policy_p2: a function that takes a state, a step function, and a key, then returns an action
     :return: (wins, draws, losses) for the first agent, and the updated key
     """
-    jax.debug.print("\n\n" + "-" * 1000 + "\nevaluate_policy", ordered=True)
+    #jax.debug.print("\n\n" + "-" * 1000 + "\nevaluate_policy", ordered=True)
     def cond_fn(args):
         state, _ = args
-        return ~state.terminated.all()
+        return ~(state.terminated.all() | state.truncated.all())
 
     def body_fn(args):
         state, key = args
@@ -241,11 +248,11 @@ def main():
     env = LudaxEnvironment(GAME_PATH)
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=20, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=200, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b)
-    AGENT1 = one_ply_policy(step_b, distance_heuristic)
+    AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
 
@@ -253,7 +260,7 @@ def main():
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    AGENT2 = one_ply_policy2(step_b, distance_heuristic)
+    AGENT2 = one_ply_policy(step_b, bad_heuristic)
 
     start_time = time.time()
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
