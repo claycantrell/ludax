@@ -1,5 +1,4 @@
 import math
-import os
 import time
 
 import jax
@@ -14,6 +13,8 @@ from . import app
 from .render import InteractiveBoardHandler
 
 ENV, HANDLER, STATE = None, None, None
+
+from ludax import games
 
 def cube_round(q, r, s):
     q_round, r_round, s_round = round(q), round(r), round(s)
@@ -89,8 +90,7 @@ def debug_state(state: environment.State, env: environment.LudaxEnvironment):
 
 @app.route('/') 
 def index():
-    game_names = [file_name.replace(".ldx", "") for file_name in os.listdir("./games") if file_name.endswith(".ldx")]
-    return render_template('index.html', games=game_names)
+    return render_template('index.html', games=games.__all__)
 
 @app.route('/game/<id>') 
 def render_game(id):
@@ -99,7 +99,7 @@ def render_game(id):
     global HANDLER
     global STATE
 
-    ENV = environment.LudaxEnvironment(f"games/{id}.ldx")
+    ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
 
     STATE = ENV.init(jax.random.PRNGKey(42))
