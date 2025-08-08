@@ -1,13 +1,15 @@
 from functools import partial
-
+import time
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from ludax import LudaxEnvironment
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
-
 import mctx
+
+jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
 def random_policy():
     def random_policy_f(state_b, key):
@@ -37,34 +39,42 @@ def one_ply_policy(step_b, heuristic=None):
         """
         batch_size, num_actions = state_b.legal_action_mask.shape
 
-        # Build an (batch, num_actions) table of action indices 0..num_actions‑1
+        # (batch, num_actions) repeat each action for each state in the batch
         all_actions = jnp.broadcast_to(jnp.arange(num_actions), (batch_size, num_actions))
-
-        # Flatten state and action arrays so we can call step_b once
         flat_actions = all_actions.reshape(-1)
 
-        # Repeat every leaf of the state PyTree `num_actions` times
-        flat_state = jax.tree_util.tree_map(
-            lambda x: jnp.repeat(x, num_actions, axis=0), state_b
-        )
+        # Repeat every state `num_actions` times
+        flat_state = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
 
         # Step every (state, action) pair in one call
-        next_state = step_b(flat_state, flat_actions.astype(jnp.int16))
+        flat_next_state = step_b(flat_state, flat_actions.astype(jnp.int16))
 
         # Sum the next_state.mover_reward with the heuristic
-        action_values = 10 * next_state.mover_reward - heuristic(next_state)
+        # Note: even in games where the players always alternate, this is necessary since the terminal state doesn't
+        # switch the current player, and thus the heuristic will be with respect to wrong player.
+        # In fact `polarity = jnp.where(next_state.terminated, 1, -1)` is equivalent in Hex
+        polarity = jnp.where(flat_next_state.game_state.current_player == flat_state.game_state.current_player, 1.0, -1.0)
+
+        # debug_polarity = jnp.where(flat_next_state.terminated, 0.0, polarity)
+        # jax.debug.print("polarity: {polarity}", polarity=debug_polarity, ordered=True)
+
+        action_values = 10 * flat_next_state.mover_reward + polarity * heuristic(flat_next_state)  # TODO don't recompute heuristic for every action
+        jax.debug.print("p2: {action_values}", action_values=action_values, ordered=True)
+
 
         # Unflatten back to (batch, num_actions)
         action_values = action_values.reshape(batch_size, num_actions)
 
         # Mask illegal moves with –inf so argmax will never pick them
-        minus_inf = -jnp.inf
-        action_values = jnp.where(state_b.legal_action_mask, action_values, minus_inf)
+        action_values = jnp.where(state_b.legal_action_mask, action_values, -jnp.inf)
 
         # Best action for each state in the batch
         return jnp.argmax(action_values, axis=1).astype(jnp.int16)
 
     return jax.jit(one_step_lookahead_f)
+
+
+# def arbitrary_lookahead_policy(step_b, heuristic=None, lookahead_depth=1):
 
 
 def ludax_recurrent(root_player, step_b, heuristic):
@@ -195,7 +205,7 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     :param policy_p2: a function that takes a state, a step function, and a key, then returns an action
     :return: (wins, draws, losses) for the first agent, and the updated key
     """
-
+    jax.debug.print("\n\n" + "-" * 1000 + "\nevaluate_policy", ordered=True)
     def cond_fn(args):
         state, _ = args
         return ~state.terminated.all()
@@ -235,21 +245,27 @@ def main():
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b)
-    # AGENT1 = one_ply_policy(step_b, distance_heuristic)
+    AGENT1 = one_ply_policy(step_b, distance_heuristic)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
-    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
+    # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
 
     # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
-    AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
-    # AGENT2 = one_ply_policy(step_b)
+    # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
+    # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
+    AGENT2 = one_ply_policy2(step_b, distance_heuristic)
 
+    start_time = time.time()
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
     (w2, d2, l2), key = evaluate_policy(AGENT2, AGENT1, state_b, step_b, key)
+
+    compile_time = time.time()
 
     print(f"Evaluating {GAME_PATH}:")
     print(f"Agent 1 - Rate:{(w1 + l2) / (w1 + l2 + l1 + w2) :.4f}, Wins: {w1}+{l2}, Draws: {d1}+{d2}")
     print(f"Agent 2 - Rate:{(l1 + w2) / (w1 + l2 + l1 + w2) :.4f}, Wins: {l1}+{w2}, Draws: {d1}+{d2}")
+    end_time = time.time()
+    print(f"Total time: {end_time - start_time:.2f}s (compile: {compile_time - start_time:.2f}s, run: {end_time - compile_time:.2f}s)")
 
 
 if __name__ == "__main__":
