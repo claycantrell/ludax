@@ -70,7 +70,6 @@ def count(state):
 def debug_state(state: environment.State, env: environment.LudaxEnvironment):
     """Debug the current state of the game."""
     print(f"state.global_step_count: {state.global_step_count}")
-    print(f"state.first_player: {state.first_player}")
     print(f"state.winner: {state.winner}")
     print(f"state.terminated: {state.terminated}")
     print(f"state.truncated: {state.truncated}")

@@ -32,7 +32,6 @@ class State():
     - game_state: a custom class that contains all the information necessary to advance the game state (e.g. board, current player, ...)
     - observation: the current observation of the environment, used for artificial agents
     - legal_action_mask: a mask indicating which actions are legal
-    - first_player: the player who started the game
     - winner: the player who won the game
     - rewards: the rewards for each player
     - mover_reward: the reward for the player who made the last move
@@ -43,7 +42,6 @@ class State():
     game_state: type
     observation: Array
     legal_action_mask: Array
-    first_player: Array = P1
     winner: Array = EMPTY
     rewards: Array = jnp.float32([0.0, 0.0])
     mover_reward: Array = jnp.float32(0.0)
