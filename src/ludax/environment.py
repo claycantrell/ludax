@@ -26,7 +26,7 @@ class LudaxEnvironment(core.PGXEnv):
             parser = Lark(f.read(), start='game')
 
         game_tree = parser.parse(game_str)
-        self.game_info = GameInfoExtractor()(game_tree)
+        self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
         game_rules = GameRuleParser(self.game_info).transform(game_tree)
 
         self.game_state_cls = self.game_info.game_state_class
@@ -68,8 +68,7 @@ class LudaxEnvironment(core.PGXEnv):
         state = State(
             game_state=game_state,
             observation=jnp.zeros(self.obs_shape, dtype=jnp.bool_),
-            legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_),
-            first_player=current_player
+            legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_)
         )
 
         legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)

@@ -20,6 +20,9 @@ class GameInfo:
     def __repr__(self):
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
 
+class RenderingInfo:
+    color_mapping: dict = None
+
 class GameInfoExtractor(Visitor):
     def __init__(self):
         self.game_info = GameInfo()
@@ -34,6 +37,12 @@ class GameInfoExtractor(Visitor):
         ]
 
         self.defaults = []
+
+        self.rendering_info = RenderingInfo()
+        self.rendering_info.color_mapping = {
+            "P1": "off_white",
+            "P2": "off_black"
+        }
     
     def __call__(self, tree):
         self.visit_topdown(tree)
@@ -44,7 +53,7 @@ class GameInfoExtractor(Visitor):
         self.game_info.game_state_class = game_state_class
         self.game_info.game_state_attributes = self.game_state_attributes
 
-        return self.game_info
+        return self.game_info, self.rendering_info
 
     def board(self, tree):
 
@@ -106,3 +115,22 @@ class GameInfoExtractor(Visitor):
         if "scores" not in self.game_state_attributes:
             self.game_state_attributes.append("scores")
             self.defaults.append(jnp.zeros(2, dtype=jnp.float32))
+
+
+    '''
+    Rendering and graphics related functions
+    '''
+    def color_assignment(self, tree):
+        player, color = map(str, tree.children)
+        self.rendering_info.color_mapping[player] = color
+
+if __name__ == '__main__':
+    grammar = open('grammar.lark').read()
+    parser = Lark(grammar, start='game')
+
+    game = open('games/tic_tac_toe.ldx').read()
+    tree = parser.parse(game)
+
+    info, rendering_info = GameInfoExtractor()(tree)
+
+    print(info)
