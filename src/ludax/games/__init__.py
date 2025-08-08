@@ -1,160 +1,31 @@
+from importlib.resources import files
+
+def _read_game(game_name: str) -> str:
+    with files(__package__).joinpath(f"./{game_name}.ldx").open('r') as f:
+        return f.read()
+
 # Package a subset of default game implementations
+complexity_demo = _read_game('complexity_demo')
+connect_four = _read_game('connect_four')
+connect_six = _read_game('connect_six')
+hex = _read_game('hex')
+gomoku = _read_game('gomoku')
+pente = _read_game('pente')
+reversi = _read_game('reversi')
+tic_tac_toe = _read_game('tic_tac_toe')
+yavalath = _read_game('yavalath')
+yavalax = _read_game('yavalax')
 
-connect_six = """
-(game "Connect-Six"
-    (players 2)
-    (equipment 
-        (board (square 19))
-    ) 
-    
-    (rules 
-        (play
-            (once-through (P1)
-                (place (destination empty))
-            )
-            (repeat (P2 P2 P1 P1)
-                (place (destination empty))
-            )
-        )
-        (end 
-            (if (line 6) (mover win))
-        )
-    )
-)
-"""
-
-connect_four = """
-(game "Connect-Four"
-    (players 2)
-    (equipment 
-        (board (rectangle 6 7))
-    ) 
-    
-    (rules 
-        (play
-            (repeat (P1 P2)
-                (place (destination (and empty (or (edge bottom) (adjacent occupied direction:up)))))
-            )
-        )
-        
-        (end 
-            (if (line 4) (mover win))
-            (if (full_board) (draw))    
-        )
-    )
-)
-"""
-
-hex = """
-(game "Hex"
-    (players 2)
-    (equipment 
-        (board (hex_rectangle 11 11))
-    ) 
-    
-    (rules 
-        (play
-            (repeat (P1 P2)
-                (place (destination empty))
-            )
-        )
-        
-        (end 
-            (if (and (>= (connected ((edge top) (edge bottom))) 2) (mover_is P1)) (mover win))
-            (if (and (>= (connected ((edge left) (edge right))) 2) (mover_is P2)) (mover win))
-            (if (full_board) (draw))    
-        )
-    )
-)
-"""
-
-tic_tac_toe = """
-(game "Tic-Tac-Toe" 
-    (players 2)
-    (equipment 
-        (board (square 3))
-    ) 
-    
-    (rules 
-        (play
-            (repeat (P1 P2)
-                (place (destination empty))
-            )
-        )
-        
-        (end 
-            (if (line 3) (mover win))
-            (if (full_board) (draw))    
-        )
-    )
-)
-"""
-
-reversi = """
-(game "Reversi" 
-    (players 2)
-    (equipment 
-        (board (square 8))
-    ) 
-    
-    (rules
-        (start
-            (place P1 (27 36))
-            (place P2 (28 35))
-        )
-        (play
-            (repeat (P2 P1)
-                (place 
-                    (destination empty)
-                    (result 
-                        (exists
-                            (custodial any)
-                        )
-                    )
-                    (effects 
-                        (flip (custodial any))
-                        (set_score mover (count (occupied mover)))
-                        (set_score opponent (count (occupied opponent)))
-                    )
-                )
-                (force_pass)
-            )
-        )
-        
-        (end
-            (if (passed both) (by_score))    
-        )
-    )
-)
-"""
-
-
-complexity_demo = """
-(game "Complexity Demo" 
-    (players 2)
-    (equipment 
-        (board (square 10))
-    ) 
-
-    (rules 
-        (play
-            (once-through (P1)
-                (place (destination empty))
-            )
-            (repeat (P2 P2 P1 P1)
-                (place 
-                    (destination (and empty (not (adjacent (adjacent (prev_move opponent))))))
-                    (effects 
-                        (capture (adjacent (prev_move mover)) increment_score:true)
-                    )
-                )
-            )
-        )
-        (end 
-            (if (line 4) (mover win))
-            (if (>= (score mover) 5) (mover win))
-            (if (full_board) (draw))
-        )
-    )
-)
-"""
+# List of all games available in the package
+__all__ = [
+    "complexity_demo",
+    "connect_four",
+    "connect_six",
+    "hex",
+    "gomoku",
+    "pente",
+    "reversi",
+    "tic_tac_toe",
+    "yavalath",
+    "yavalax"
+]

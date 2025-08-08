@@ -2,18 +2,6 @@
 Ludax is a domain specific language for board games that compiles into hardware-accelerated learning environments using [JAX](https://github.com/jax-ml/jax). Ludax draws inspiration from the [Ludii](https://ludii.games/index.php) game description language as well as [PGX](https://github.com/sotetsuk/pgx), a library of JAX implementations for classic board games and video games. Ludax supports a variety of two-player perfect-information board games and can run at tens of millions of steps per second on modern GPUs.
 
 ![Throughput of Ludax environments compared to PGX and Ludii implementations](/assets/throughput_comparison.png)
-## ToDo before merge
-- Fix compare_implementations.py and other scripts
-
-## Issues
-- Confusingly, 'state.game_state.current_player' in the final state
-- `state.first_player` should be removed, why not define P1 as the first player? Graphically, we can still encode the first player as black or some other color, but it should not be part of the state. -> P1 will e the first player while metadata will specify color.
-- remove `state.truncated`, that should be handled by the client.
-- `state.observation` should be removed, we can provide a function to convert game state to an observation instead.
-- It doesn't feel intuitive that the mover_reward is in `state.mover_reward` but the current_player is hidden in `state.game_state.current_player`. Is game_state supposed to represent internal variables who's API can change from game to game? If so, it should not be part of the public API.
-- We really need to demonstrate that fp16 is faster than fp32 on our target hardware. If it isn't then we should stick to fp32 since that's what most other libraries use.
-- config.State should inherit from pgx_core.PGXState no?
-
 
 ## Installation
 > [!IMPORTANT]
