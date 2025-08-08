@@ -1,5 +1,5 @@
 // ---Root---
-game: "(game" name players equipment rules ")"
+game: "(game" name players equipment rules rendering? ")"
 
 // ---Players---
 players: "(players" positive_int ")"
@@ -149,6 +149,12 @@ orientation_arg: "orientation:" orientation
 pattern_arg: "(" positive_int+ ")"
 rotate_arg: "rotate:" boolean
 
+// Optional rendering details
+rendering: "(rendering" rendering_detail+ ")"
+rendering_detail: color_assignment
+
+color_assignment: "(color" player_reference color ")"
+
 // General-purpose definitions
 ?number: SIGNED_NUMBER
 ?positive_int: /[0-9]+/
@@ -156,6 +162,7 @@ rotate_arg: "rotate:" boolean
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
+?color: WHITE | BLACK
 // ----------------------------
 
 ?player_reference: P1 | P2
@@ -193,6 +200,8 @@ OPPONENT: "opponent"
 P1: "P1"
 P2: "P2"
 BOTH: "both"
+WHITE: "white"
+BLACK: "black"
 
 // Lark imports
 %import common.ESCAPED_STRING -> STRING

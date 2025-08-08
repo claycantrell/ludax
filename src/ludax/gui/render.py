@@ -13,9 +13,11 @@ class InteractiveBoardHandler():
     '''
     def __init__(self,
                  game_info,
+                 rendering_info,
                  render_config=RENDER_CONFIG):
         
         self.game_info = game_info
+        self.rendering_info = rendering_info
         self.render_config = render_config
         self.cell_size = render_config['cell_size']
         self.padding = self.cell_size / 2
@@ -270,9 +272,11 @@ class InteractiveBoardHandler():
 
             # Draw the piece (if present)
             if occupant == P1:
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=self.render_config['off_white'], stroke=self.render_config['dark_grey'], stroke_width=1))
+                fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
+                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
             elif occupant == P2:
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=self.render_config['off_black'], stroke=self.render_config['dark_grey'], stroke_width=1))
+                fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
+                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
 
         # Add an invisible rectangle to capture the user's clicks
         if add_button:

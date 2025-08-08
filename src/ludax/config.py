@@ -166,8 +166,8 @@ RENDER_CONFIG = {
     # Colors
     "light_blue": "#d2e6ff",
     "light_grey": "#c3cdd8",
-    "off_white": "#fafafa",
+    "white": "#fafafa",
+    "black": "#323232",
     "dark_grey": "#a6a6a6",
-    "off_black": "#323232",
     "purple": "#8a7af0"
 }

@@ -100,7 +100,7 @@ def render_game(id):
     global STATE
 
     ENV = environment.LudaxEnvironment(f"games/{id}.ldx")
-    HANDLER = InteractiveBoardHandler(ENV.game_info)
+    HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
 
     STATE = ENV.init(jax.random.PRNGKey(42))
     

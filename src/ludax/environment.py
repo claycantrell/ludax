@@ -26,7 +26,7 @@ class LudaxEnvironment(core.PGXEnv):
             parser = Lark(f.read(), start='game')
 
         game_tree = parser.parse(game_str)
-        self.game_info = GameInfoExtractor()(game_tree)
+        self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
         game_rules = GameRuleParser(self.game_info).transform(game_tree)
 
         self.game_state_cls = self.game_info.game_state_class

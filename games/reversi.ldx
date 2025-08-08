@@ -6,11 +6,11 @@
     
     (rules
         (start
-            (place P1 (27 36))
-            (place P2 (28 35))
+            (place P1 (28 35))
+            (place P2 (27 36))
         )
         (play
-            (repeat (P2 P1)
+            (repeat (P1 P2)
                 (place 
                     (destination empty)
                     (result 
@@ -31,5 +31,9 @@
         (end
             (if (passed both) (by_score))    
         )
+    )
+    (rendering
+        (color P1 black)
+        (color P2 white)
     )
 )

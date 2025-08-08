@@ -42,8 +42,14 @@ class GameRuleParser(Transformer):
             return str(token)
     
     def game(self, children):
-        _, _, _, *game_rule_dicts = children
-        game_rule_dicts = game_rule_dicts[0]
+
+        # Case 1: no optional rendering rules
+        if len(children) == 4:
+            _, _, _, game_rule_dicts = children
+
+        # Case 2: optional rendering rules are present
+        else:
+            _, _, _, game_rule_dicts, _ = children
 
         # Handle the case where there are no start rules
         if len(game_rule_dicts) == 2:
