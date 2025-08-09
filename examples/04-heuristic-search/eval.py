@@ -13,6 +13,7 @@ from heuristics.test import bad_heuristic, zero_heuristic
 
 from mcts import mcts_policy, gumbel_policy
 from simple import one_ply_policy, random_policy
+from beam import beam_search_policy
 
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
@@ -72,26 +73,27 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
 def main():
     env = LudaxEnvironment(
         # game_str=complexity_demo,
-        game_str=hex,
+        # game_str=hex,
         # game_str=connect_four,
         # game_str=reversi,
-        # game_str=tic_tac_toe,
+        game_str=tic_tac_toe,
     )
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=2, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=100, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
-    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
+    # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
+    AGENT1 = beam_search_policy(step_b, topk=9, iterations=10)
 
-    # AGENT2 = random_policy()
+    AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    AGENT2 = one_ply_policy(step_b, bad_heuristic)
+    # AGENT2 = one_ply_policy(step_b)
 
     start_time = time.time()
     (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
