@@ -9,6 +9,7 @@ from .config import BoardShapes
 
 @dataclass
 class GameInfo:
+    num_players: int = 2
     board_shape: str = None
     observation_shape: tuple = None
     board_dims: tuple = None
@@ -40,8 +41,8 @@ class GameInfoExtractor(Visitor):
 
         self.rendering_info = RenderingInfo()
         self.rendering_info.color_mapping = {
-            "P1": "off_white",
-            "P2": "off_black"
+            "P1": "white",
+            "P2": "black"
         }
     
     def __call__(self, tree):
