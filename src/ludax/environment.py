@@ -67,7 +67,8 @@ class LudaxEnvironment(core.PGXEnv):
 
         state = State(
             game_state=game_state,
-            legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_)
+            legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_),
+            current_player=current_player
         )
 
         legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)

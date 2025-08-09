@@ -83,8 +83,9 @@ class PGXEnv(abc.ABC):
 
         """
         state = self._init(key)
-        observation = self.observe(state, state.game_state.current_player)
-        return state.replace(observation=observation)  # type: ignore
+        # observation = self.observe(state, state.game_state.current_player)
+        # return state.replace(observation=observation)  # type: ignore
+        return state
 
     def step(
         self,
@@ -120,8 +121,8 @@ class PGXEnv(abc.ABC):
             lambda: state,
         )
 
-        observation = self.observe(state, state.game_state.current_player)
-        state = state.replace(observation=observation)  # type: ignore
+        # observation = self.observe(state, state.game_state.current_player)
+        # state = state.replace(observation=observation)  # type: ignore
 
         return state
 
