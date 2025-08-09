@@ -1,15 +1,15 @@
+from importlib.resources import files
+from typing import Optional
+
 import jax
 import jax.numpy as jnp
 from lark import Lark
-from importlib.resources import files
 
-
-from . import pgx_core as core
-from .config import Array, PRNGKey, State, EMPTY
+from .config import Array, PRNGKey, State, EMPTY, TRUE
 from .game_info import GameInfoExtractor
 from .game_parser import GameRuleParser
 
-class LudaxEnvironment(core.PGXEnv):
+class LudaxEnvironment():
     def __init__(self,
                  game_path: str = None,
                  game_str: str = None):
@@ -46,7 +46,7 @@ class LudaxEnvironment(core.PGXEnv):
         self._get_winner = game_rules['end_rules']
         self._get_terminal = lambda board, player: (board != EMPTY).all()
 
-    def _init(self, rng: PRNGKey) -> State:
+    def init(self, rng: PRNGKey) -> State:
 
         board = jnp.ones(self.board_size, dtype=jnp.int16) * EMPTY
         board = self._initialize_board(board)
@@ -76,7 +76,47 @@ class LudaxEnvironment(core.PGXEnv):
 
         return state
     
+    def step(self, state: State, action: Array, key: Optional[Array] = None) -> State:
+        """
+        The basic environment step function, largely taken from the PGX implementation
+        (https://github.com/sotetsuk/pgx/blob/main/pgx/core.py) and used under the
+        Apache-2.0 license.
+        """
+        is_illegal = ~state.legal_action_mask[action]
+        current_player = state.current_player
+
+        # If the state is already terminated or truncated, environment does not take usual step,
+        # but return the same state with zero-rewards for all players
+        state = jax.lax.cond(
+            (state.terminated | state.truncated),
+            lambda: state.replace(rewards=jnp.zeros_like(state.rewards)),  # type: ignore
+            lambda: self._step(state, action, key),  # type: ignore
+        )
+
+        # Taking illegal action leads to immediate game terminal with negative reward
+        state = jax.lax.cond(
+            is_illegal,
+            lambda: self._step_with_illegal_action(state, current_player),
+            lambda: state,
+        )
+
+        # All legal_action_mask elements are **TRUE** at terminal state
+        # This is to avoid zero-division error when normalizing action probability
+        # Taking any action at terminal state does not give any effect to the state
+        state = jax.lax.cond(
+            state.terminated,
+            lambda: state.replace(legal_action_mask=jnp.ones_like(state.legal_action_mask)),  # type: ignore
+            lambda: state,
+        )
+
+        # NOTE: unlike PGX, we don't compute the observation inside the step function, instead leaving it
+        # to, for example, the RL training loop using env._observe(state, player_id)
+
+        return state
+    
     def _step(self, state: State, action: Array, key) -> State:
+
+        # Currently, Ludax games don't have any stochastic elements, so we don't use the key
         del key
 
         # The game state is separate from the "environment state" and contains
@@ -136,7 +176,7 @@ class LudaxEnvironment(core.PGXEnv):
 
         return state
 
-    def _observe(self, state: core.PGXState, player_id: Array) -> Array:
+    def _observe(self, state: State, player_id: Array) -> Array:
         """
         Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor
         board[i] == -1  → empty square
@@ -153,9 +193,17 @@ class LudaxEnvironment(core.PGXEnv):
 
         obs = jnp.stack((board2d == player_id, board2d == jnp.abs(1 - player_id)), axis=-1)
 
-        return jax.lax.stop_gradient(obs)  # Not sure why, taken from pgx core
-
+        return jax.lax.stop_gradient(obs)  # Taken from PGX
 
     @property
-    def num_players(self) -> int:
-        return 2
+    def _illegal_action_penalty(self) -> float:
+        """
+        Negative reward given when illegal action is selected
+        """
+        return -1.0
+
+    def _step_with_illegal_action(self, state: State, loser: Array) -> State:
+        penalty = self._illegal_action_penalty
+        reward = jnp.ones_like(state.rewards) * (-1 * penalty) * (self.game_info.num_players - 1)
+        reward = reward.at[loser].set(penalty)
+        return state.replace(rewards=reward, terminated=TRUE)  # type: ignore
