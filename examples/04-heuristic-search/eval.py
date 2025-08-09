@@ -81,24 +81,27 @@ def main():
     )
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=1, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=10, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    AGENT1 = beam_search_policy(step_b, topk=9, iterations=2, heuristic=connect_four_heuristic)
+    AGENT1 = beam_search_policy(step_b, topk=10, iterations=10, heuristic=connect_four_heuristic)
 
-    AGENT2 = random_policy()
+    # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    # AGENT2 = one_ply_policy(step_b)
+    # AGENT2 = beam_search_policy(step_b, topk=1, iterations=1, heuristic=connect_four_heuristic)
+    AGENT2 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
 
     start_time = time.time()
-    (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, key)
-    (w2, d2, l2), key = evaluate_policy(AGENT2, AGENT1, state_b, step_b, key)
+    key, sub_key = jax.random.split(key)
+    (w1, d1, l1), key = evaluate_policy(AGENT1, AGENT2, state_b, step_b, sub_key)
+    key, sub_key = jax.random.split(key)
+    (w2, d2, l2), key = evaluate_policy(AGENT2, AGENT1, state_b, step_b, sub_key)
 
     compile_time = time.time()
 

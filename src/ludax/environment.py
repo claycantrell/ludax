@@ -137,7 +137,24 @@ class LudaxEnvironment(core.PGXEnv):
         return state
 
     def _observe(self, state: core.PGXState, player_id: Array) -> Array:
-        return jnp.zeros(self.obs_shape, dtype=jnp.bool_)
+        """
+        Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor
+        board[i] == -1  → empty square
+        board[i] == 0   → square occupied by white (current player or not)
+        board[i] == 1   → square occupied by black (current player or not)
+        observation[:, :, 0] == True  → squares occupied by the current player (black or white)
+        observation[:, :, 1] == True  → squares occupied by the other player (black or white)
+        """
+        board = state.game_state.board
+        observation_shape = self.game_info.observation_shape
+
+        board2d = board.reshape(*board.shape[:-1], observation_shape[-3], observation_shape[-2])
+        player_id = player_id[..., None, None]
+
+        obs = jnp.stack((board2d == player_id, board2d == jnp.abs(1 - player_id)), axis=-1)
+
+        return jax.lax.stop_gradient(obs)  # Not sure why, taken from pgx core
+
 
     @property
     def num_players(self) -> int:

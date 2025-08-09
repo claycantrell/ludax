@@ -5,3 +5,5 @@ renders/
 .idea/
 *.egg-info/
 dist/
+baselines/
+wandb/

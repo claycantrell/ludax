@@ -41,7 +41,7 @@ from pgx.experimental import auto_reset
 
 # Import the LDX environment
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from environment import LudaxEnvironment
+from ludax import LudaxEnvironment
 
 # CNN module from PGX
 from network import AZNet
@@ -90,7 +90,7 @@ def pgx_baseline(env_id):
 
     @jax.jit
     def baseline_wrap(state):
-        logits, _ = baseline_fn(observe(state))
+        logits, _ = baseline_fn(observe(env, state))
         return logits
 
     return baseline_wrap
@@ -106,31 +106,15 @@ def random_baseline(state):
 
     return jnp.log(state.legal_action_mask.astype(jnp.float16))
 
-
-@partial(jax.jit, static_argnames=["observation_shape"])
-def board_to_observation(board: jnp.ndarray, current_player: jnp.ndarray, observation_shape: Tuple[int, int]) -> jnp.ndarray:
-    """
-    Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor symbolizing who is playing.
-    board[i] == -1  → empty square
-    board[i] == 0   → square occupied by white (current player or not)
-    board[i] == 1   → square occupied by black (current player or not)
-    observation[:, :, 0] == True  → squares occupied by the current player (black or white)
-    observation[:, :, 1] == True  → squares occupied by the other player (black or white)
-    """
-    board2d = board.reshape(*board.shape[:-1], observation_shape[-3], observation_shape[-2])
-    current_player = current_player[..., None, None]
-    return jnp.stack((board2d == current_player, board2d == jnp.abs(1 - current_player)), axis=-1)
-
-
-@jax.jit
-def observe(state: pgx.State) -> jnp.ndarray:
+@partial(jax.jit, static_argnums=0)
+def observe(env, state: pgx.State) -> jnp.ndarray:
     """
     Wrapper function to convert the state to the model input regardless of the env_type.
     """
     if config.env_type=="pgx":
         return state.observation
     else:
-        return board_to_observation(state.game_state.board, state.game_state.current_player, state.observation.shape)
+        return env.observe(state, state.current_player)
 
 
 def forward_fn(x, is_eval=False):
@@ -157,7 +141,7 @@ def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state: pgx.St
         action = action.astype(jnp.int16)
     state = jax.vmap(env.step)(state, action)
 
-    (logits, value), _ = forward.apply(model_params, model_state, observe(state), is_eval=True)
+    (logits, value), _ = forward.apply(model_params, model_state, observe(env, state), is_eval=True)
     # mask invalid actions
     logits = logits - jnp.max(logits, axis=-1, keepdims=True)
     logits = jnp.where(state.legal_action_mask, logits, jnp.finfo(logits.dtype).min)
@@ -192,7 +176,7 @@ def selfplay(model, rng_key: jnp.ndarray) -> SelfplayOutput:
     def step_fn(state, key) -> SelfplayOutput:
         key1, key2 = jax.random.split(key)
 
-        observation = observe(state)
+        observation = observe(env, state)
 
         (logits, value), _ = forward.apply(
             model_params, model_state, observation, is_eval=True
@@ -316,7 +300,7 @@ def evaluate(rng_key, my_model, my_player: int):
     def body_fn(val):
         key, state, R = val
         (my_logits, _), _ = forward.apply(
-            my_model_params, my_model_state, observe(state), is_eval=True
+            my_model_params, my_model_state, observe(env, state), is_eval=True
         )
         opp_logits = baseline(state)
         current_player = state.current_player if config.env_type=="pgx" else state.game_state.current_player
@@ -368,7 +352,7 @@ if __name__ == "__main__":
 
     # Initialize model and opt_state
     dummy_state = jax.vmap(env.init)(jax.random.split(jax.random.PRNGKey(0), 2))
-    dummy_input = observe(dummy_state)
+    dummy_input = observe(env, dummy_state)
     model = forward.init(jax.random.PRNGKey(0), dummy_input)  # (params, state)
     opt_state = optimizer.init(params=model[0])
     # replicates to all devices
