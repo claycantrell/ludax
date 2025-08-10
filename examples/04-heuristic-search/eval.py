@@ -81,14 +81,14 @@ def main():
     )
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=10, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=1, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    AGENT1 = beam_search_policy(step_b, topk=10, iterations=10, heuristic=connect_four_heuristic)
+    AGENT1 = beam_search_policy(step_b, topk=1000, iterations=5, heuristic=connect_four_heuristic)
 
     # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)

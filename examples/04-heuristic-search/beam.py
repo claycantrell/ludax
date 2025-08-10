@@ -5,6 +5,7 @@ from jax import lax
 from heuristics.test import zero_heuristic
 from heuristics import BIG, SMALL
 
+
 def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10):
 
     def beam_search_f(state, key):
@@ -21,18 +22,21 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
             state
         )
 
-        # Initial values — heuristic from root perspective
-        init_polarity = jnp.where(
-            top_states.game_state.current_player == root_player, 1.0, -1.0
+        root_value = heuristic(state) # TODO figure out if it's okay to expect heuristic to support both single and batched states
+        top_values = jnp.full((topk,), -BIG, dtype=root_value.dtype)
+        top_values = top_values.at[0].set(root_value)
+
+        top_is_dummy = jnp.concatenate(
+            [jnp.array([False]), jnp.ones((topk - 1,), dtype=bool)],
+            axis=0
         )
-        top_values = init_polarity * heuristic(top_states)
 
         jax.debug.print("[Init] top_values = {x}", x=top_values)
 
         for i in range(iterations):
             key, subkey = jax.random.split(key)
             top_states, top_values = beam_step_f_single(
-                root_player, top_states, top_values, subkey
+                root_player, top_states, top_values, top_is_dummy, subkey
             )
             jax.debug.print("[Iter {i}] top_values = {x}", i=i + 1, x=top_values)
 
@@ -53,7 +57,7 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
         )
         return action
 
-    def beam_step_f_single(root_player, top_states, top_values, key):
+    def beam_step_f_single(root_player, top_states, top_values, top_is_dummy, key):
         _topk, num_actions = top_states.legal_action_mask.shape
 
         all_actions = jnp.broadcast_to(jnp.arange(num_actions), (_topk, num_actions))
@@ -69,28 +73,21 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
         noise = jax.random.uniform(key, shape=flat_next_state.mover_reward.shape, minval=-SMALL, maxval=SMALL)
 
         # Signs per term
-        # Root perspective for the HEURISTIC: + if root is the next player to move
-        heur_sign = jnp.where(flat_next_state.game_state.current_player == root_player, 1.0, -1.0)
-
-        # Root perspective for the IMMEDIATE REWARD: + if root was the mover that just acted
-        # (the mover in the *previous* state, i.e., state_flat)
-        reward_sign = jnp.where(state_flat.game_state.current_player == root_player, 1.0, -1.0)
+        heur_sign = jnp.where(flat_next_state.game_state.current_player == state_flat.game_state.current_player, 1.0, -1.0)
 
         # Combine into root player's perspective
         action_values_flat = (
-                BIG * reward_sign * flat_next_state.mover_reward
+                BIG * flat_next_state.mover_reward
                 + heur_sign * heuristic(flat_next_state)
                 + noise
         )
-
-
 
         # legality for each (state, action) pair
         legality_flat = state_flat.legal_action_mask[
             jnp.arange(actions_flat.shape[0]), actions_flat
         ]
 
-        # keep illegal as -inf in values (safe for later concatenation)
+        # mask illegal actions as -inf
         action_values_flat = jnp.where(legality_flat, action_values_flat, -jnp.inf)
 
         # jax.debug.print(
@@ -106,18 +103,14 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
             top_states, flat_next_state
         )
 
-        # Legality mask for the combined pool:
-        # - previous top_k states are valid candidates (True)
-        # - new action candidates follow legality_flat
-        combined_legal = jnp.concatenate(
-            [jnp.ones_like(top_values, dtype=bool), legality_flat], axis=0
-        )
+        # Any child of a dummy parent is also dummy, and must never be competitive
+        parent_dummy_flat = jnp.repeat(top_is_dummy, num_actions, axis=0)
+        combined_is_dummy = jnp.concatenate([top_is_dummy, parent_dummy_flat], axis=0)
+        # This could overwrite a -inf from an illegal dummy child but we still keep track of them so it's okay
+        combined_values = jnp.where(combined_is_dummy, -BIG, combined_values)
 
-        # Select new top-k by absolute value, but make illegal magnitudes -inf so they can never win
-        abs_vals = jnp.abs(combined_values)
-        abs_vals = jnp.where(combined_legal, abs_vals, -jnp.inf)
-
-        _top_abs, top_indices = lax.top_k(abs_vals, _topk)
+        # Select new top-k
+        _top_abs, top_indices = lax.top_k(combined_values, _topk)
 
         new_top_values = jnp.take(combined_values, top_indices, axis=0)
         new_top_states = jax.tree_util.tree_map(
