@@ -1,4 +1,4 @@
-# NOTE: This file is copied from Flax (https://github.com/google/flax).
+# NOTE: This file is copied from PGX, which is itself copied from Flax (https://github.com/google/flax).
 # Copyright belongs to the original authors.
 # We keep tracking the updates of original Flax implementation.
 # We try to minimize the modification to this file. Exceptions includes:

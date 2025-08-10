@@ -187,6 +187,4 @@ def reset():
     HANDLER.render(STATE)
     time.sleep(0.1)
 
-    svg_data = ""
-
-    return {"svg": svg_data}
+    return {"svg": HANDLER.rendered_svg}

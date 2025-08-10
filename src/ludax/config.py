@@ -10,7 +10,7 @@ except ImportError: # Python ≤ 3.10
 
 import jax.numpy as jnp
 
-from .pgx_struct import dataclass
+from .struct import dataclass
 
 Array = Any
 PRNGKey = Any
