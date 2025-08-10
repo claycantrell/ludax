@@ -34,7 +34,7 @@ class LudaxEnvironment():
         self.obs_shape = self.game_info.observation_shape
         self.board_size = self.game_info.board_size
 
-        self.action_size = game_rules['action_size']
+        self.num_actions = game_rules['action_size']
         self._initialize_board = game_rules['start_rules']
         self._apply_action = game_rules['apply_action_fn']
         self._update_info = game_rules['addl_info_fn']
@@ -67,7 +67,7 @@ class LudaxEnvironment():
 
         state = State(
             game_state=game_state,
-            legal_action_mask=jnp.ones(self.action_size, dtype=jnp.bool_),
+            legal_action_mask=jnp.ones(self.num_actions, dtype=jnp.bool_),
             current_player=current_player
         )
 
@@ -176,7 +176,7 @@ class LudaxEnvironment():
 
         return state
 
-    def _observe(self, state: State, player_id: Array) -> Array:
+    def observe(self, state: State, player_id: Array) -> Array:
         """
         Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor
         board[i] == -1  → empty square

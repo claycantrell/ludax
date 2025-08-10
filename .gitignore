@@ -8,3 +8,4 @@ dist/
 baselines/
 wandb/
 submit.sh
+checkpoints
