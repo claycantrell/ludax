@@ -35,13 +35,12 @@ import optax
 import wandb
 from omegaconf import OmegaConf
 
+from ludax import LudaxEnvironment, games
+
 # Import the PGX environment
 import pgx
 from pgx.experimental import auto_reset
 
-# Import the LDX environment
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from ludax import LudaxEnvironment
 
 # CNN module from PGX
 from network import AZNet
@@ -336,7 +335,7 @@ if __name__ == "__main__":
         config.env_id = "reversi"
 
     # Initialize the environment, either PGX or LDX
-    env = pgx.make(config.env_id) if config.env_type == "pgx" else LudaxEnvironment(f"games/{config.env_id}.ldx")
+    env = pgx.make(config.env_id) if config.env_type == "pgx" else LudaxEnvironment(game_str=getattr(games, config.env_id))
 
     # Load the baseline model for evaluation
     try:
@@ -398,8 +397,7 @@ if __name__ == "__main__":
                     "frames": frames,
                     "hours": hours,
                     "pgx.__version__": pgx.__version__,
-                    "env_id": env.id,
-                    "env_version": env.version,
+                    "env_id": config.env_id,
                 }
                 pickle.dump(dic, f)
 

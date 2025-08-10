@@ -1,6 +1,6 @@
 [project]
 name = "ludax"
-version = "0.0.5"
+version = "0.0.6"
 authors = [
   { name="Graham Todd", email="gdrtodd@gmail.com" }, { name="Alexander Padula", email="alexpadula2001@gmail.com"}
 ]
@@ -35,4 +35,4 @@ Issues = "https://github.com/gdrtodd/ludax/issues"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-"*" = ["*.lark", "*.html", "*.css"]
+"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg"]
