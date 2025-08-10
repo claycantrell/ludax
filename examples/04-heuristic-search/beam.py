@@ -57,7 +57,11 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
         )
         return action
 
-    def beam_step_f_single(root_player, top_states, top_values, top_is_dummy, key):
+    def beam_step_f_single(top_states, top_values, top_is_dummy, key):
+        """
+        Perform one step of the beam search, expanding the top-k states and evaluating their actions.
+        Top-k is defined from the perspective of the mover sice we want to identify
+        """
         _topk, num_actions = top_states.legal_action_mask.shape
 
         all_actions = jnp.broadcast_to(jnp.arange(num_actions), (_topk, num_actions))
@@ -73,9 +77,9 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
         noise = jax.random.uniform(key, shape=flat_next_state.mover_reward.shape, minval=-SMALL, maxval=SMALL)
 
         # Signs per term
-        heur_sign = jnp.where(flat_next_state.game_state.current_player == state_flat.game_state.current_player, 1.0, -1.0)
+        heur_sign = jnp.where(flat_next_state.current_player == state_flat.current_player, 1.0, -1.0)
 
-        # Combine into root player's perspective
+        # Combine from current player's perspective
         action_values_flat = (
                 BIG * flat_next_state.mover_reward
                 + heur_sign * heuristic(flat_next_state)
@@ -87,6 +91,10 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
             jnp.arange(actions_flat.shape[0]), actions_flat
         ]
 
+        # Mask out dummy children
+        parent_dummy_flat = jnp.repeat(top_is_dummy, num_actions, axis=0)
+        action_values_flat = jnp.where(parent_dummy_flat, -BIG, action_values_flat)
+
         # mask illegal actions as -inf
         action_values_flat = jnp.where(legality_flat, action_values_flat, -jnp.inf)
 
@@ -96,21 +104,8 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, topk=200, iterations=10
         #     ordered=True
         # )
 
-        # Build combined pool
-        combined_values = jnp.concatenate([top_values, action_values_flat], axis=0)
-        combined_states = jax.tree_util.tree_map(
-            lambda old, new: jnp.concatenate([old, new], axis=0),
-            top_states, flat_next_state
-        )
-
-        # Any child of a dummy parent is also dummy, and must never be competitive
-        parent_dummy_flat = jnp.repeat(top_is_dummy, num_actions, axis=0)
-        combined_is_dummy = jnp.concatenate([top_is_dummy, parent_dummy_flat], axis=0)
-        # This could overwrite a -inf from an illegal dummy child but we still keep track of them so it's okay
-        combined_values = jnp.where(combined_is_dummy, -BIG, combined_values)
-
         # Select new top-k
-        _top_abs, top_indices = lax.top_k(combined_values, _topk)
+        _top_val, top_indices = lax.top_k(combined_values, topk)
 
         new_top_values = jnp.take(combined_values, top_indices, axis=0)
         new_top_states = jax.tree_util.tree_map(
