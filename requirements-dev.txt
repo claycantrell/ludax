@@ -1,0 +1,18 @@
+# Ludax in development mode
+-e .[gui]
+
+# Graphs
+matplotlib
+pandas
+thefuzz
+tqdm
+
+# Alphazero
+pgx>=2.0.0
+dm-haiku
+mctx
+optax
+wandb
+omegaconf
+pydantic
+numpy<2.0

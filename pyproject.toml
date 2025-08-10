@@ -1,0 +1,38 @@
+[project]
+name = "ludax"
+version = "0.0.6"
+authors = [
+  { name="Graham Todd", email="gdrtodd@gmail.com" }, { name="Alexander Padula", email="alexpadula2001@gmail.com"}
+]
+description = "Ludax is a domain-specific language for board games that automatically compiles into hardware-accelerated learning environments with the JAX library"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = [
+    "jax",
+    "lark",
+    "flax"
+]
+
+[project.optional-dependencies]
+gui = [
+    "flask",
+    "svgwrite"
+]
+
+
+[project.urls]
+Homepage = "https://github.com/gdrtodd/ludax"
+Issues = "https://github.com/gdrtodd/ludax/issues"
+
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg"]
