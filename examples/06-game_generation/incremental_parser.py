@@ -45,8 +45,6 @@ tic_tac_toe_complete = """
             (if (full_board) (draw)) 
 """
 
-print(tic_tac_toe_partial)
-
 # Note: Had to redefine the grammar to name all literals which eliminates __ANON_* tokens
 # with files("ludax").joinpath('grammar.lark').open('r') as f:
 #     grammar = f.read()
@@ -66,6 +64,15 @@ def print_partial_tree(value_stack, indent=0):
             # Might be an intermediate value from a transformer
             print("  " * indent + repr(item))
 
+def tree_to_source(obj):
+    """Recursively rebuild the original source text from a Lark Tree or Token."""
+    if isinstance(obj, Tree):
+        return " ".join(tree_to_source(c) for c in obj.children)
+    elif isinstance(obj, Token):
+        return obj.value
+    else:
+        return str(obj)
+
 parser = Lark(
     grammar,
     start="game",            # same start rule as before
@@ -74,7 +81,7 @@ parser = Lark(
 )
 
 # interactive = parser.parse_interactive('(game "demo" ')
-interactive = parser.parse_interactive(tic_tac_toe_partial)
+interactive = parser.parse_interactive(tic_tac_toe_complete)
 interactive.exhaust_lexer()
 
 
@@ -160,10 +167,10 @@ while True:
 
 # Print the current state of the parser
 tree = interactive.resume_parse()
-print(tree.pretty())
+game_str = tree_to_source(tree)
 
 
-env = LudaxEnvironment(game_tree=tree)
+env = LudaxEnvironment(game_str=game_str)
 init = jax.jit(jax.vmap(env.init))
 step = jax.jit(jax.vmap(env.step))
 

@@ -1,51 +1,51 @@
 // ---Root---
-game: "(game" name players equipment rules rendering? ")"
+game: "(" "game" name players equipment rules rendering? ")"
 
 // ---Players---
-players: "(players" positive_int ")"
+players: "(" "players" positive_int ")"
 
 // ---Equipment---
-equipment: "(equipment" board ")"
-board: "(board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
-board_square: "(square" number ")"
-board_rectangle: "(rectangle" number number ")"
-board_hexagon: "(hexagon"  number ")"
-board_hex_rectangle: "(hex_rectangle" number number ")"
+equipment: "(" "equipment" board ")"
+board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
+board_square: "(" "square" number ")"
+board_rectangle: "(" "rectangle" number number ")"
+board_hexagon: "(" "hexagon"  number ")"
+board_hex_rectangle: "(" "hex_rectangle" number number ")"
 
 // ---Rules---
-rules: "(rules" start_rules? play_rules end_rules ")"
+rules: "(" "rules" start_rules? play_rules end_rules ")"
 
 // ---Start rules---
-start_rules: "(start" start_rule+ ")"
+start_rules: "(" "start" start_rule+ ")"
 start_rule: start_place
-start_place: "(place" player_reference pattern_arg ")"
+start_place: "(" "place" player_reference pattern_arg ")"
 
 // ---Play rules---
-play_rules: "(play" play_phase+ ")"
+play_rules: "(" "play" play_phase+ ")"
 play_phase: phase_once_through | phase_repeat
-phase_once_through: "(once-through" play_mover_order play_mechanic ")"
-phase_repeat: "(repeat" play_mover_order play_mechanic ")"
+phase_once_through: "(" "once-through" play_mover_order play_mechanic ")"
+phase_repeat: "(" "repeat" play_mover_order play_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
 play_mechanic: play_place force_pass? 
-play_place: "(place" mover_reference? place_destination_constraint place_result_constraint? play_effects?")"
-force_pass: "(force_pass" ")"
+play_place: "(" "place" mover_reference? place_destination_constraint place_result_constraint? play_effects?")"
+force_pass: "(" "force_pass" ")"
 
 // ---Constraints---
-place_destination_constraint: "(destination" super_mask ")"
-place_result_constraint: "(result" super_predicate ")"
+place_destination_constraint: "(" "destination" super_mask ")"
+place_result_constraint: "(" "result" super_predicate ")"
 
 // ---Effects---
-play_effects: "(effects" play_effect+ ")"
+play_effects: "(" "effects" play_effect+ ")"
 play_effect: effect_capture 
            | effect_flip
            | effect_increment_score
            | effect_set_score
 
-effect_capture: "(capture" super_mask mover_reference? increment_score_arg? ")"
-effect_flip: "(flip" super_mask mover_reference? ")"
-effect_increment_score: "(increment_score" mover_reference function ")"
-effect_set_score: "(set_score" mover_reference function ")"
+effect_capture: "(" "capture" super_mask mover_reference? increment_score_arg? ")"
+effect_flip: "(" "flip" super_mask mover_reference? ")"
+effect_increment_score: "(" "increment_score" mover_reference function ")"
+effect_set_score: "(" "set_score" mover_reference function ")"
 
 // ---Functions---
 function: function_add
@@ -57,18 +57,18 @@ function: function_add
         | function_score
         | function_subtract
 
-function_add: "(add" function+ ")"
-function_connected: "(connected" multi_mask_arg mover_reference? direction_arg? ")"
+function_add: "(" "add" function+ ")"
+function_connected: "(" "connected" multi_mask_arg mover_reference? direction_arg? ")"
 function_constant: positive_int
-function_count: "(count" super_mask ")"
-function_line: "(line" positive_int orientation_arg? exact_arg? ")"
-function_multiply: "(multiply" function+ ")"
-function_score: "(score" mover_reference ")"
-function_subtract: "(subtract" function function ")"
+function_count: "(" "count" super_mask ")"
+function_line: "(" "line" positive_int orientation_arg? exact_arg? ")"
+function_multiply: "(" "multiply" function+ ")"
+function_score: "(" "score" mover_reference ")"
+function_subtract: "(" "subtract" function function ")"
 
 // ---End rules---
-end_rules: "(end" end_rule+ ")"
-end_rule: "(if" super_predicate end_rule_result ")"
+end_rules: "(" "end" end_rule+ ")"
+end_rule: "(" "if" super_predicate end_rule_result ")"
 ?end_rule_result: result_win | result_lose | result_draw | result_by_score
 
 // -- Result definitions --
@@ -79,9 +79,9 @@ result_by_score: "(" "by_score" ")"
 
 // -- Mask definitions --
 super_mask: mask | super_mask_and | super_mask_or | super_mask_not
-super_mask_and: "(and" super_mask+ ")"
-super_mask_or: "(or" super_mask+ ")"
-super_mask_not: "(not" super_mask ")"
+super_mask_and: "(" "and" super_mask+ ")"
+super_mask_or: "(" "or" super_mask+ ")"
+super_mask_not: "(" "not" super_mask ")"
 
 mask: mask_adjacent
     | mask_center
@@ -93,15 +93,15 @@ mask: mask_adjacent
     | mask_pattern
     | mask_prev_move
 
-mask_adjacent: "(adjacent" super_mask direction_arg? ")"
+mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
 mask_center: "center"
 mask_corners: "corners"
-mask_custodial: "(custodial" custodial_length_arg mover_reference? orientation_arg? ")"
-mask_edge: "(edge" edge ")"
+mask_custodial: "(" "custodial" custodial_length_arg mover_reference? orientation_arg? ")"
+mask_edge: "(" "edge" edge ")"
 mask_empty: "empty"
-mask_occupied: "occupied" | "(occupied" mover_reference ")"
-mask_pattern: "(pattern" dimensions_arg pattern_arg rotate_arg? ")"
-mask_prev_move: "(prev_move" mover_reference ")"
+mask_occupied: "occupied" | "(" "occupied" mover_reference ")"
+mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
+mask_prev_move: "(" "prev_move" mover_reference ")"
 
 // "Multi-masks" are special keywords that are manually split into multiple
 // sub-masks at compile time. This is mostly useful for the "connected" function,
@@ -116,9 +116,9 @@ multi_mask_edges_no_corners: "edgesNoCorners"
 
 // ---Predicate definitions---
 super_predicate: predicate | super_predicate_and | super_predicate_or | super_predicate_not
-super_predicate_and: "(and" super_predicate+ ")"
-super_predicate_or: "(or" super_predicate+ ")"
-super_predicate_not: "(not" super_predicate ")"
+super_predicate_and: "(" "and" super_predicate+ ")"
+super_predicate_or: "(" "or" super_predicate+ ")"
+super_predicate_not: "(" "not" super_predicate ")"
 
 predicate: predicate_equals
          | predicate_exists
@@ -129,14 +129,14 @@ predicate: predicate_equals
          | predicate_mover_is
          | predicate_passed
 
-predicate_equals: "(=" function+ ")"
-predicate_exists: "(exists" super_mask ")" // technically equivalent to (>= (count mask) 1) 
+predicate_equals: "(" "=" function+ ")"
+predicate_exists: "(" "exists" super_mask ")" // technically equivalent to (>= (count mask) 1) 
 predicate_full_board: "(" "full_board" ")"
 predicate_function: function // special syntax which is equivalent to "(>= function 1)"
-predicate_greater_equals: "(>=" function function ")"
-predicate_less_equals: "(<=" function function ")"
-predicate_mover_is: "(mover_is" player_reference ")"
-predicate_passed: "(passed" (mover_reference | BOTH) ")"
+predicate_greater_equals: "(" ">=" function function ")"
+predicate_less_equals: "(" "<=" function function ")"
+predicate_mover_is: "(" "mover_is" player_reference ")"
+predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 
 // Additional (potentially optional) arguments for predicates
 custodial_length_arg: ANY | positive_int
@@ -150,10 +150,10 @@ pattern_arg: "(" positive_int+ ")"
 rotate_arg: "rotate:" boolean
 
 // Optional rendering details
-rendering: "(rendering" rendering_detail+ ")"
+rendering: "(" "rendering" rendering_detail+ ")"
 rendering_detail: color_assignment
 
-color_assignment: "(color" player_reference color ")"
+color_assignment: "(" "color" player_reference color ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
