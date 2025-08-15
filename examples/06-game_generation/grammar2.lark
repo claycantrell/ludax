@@ -1,0 +1,292 @@
+// ---------- Terminals (name every literal) ----------
+LPAR: "("
+RPAR: ")"
+
+GAME: "game"
+PLAYERS: "players"
+EQUIPMENT: "equipment"
+RULES: "rules"
+RENDERING: "rendering"
+START: "start"
+PLAY: "play"
+ONCE_THROUGH: "once-through"
+REPEAT: "repeat"
+PLACE: "place"
+FORCE_PASS: "force_pass"
+DESTINATION: "destination"
+RESULT: "result"
+
+EFFECTS: "effects"
+CAPTURE: "capture"
+FLIP: "flip"
+INCREMENT_SCORE: "increment_score"
+SET_SCORE: "set_score"
+
+ADD: "add"
+CONNECTED: "connected"
+COUNT: "count"
+LINE: "line"
+MULTIPLY: "multiply"
+SCORE: "score"
+SUBTRACT: "subtract"
+
+END: "end"
+IF: "if"
+WIN: "win"
+LOSE: "lose"
+DRAW: "draw"
+BY_SCORE: "by_score"
+
+AND: "and"
+OR: "or"
+NOT: "not"
+
+ADJACENT: "adjacent"
+CENTER: "center"
+CORNERS: "corners"
+CUSTODIAL: "custodial"
+EDGE: "edge"
+EMPTY: "empty"
+OCCUPIED: "occupied"
+PATTERN: "pattern"
+PREV_MOVE: "prev_move"
+
+EDGES: "edges"
+EDGES_NO_CORNERS: "edgesNoCorners"
+
+EXISTS: "exists"
+FULL_BOARD: "full_board"
+MOVER_IS: "mover_is"
+PASSED: "passed"
+
+# Labels with colons
+DIRECTION_LBL: "direction:"
+EXACT_LBL: "exact:"
+INCREMENT_SCORE_LBL: "increment_score:"
+ORIENTATION_LBL: "orientation:"
+ROTATE_LBL: "rotate:"
+
+# Board-related
+BOARD: "board"
+SQUARE: "square"
+RECTANGLE: "rectangle"
+HEXAGON: "hexagon"
+HEX_RECTANGLE: "hex_rectangle"
+
+# Operators
+EQUAL: "="
+GE: ">="
+LE: "<="
+
+// Numbers & strings
+POS_INT: /[0-9]+/
+
+// Constants
+TOP: "top"
+BOTTOM: "bottom"
+UP: "up"
+DOWN: "down"
+LEFT: "left"
+RIGHT: "right"
+TOP_LEFT: "top_left"
+TOP_RIGHT: "top_right"
+BOTTOM_LEFT: "bottom_left"
+BOTTOM_RIGHT: "bottom_right"
+UP_LEFT: "up_left"
+UP_RIGHT: "up_right"
+DOWN_LEFT: "down_left"
+DOWN_RIGHT: "down_right"
+VERTICAL: "vertical"
+HORIZONTAL: "horizontal"
+ORTHOGONAL: "orthogonal"
+DIAGONAL: "diagonal"
+BACK_DIAGONAL: "back_diagonal"
+FORWARD_DIAGONAL: "forward_diagonal"
+ANY: "any"
+TRUE: "true"
+FALSE: "false"
+MOVER: "mover"
+OPPONENT: "opponent"
+P1: "P1"
+P2: "P2"
+BOTH: "both"
+WHITE: "white"
+BLACK: "black"
+COLOR: "color"
+
+// Lark imports
+%import common.ESCAPED_STRING -> STRING
+%import common.SIGNED_NUMBER
+%import common.WS
+%ignore WS
+
+// ---------- Rules ----------
+
+// ---Root---
+game: LPAR GAME name players equipment rules rendering? RPAR
+
+// ---Players---
+players: LPAR PLAYERS POS_INT RPAR
+
+// ---Equipment---
+equipment: LPAR EQUIPMENT board RPAR
+board: LPAR BOARD (board_square | board_rectangle | board_hexagon | board_hex_rectangle) RPAR
+board_square: LPAR SQUARE number RPAR
+board_rectangle: LPAR RECTANGLE number number RPAR
+board_hexagon: LPAR HEXAGON number RPAR
+board_hex_rectangle: LPAR HEX_RECTANGLE number number RPAR
+
+// ---Rules---
+rules: LPAR RULES start_rules? play_rules end_rules RPAR
+
+// ---Start rules---
+start_rules: LPAR START start_rule+ RPAR
+start_rule: start_place
+start_place: LPAR PLACE player_reference pattern_arg RPAR
+
+// ---Play rules---
+play_rules: LPAR PLAY play_phase+ RPAR
+play_phase: phase_once_through | phase_repeat
+phase_once_through: LPAR ONCE_THROUGH play_mover_order play_mechanic RPAR
+phase_repeat: LPAR REPEAT play_mover_order play_mechanic RPAR
+play_mover_order: LPAR player_reference+ RPAR
+
+play_mechanic: play_place force_pass?
+play_place: LPAR PLACE mover_reference? place_destination_constraint place_result_constraint? play_effects? RPAR
+force_pass: LPAR FORCE_PASS RPAR
+
+// ---Constraints---
+place_destination_constraint: LPAR DESTINATION super_mask RPAR
+place_result_constraint: LPAR RESULT super_predicate RPAR
+
+// ---Effects---
+play_effects: LPAR EFFECTS play_effect+ RPAR
+play_effect: effect_capture
+           | effect_flip
+           | effect_increment_score
+           | effect_set_score
+
+effect_capture: LPAR CAPTURE super_mask mover_reference? increment_score_arg? RPAR
+effect_flip: LPAR FLIP super_mask mover_reference? RPAR
+effect_increment_score: LPAR INCREMENT_SCORE mover_reference function RPAR
+effect_set_score: LPAR SET_SCORE mover_reference function RPAR
+
+// ---Functions---
+function: function_add
+        | function_connected
+        | function_constant
+        | function_count
+        | function_line
+        | function_multiply
+        | function_score
+        | function_subtract
+
+function_add: LPAR ADD function+ RPAR
+function_connected: LPAR CONNECTED multi_mask_arg mover_reference? direction_arg? RPAR
+function_constant: POS_INT
+function_count: LPAR COUNT super_mask RPAR
+function_line: LPAR LINE POS_INT orientation_arg? exact_arg? RPAR
+function_multiply: LPAR MULTIPLY function+ RPAR
+function_score: LPAR SCORE mover_reference RPAR
+function_subtract: LPAR SUBTRACT function function RPAR
+
+// ---End rules---
+end_rules: LPAR END end_rule+ RPAR
+end_rule: LPAR IF super_predicate end_rule_result RPAR
+?end_rule_result: result_win | result_lose | result_draw | result_by_score
+
+// -- Result definitions --
+result_win: LPAR mover_reference WIN RPAR
+result_lose: LPAR mover_reference LOSE RPAR
+result_draw: LPAR DRAW RPAR
+result_by_score: LPAR BY_SCORE RPAR
+
+// -- Mask definitions --
+super_mask: mask | super_mask_and | super_mask_or | super_mask_not
+super_mask_and: LPAR AND super_mask+ RPAR
+super_mask_or: LPAR OR super_mask+ RPAR
+super_mask_not: LPAR NOT super_mask RPAR
+
+mask: mask_adjacent
+    | mask_center
+    | mask_corners
+    | mask_custodial
+    | mask_edge
+    | mask_empty
+    | mask_occupied
+    | mask_pattern
+    | mask_prev_move
+
+mask_adjacent: LPAR ADJACENT super_mask direction_arg? RPAR
+mask_center: CENTER
+mask_corners: CORNERS
+mask_custodial: LPAR CUSTODIAL custodial_length_arg mover_reference? orientation_arg? RPAR
+mask_edge: LPAR EDGE edge RPAR
+mask_empty: EMPTY
+mask_occupied: OCCUPIED | LPAR OCCUPIED mover_reference RPAR
+mask_pattern: LPAR PATTERN dimensions_arg pattern_arg rotate_arg? RPAR
+mask_prev_move: LPAR PREV_MOVE mover_reference RPAR
+
+// "Multi-masks" are special keywords that are manually split into multiple
+// sub-masks at compile time.
+multi_mask: multi_mask_corners
+          | multi_mask_edges
+          | multi_mask_edges_no_corners
+
+multi_mask_corners: CORNERS
+multi_mask_edges: EDGES
+multi_mask_edges_no_corners: EDGES_NO_CORNERS
+
+// ---Predicate definitions---
+super_predicate: predicate | super_predicate_and | super_predicate_or | super_predicate_not
+super_predicate_and: LPAR AND super_predicate+ RPAR
+super_predicate_or: LPAR OR super_predicate+ RPAR
+super_predicate_not: LPAR NOT super_predicate RPAR
+
+predicate: predicate_equals
+         | predicate_exists
+         | predicate_full_board
+         | predicate_function
+         | predicate_greater_equals
+         | predicate_less_equals
+         | predicate_mover_is
+         | predicate_passed
+
+predicate_equals: LPAR EQUAL function+ RPAR
+predicate_exists: LPAR EXISTS super_mask RPAR
+predicate_full_board: LPAR FULL_BOARD RPAR
+predicate_function: function
+predicate_greater_equals: LPAR GE function function RPAR
+predicate_less_equals: LPAR LE function function RPAR
+predicate_mover_is: LPAR MOVER_IS player_reference RPAR
+predicate_passed: LPAR PASSED (mover_reference | BOTH) RPAR
+
+// Additional (potentially optional) arguments for predicates
+custodial_length_arg: ANY | POS_INT
+dimensions_arg: LPAR POS_INT POS_INT RPAR
+direction_arg: DIRECTION_LBL direction
+exact_arg: EXACT_LBL boolean
+increment_score_arg: INCREMENT_SCORE_LBL boolean
+multi_mask_arg: multi_mask | LPAR super_mask+ RPAR
+orientation_arg: ORIENTATION_LBL orientation
+pattern_arg: LPAR POS_INT+ RPAR
+rotate_arg: ROTATE_LBL boolean
+
+// Optional rendering details
+rendering: LPAR RENDERING rendering_detail+ RPAR
+rendering_detail: color_assignment
+color_assignment: LPAR COLOR player_reference color RPAR
+
+// General-purpose definitions
+?number: SIGNED_NUMBER
+?boolean: TRUE | FALSE
+?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
+?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
+?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
+?color: WHITE | BLACK
+
+?player_reference: P1 | P2
+?mover_reference: MOVER | OPPONENT
+name: STRING
+variable_name: /\?[a-z][a-z0-9]*/
+id: /[a-zA-Z0-9_]+/
