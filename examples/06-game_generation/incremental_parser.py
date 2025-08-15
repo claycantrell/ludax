@@ -2,7 +2,7 @@ from importlib.resources import files
 
 import jax
 import jax.numpy as jnp
-from lark import Lark, UnexpectedEOF, Token, UnexpectedToken
+from lark import Lark, UnexpectedEOF, Token, UnexpectedToken, Tree
 
 from ludax import LudaxEnvironment
 from ludax.games import tic_tac_toe
@@ -54,7 +54,17 @@ print(tic_tac_toe_partial)
 with open("./grammar2.lark", "r") as f:
     grammar = f.read()
 
-
+def print_partial_tree(value_stack, indent=0):
+    """Recursively print Tree/Token objects in value_stack."""
+    for item in value_stack:
+        if isinstance(item, Tree):
+            print("  " * indent + f"Tree({item.data!r})")
+            print_partial_tree(item.children, indent + 1)
+        elif isinstance(item, Token):
+            print("  " * indent + f"Token({item.type!r}, {item.value!r})")
+        else:
+            # Might be an intermediate value from a transformer
+            print("  " * indent + repr(item))
 
 parser = Lark(
     grammar,
@@ -64,7 +74,7 @@ parser = Lark(
 )
 
 # interactive = parser.parse_interactive('(game "demo" ')
-interactive = parser.parse_interactive(tic_tac_toe_complete)
+interactive = parser.parse_interactive(tic_tac_toe_partial)
 interactive.exhaust_lexer()
 
 
@@ -94,6 +104,9 @@ while True:
 
 
     print("Tokens:", [f"{i}: {t}" for i, t in enumerate(tokens)])
+    print("Tokens from .choices():", list(sorted(interactive.choices())))
+    print("Tokens from .accepts():", list(interactive.accepts()))
+    # breakpoint()
 
     token_idx = 0
     if len(tokens) > 1:
@@ -143,6 +156,7 @@ while True:
     interactive.feed_token(token)
     interactive.exhaust_lexer()
 
+    print_partial_tree(interactive.parser_state.value_stack)
 
 # Print the current state of the parser
 tree = interactive.resume_parse()
