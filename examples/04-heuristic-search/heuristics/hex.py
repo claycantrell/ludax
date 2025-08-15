@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 
-
 def connectivity_heuristic(state_b):
 
     def per_state(state):

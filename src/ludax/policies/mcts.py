@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from heuristics.test import zero_heuristic
+from . import zero_heuristic
 import mctx
 
 def ludax_recurrent(root_player, step_b, heuristic):
@@ -94,6 +94,7 @@ def gumbel_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
             num_simulations=num_simulations,
             max_num_considered_actions=num_actions,
             invalid_actions=~state_b.legal_action_mask,
+            gumbel_scale=0.0  # Perfect information game
         )
 
         return policy_output.action.astype(jnp.int16)

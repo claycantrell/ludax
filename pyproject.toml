@@ -1,6 +1,6 @@
 [project]
 name = "ludax"
-version = "0.0.6"
+version = "0.0.7"
 authors = [
   { name="Graham Todd", email="gdrtodd@gmail.com" }, { name="Alexander Padula", email="alexpadula2001@gmail.com"}
 ]

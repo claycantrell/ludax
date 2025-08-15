@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
-from heuristics.test import zero_heuristic
-from heuristics import BIG, SMALL
+from . import BIG, SMALL, zero_heuristic
 
 
 def random_policy():

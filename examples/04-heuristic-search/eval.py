@@ -9,13 +9,10 @@ from ludax import LudaxEnvironment
 from ludax.games import hex, connect_four, reversi, tic_tac_toe, complexity_demo
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
-from heuristics.test import bad_heuristic, zero_heuristic
+from heuristics.test import bad_heuristic
 from heuristics.connect_four import connect_four_heuristic
 
-from mcts import mcts_policy, gumbel_policy
-from simple import one_ply_policy, random_policy
-from beam import beam_search_policy
-
+from ludax.policies import mcts_policy, gumbel_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
@@ -69,33 +66,67 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     losses = jnp.sum(state_b.winner == 1)
     return (wins, draws, losses), key
 
+tri_hex = """
+(game "Tri‑Hex"
+    (players 2)
+    (equipment
+        (board (hex_rectangle 11 11))
+    )
 
+    (rules
+        (play
+            (repeat (P1 P2)
+                (place (destination empty))
+            )
+        )
+
+        (end
+            (if (and (>= (connected ((edge top) (edge bottom) (edge left))) 3)
+                    (mover_is P1))
+                (mover win))
+            (if (and (>= (connected ((edge top) (edge bottom) (edge right))) 3)
+                    (mover_is P2))
+                (mover win))
+            (if (full_board)
+                (draw))
+        )
+    )
+)"""
 
 def main():
+
+
+
     env = LudaxEnvironment(
         # game_str=complexity_demo,
-        # game_str=hex,
-        game_str=connect_four,
+        game_str=hex,
+        # game_str=tri_hex,
+        # game_str=connect_four,
         # game_str=reversi,
         # game_str=tic_tac_toe,
     )
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=1, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=100, seed=42)
 
     # AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
-    AGENT1 = beam_search_policy(step_b, topk=1000, iterations=5, heuristic=connect_four_heuristic)
+    # AGENT1 = beam_search_policy(step_b, topk=10, iterations=5, heuristic=connect_four_heuristic)
+    # AGENT1 = negamax_policy(step_b, depth=2, heuristic=connect_four_heuristic)
+    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
 
+
+    # AGENT2 = gumbel_policy(step_b, num_simulations=20)
     # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
     # AGENT2 = beam_search_policy(step_b, topk=1, iterations=1, heuristic=connect_four_heuristic)
-    AGENT2 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
+    # AGENT2 = one_ply_policy(step_b)
+    AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
 
     start_time = time.time()
     key, sub_key = jax.random.split(key)
