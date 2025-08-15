@@ -3,6 +3,7 @@ from typing import Optional
 
 import jax
 import jax.numpy as jnp
+import lark
 from lark import Lark
 
 from .config import Array, PRNGKey, State, EMPTY, TRUE
@@ -12,20 +13,23 @@ from .game_parser import GameRuleParser
 class LudaxEnvironment():
     def __init__(self,
                  game_path: str = None,
-                 game_str: str = None):
+                 game_str: str = None,
+                 game_tree: lark.Tree = None):
         super().__init__()
         
-        assert game_path is not None or game_str is not None, "Must provide either a game path or a game string!"
-        assert game_path is None or game_str is None, "Cannot provide both a game path and a game string!"
+        assert game_path is not None or game_str is not None or game_tree is not None, \
+            "You must provide either a game path, a game string, or a pre-parsed game tree."
 
-        if game_path is not None:
-            with open(game_path, 'r') as f:
-                game_str = f.read()
+        if game_tree is None:
+            if game_path is not None:
+                with open(game_path, 'r') as f:
+                    game_str = f.read()
 
-        with files(__package__).joinpath('grammar.lark').open('r') as f:
-            parser = Lark(f.read(), start='game')
+            with files(__package__).joinpath('grammar.lark').open('r') as f:
+                parser = Lark(f.read(), start='game')
 
-        game_tree = parser.parse(game_str)
+            game_tree = parser.parse(game_str)
+
         self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
         game_rules = GameRuleParser(self.game_info).transform(game_tree)
 
