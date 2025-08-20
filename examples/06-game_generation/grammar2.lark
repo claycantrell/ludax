@@ -9,7 +9,7 @@ RULES: "rules"
 RENDERING: "rendering"
 START: "start"
 PLAY: "play"
-ONCE_THROUGH: "once-through"
+ONCE_THROUGH: "once_through"
 REPEAT: "repeat"
 PLACE: "place"
 FORCE_PASS: "force_pass"
@@ -79,7 +79,8 @@ GE: ">="
 LE: "<="
 
 // Numbers & strings
-POS_INT: /[0-9]+/
+NONNEG_INT: /0|[1-9][0-9]*/
+POS_INT: /[1-9][0-9]*/
 
 // Constants
 TOP: "top"
@@ -116,7 +117,6 @@ COLOR: "color"
 
 // Lark imports
 %import common.ESCAPED_STRING -> STRING
-%import common.SIGNED_NUMBER
 %import common.WS
 %ignore WS
 
@@ -131,10 +131,10 @@ players: LPAR PLAYERS POS_INT RPAR
 // ---Equipment---
 equipment: LPAR EQUIPMENT board RPAR
 board: LPAR BOARD (board_square | board_rectangle | board_hexagon | board_hex_rectangle) RPAR
-board_square: LPAR SQUARE number RPAR
-board_rectangle: LPAR RECTANGLE number number RPAR
-board_hexagon: LPAR HEXAGON number RPAR
-board_hex_rectangle: LPAR HEX_RECTANGLE number number RPAR
+board_square: LPAR SQUARE POS_INT RPAR
+board_rectangle: LPAR RECTANGLE POS_INT POS_INT RPAR
+board_hexagon: LPAR HEXAGON POS_INT RPAR
+board_hex_rectangle: LPAR HEX_RECTANGLE POS_INT POS_INT RPAR
 
 // ---Rules---
 rules: LPAR RULES start_rules? play_rules end_rules RPAR
@@ -183,9 +183,9 @@ function: function_add
 
 function_add: LPAR ADD function+ RPAR
 function_connected: LPAR CONNECTED multi_mask_arg mover_reference? direction_arg? RPAR
-function_constant: POS_INT
+function_constant: NONNEG_INT
 function_count: LPAR COUNT super_mask RPAR
-function_line: LPAR LINE POS_INT orientation_arg? exact_arg? RPAR
+function_line: LPAR LINE NONNEG_INT orientation_arg? exact_arg? RPAR
 function_multiply: LPAR MULTIPLY function+ RPAR
 function_score: LPAR SCORE mover_reference RPAR
 function_subtract: LPAR SUBTRACT function function RPAR
@@ -278,7 +278,6 @@ rendering_detail: color_assignment
 color_assignment: LPAR COLOR player_reference color RPAR
 
 // General-purpose definitions
-?number: SIGNED_NUMBER
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY

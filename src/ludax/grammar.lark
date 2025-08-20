@@ -23,7 +23,7 @@ start_place: "(" "place" player_reference pattern_arg ")"
 // ---Play rules---
 play_rules: "(" "play" play_phase+ ")"
 play_phase: phase_once_through | phase_repeat
-phase_once_through: "(" "once-through" play_mover_order play_mechanic ")"
+phase_once_through: "(" "once_through" play_mover_order play_mechanic ")"
 phase_repeat: "(" "repeat" play_mover_order play_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
