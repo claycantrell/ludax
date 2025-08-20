@@ -13,6 +13,7 @@ from heuristics.test import bad_heuristic
 from heuristics.connect_four import connect_four_heuristic
 
 from ludax.policies import mcts_policy, gumbel_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy
+# from ludax.policies.mcts2 import mcts_policy as mcts_policy2, gumbel_policy as gumbel_policy2
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
 
@@ -99,9 +100,9 @@ def main():
 
     env = LudaxEnvironment(
         # game_str=complexity_demo,
-        game_str=hex,
+        # game_str=hex,
         # game_str=tri_hex,
-        # game_str=connect_four,
+        game_str=connect_four,
         # game_str=reversi,
         # game_str=tic_tac_toe,
     )
@@ -116,7 +117,9 @@ def main():
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
     # AGENT1 = beam_search_policy(step_b, topk=10, iterations=5, heuristic=connect_four_heuristic)
     # AGENT1 = negamax_policy(step_b, depth=2, heuristic=connect_four_heuristic)
-    AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
+    # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
+    # AGENT1 = negamax_policy(step_b, depth=3)
+    AGENT1 = gumbel_policy(step_b, num_simulations=100)
 
 
     # AGENT2 = gumbel_policy(step_b, num_simulations=20)
@@ -126,7 +129,10 @@ def main():
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
     # AGENT2 = beam_search_policy(step_b, topk=1, iterations=1, heuristic=connect_four_heuristic)
     # AGENT2 = one_ply_policy(step_b)
-    AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
+    # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
+    # AGENT2 = negamax_policy(step_b, depth=3)
+    AGENT2 = gumbel_policy(step_b, num_simulations=100)
+
 
     start_time = time.time()
     key, sub_key = jax.random.split(key)

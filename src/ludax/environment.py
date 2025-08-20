@@ -1,35 +1,31 @@
-from importlib.resources import files
 from typing import Optional
 
 import jax
 import jax.numpy as jnp
-import lark
 from lark import Lark
 
+import ludax
 from .config import Array, PRNGKey, State, EMPTY, TRUE
 from .game_info import GameInfoExtractor
 from .game_parser import GameRuleParser
 
+
 class LudaxEnvironment():
     def __init__(self,
                  game_path: str = None,
-                 game_str: str = None,
-                 game_tree: lark.Tree = None):
+                 game_str: str = None):
         super().__init__()
-        
-        assert game_path is not None or game_str is not None or game_tree is not None, \
-            "You must provide either a game path, a game string, or a pre-parsed game tree."
 
-        if game_tree is None:
-            if game_path is not None:
-                with open(game_path, 'r') as f:
-                    game_str = f.read()
+        assert game_path is not None or game_str is not None, "Must provide either a game path or a game string!"
+        assert game_path is None or game_str is None, "Cannot provide both a game path and a game string!"
 
-            with files(__package__).joinpath('grammar.lark').open('r') as f:
-                parser = Lark(f.read(), start='game')
+        if game_path is not None:
+            with open(game_path, 'r') as f:
+                game_str = f.read()
 
-            game_tree = parser.parse(game_str)
+        parser = Lark(ludax.grammar, start='game')
 
+        game_tree = parser.parse(game_str)
         self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
         game_rules = GameRuleParser(self.game_info).transform(game_tree)
 
@@ -51,7 +47,6 @@ class LudaxEnvironment():
         self._get_terminal = lambda board, player: (board != EMPTY).all()
 
     def init(self, rng: PRNGKey) -> State:
-
         board = jnp.ones(self.board_size, dtype=jnp.int16) * EMPTY
         board = self._initialize_board(board)
 
@@ -79,7 +74,7 @@ class LudaxEnvironment():
         state = state.replace(current_player=current_player, legal_action_mask=legal_action_mask)
 
         return state
-    
+
     def step(self, state: State, action: Array, key: Optional[Array] = None) -> State:
         """
         The basic environment step function, largely taken from the PGX implementation
@@ -117,9 +112,8 @@ class LudaxEnvironment():
         # to, for example, the RL training loop using env._observe(state, player_id)
 
         return state
-    
-    def _step(self, state: State, action: Array, key) -> State:
 
+    def _step(self, state: State, action: Array, key) -> State:
         # Currently, Ludax games don't have any stochastic elements, so we don't use the key
         del key
 
@@ -147,12 +141,13 @@ class LudaxEnvironment():
 
         # Use the new phase and the global player offset to determine the next player but don't apply it yet
         next_player = self._get_next_player(game_state)
-        
+
         # Apply any effects that occur at the end of the turn
         game_state = self._apply_effects(game_state, original_player)
 
         # Compute the legal action mask for the upcoming player (which is used in some scoring conditions)
-        new_legal_action_mask = self._get_legal_action_mask(game_state._replace(current_player=next_player)).astype(jnp.bool_)
+        new_legal_action_mask = self._get_legal_action_mask(game_state._replace(current_player=next_player)).astype(
+            jnp.bool_)
         state = state.replace(legal_action_mask=new_legal_action_mask)
 
         # Use the new board to compute the winner, terminal, and rewards
