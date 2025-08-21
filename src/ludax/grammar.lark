@@ -61,7 +61,7 @@ function_add: "(" "add" function+ ")"
 function_connected: "(" "connected" multi_mask_arg mover_reference? direction_arg? ")"
 function_constant: positive_int
 function_count: "(" "count" super_mask ")"
-function_line: "(" "line" positive_int orientation_arg? exact_arg? ")"
+function_line: "(" "line" positive_int orientation_arg? exact_arg? player_arg? ")"
 function_multiply: "(" "multiply" function+ ")"
 function_score: "(" "score" mover_reference ")"
 function_subtract: "(" "subtract" function function ")"
@@ -147,6 +147,7 @@ increment_score_arg: "increment_score:" boolean
 multi_mask_arg: multi_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
 pattern_arg: "(" positive_int+ ")"
+player_arg: "player:" (player_reference | mover_reference)
 rotate_arg: "rotate:" boolean
 
 // Optional rendering details

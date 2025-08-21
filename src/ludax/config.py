@@ -145,7 +145,7 @@ class OptionalArgs(StrEnum):
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover'},
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CUSTODIAL: {OptionalArgs.MOVER: 'mover', OptionalArgs.ORIENTATION: 'any'},
     Masks.LOOP: {OptionalArgs.MOVER: 'mover'},

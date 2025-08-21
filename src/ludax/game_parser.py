@@ -1259,12 +1259,28 @@ class GameRuleParser(Transformer):
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
 
+        player = optional_args[OptionalArgs.PLAYER]
+        if player == PlayerAndMoverRefs.MOVER:
+            def get_mask(state):
+                return (state.board == state.current_player).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.OPPONENT:
+            def get_mask(state):
+                return (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.P1:
+            def get_mask(state):
+                return (state.board == P1).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.P2:
+            def get_mask(state):
+                return (state.board == P2).astype(jnp.int16)
+        else:
+            raise ValueError(f"Invalid player reference: {player}")
+
         if optional_args[OptionalArgs.EXACT] and n < max(self.game_info.board_dims):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 num_lines = line_matches.sum()
                 num_overshoot_lines = jax.lax.cond(num_lines, lambda: 0, lambda: (occupied_mask[overshoot_line_indices] == 1).all(axis=1).sum())
@@ -1277,13 +1293,13 @@ class GameRuleParser(Transformer):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 return line_matches.sum()
             
             num_lines = line_indices.shape[0]
             def lookahead_mask_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
 
                 line_mask = (occupied_mask[line_indices] == 1)
                 almost_line_mask = (line_mask.sum(axis=1) == n-1)
