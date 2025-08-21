@@ -469,13 +469,13 @@ class GameRuleParser(Transformer):
         # flags the game as terminated
         def combined_end_rules(state):
             index = jnp.arange(n_rules)
-            winners, ends = jax.vmap(lambda i: jax.lax.switch(i, rules, state))(index)
+            winners_by_rule, ends = jax.vmap(lambda i: jax.lax.switch(i, rules, state))(index)
 
-            # Take winner determined by the first active end rule
-            winner = jax.lax.select(ends.any(), winners[jnp.argmax(ends)], EMPTY)
+            # Take winner(s) determined by the first active end rule
+            winners = jax.lax.select(ends.any(), winners_by_rule[jnp.argmax(ends)], EMPTY * jnp.ones(2, jnp.int16))
             end = ends.any()
             
-            return winner, end
+            return winners, end
 
         return {'end_rules': combined_end_rules}
     
@@ -492,7 +492,7 @@ class GameRuleParser(Transformer):
 
         def end_rule_fn(state):
             pred_val = predicate_fn(state)
-            winner = jax.lax.select(pred_val, get_winner(state), EMPTY)
+            winner = jax.lax.select(pred_val, get_winner(state), EMPTY * jnp.ones(2, jnp.int16))
             termination = jax.lax.select(pred_val, TRUE, FALSE)
 
             return winner, termination
@@ -510,7 +510,8 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def get_winner(state):
-            return state.current_player + offset
+            winners = jnp.zeros(2, jnp.int16).at[state.current_player + offset].set(1)
+            return winners
         
         info = {}
 
@@ -527,7 +528,8 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def get_winner(state):
-            return (state.current_player + offset + 1)%2
+            winners = jnp.zeros(2, jnp.int16).at[(state.current_player + offset + 1) % 2].set(1)
+            return winners
         
         info = {}
 
@@ -538,7 +540,8 @@ class GameRuleParser(Transformer):
         The game ends in a draw
         '''
         def get_winner(state):
-            return EMPTY
+            winners = EMPTY * jnp.ones(2, jnp.int16)
+            return winners
         
         info = {}
 
@@ -548,11 +551,16 @@ class GameRuleParser(Transformer):
         '''
         The game is won by the player with the highest score (draw if scores are equal)
         '''
+
+        draw_result = EMPTY * jnp.ones(2, jnp.int16)
+        p1_win_result = jnp.array([1, 0], dtype=jnp.int16)
+        p2_win_result = jnp.array([0, 1], dtype=jnp.int16)
+
         def get_winner(state):
             is_draw = state.scores[0] == state.scores[1]
             p1_wins = state.scores[0] > state.scores[1]
 
-            return jax.lax.select(is_draw, EMPTY, jax.lax.select(p1_wins, P1, P2))
+            return jax.lax.select(is_draw, draw_result, jax.lax.select(p1_wins, p1_win_result, p2_win_result))
         
         info = {}
 
