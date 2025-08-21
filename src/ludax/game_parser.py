@@ -504,13 +504,22 @@ class GameRuleParser(Transformer):
         The specified player wins the game
         '''
         mover_ref = children[0]
-        if mover_ref == PlayerAndMoverRefs.MOVER:
+
+        # In this case, both players win so we can effectively just ignore
+        # the offset by setting the "base" to be all ones
+        if mover_ref == PlayerAndMoverRefs.BOTH:
+            base = jnp.ones(2, jnp.int16)
             offset = 0
+
         else:
-            offset = 1
+            base = jnp.zeros(2, jnp.int16)
+            if mover_ref == PlayerAndMoverRefs.MOVER:
+                offset = 0
+            else:
+                offset = 1
 
         def get_winner(state):
-            winners = jnp.zeros(2, jnp.int16).at[state.current_player + offset].set(1)
+            winners = base.at[(state.current_player + offset) % 2].set(1)
             return winners
         
         info = {}
@@ -522,13 +531,22 @@ class GameRuleParser(Transformer):
         The specified player loses the game
         '''
         mover_ref = children[0]
-        if mover_ref == PlayerAndMoverRefs.MOVER:
+
+        # The inverse of the above: we can set the base to be all zeros
+        # and ignore the offset
+        if mover_ref == PlayerAndMoverRefs.BOTH:
+            base = jnp.zeros(2, jnp.int16)
             offset = 0
+
         else:
-            offset = 1
+            base = jnp.ones(2, jnp.int16)
+            if mover_ref == PlayerAndMoverRefs.MOVER:
+                offset = 0
+            else:
+                offset = 1
 
         def get_winner(state):
-            winners = jnp.zeros(2, jnp.int16).at[(state.current_player + offset + 1) % 2].set(1)
+            winners = base.at[(state.current_player + offset) % 2].set(0)
             return winners
         
         info = {}

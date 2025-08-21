@@ -1,0 +1,19 @@
+(game "Cooperative-Game"
+    (players 2)
+    (equipment 
+        (board (square 7))
+    ) 
+    
+    (rules 
+        (play
+            (repeat (P1 P2)
+                (place (destination empty))
+            )
+        )
+        
+        (end 
+            (if (line 4) (both win))
+            (if (full_board) (draw))    
+        )
+    )
+)

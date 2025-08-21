@@ -72,8 +72,8 @@ end_rule: "(" "if" super_predicate end_rule_result ")"
 ?end_rule_result: result_win | result_lose | result_draw | result_by_score
 
 // -- Result definitions --
-result_win: "(" mover_reference "win" ")"
-result_lose: "(" mover_reference "lose" ")"
+result_win: "(" (mover_reference | BOTH) "win" ")"
+result_lose: "(" (mover_reference | BOTH) "lose" ")"
 result_draw: "(" "draw" ")"
 result_by_score: "(" "by_score" ")"
 
