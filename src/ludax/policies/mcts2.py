@@ -2,16 +2,16 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-from . import zero_heuristic
+from . import random_playout_heuristic_constructor
 import mctx
 
 # 1 No difference: support one-ply logits
 # 2 TODO: support one-ply logits with heuristic
-# 3 TODO: default to a random rollout value fn if no heuristic is given
+# 3 10% improvement: default to a random rollout value fn if no heuristic is given
 # 4 TODO: integrate random rollouts with heuristics
 
-WINNING_LOGIT = 100.0
-LOSING_LOGIT = 100.0
+WINNING_LOGIT = 300.0
+LOSING_LOGIT = 200.0
 LEGAL_LOGIT = 100.0
 
 @partial(jax.jit, static_argnames=['step_b'])
@@ -59,6 +59,8 @@ def one_ply_logits(step_b, state_b, root_player_b):
 def ludax_recurrent(root_player_b, step_b, heuristic):
     def recurrent_fn(params, rng_key, action, state):
 
+        key, sub_key = jax.random.split(rng_key)
+
         next_state = step_b(state, action.astype(jnp.int16))
 
         # Reward from the root player's perspective
@@ -68,7 +70,7 @@ def ludax_recurrent(root_player_b, step_b, heuristic):
         # Heuristic for the side to move, flipped to root perspective
         to_play = next_state.game_state.current_player
         sign = jnp.where(to_play == root_player_b, 1.0, -1.0)
-        v = sign * heuristic(next_state)
+        v = sign * heuristic(next_state, sub_key)
 
         # Terminal handling
         v = jnp.where(next_state.terminated, 0.0, v)
@@ -85,10 +87,12 @@ def ludax_recurrent(root_player_b, step_b, heuristic):
     return jax.jit(recurrent_fn)
 
 
-def mcts_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
+def mcts_policy(step_b, heuristic=None, num_simulations=100):
     """
     MCTX-based implementation
     """
+    if heuristic is None:
+        heuristic = random_playout_heuristic_constructor(step_b)
 
     def mcts_policy_f(state_b, key):
         """
@@ -122,14 +126,19 @@ def mcts_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
     return jax.jit(mcts_policy_f)
 
 
-def gumbel_policy(step_b, heuristic=zero_heuristic, num_simulations=100):
+def gumbel_policy(step_b, heuristic=None, num_simulations=100):
+    if heuristic is None:
+        heuristic = random_playout_heuristic_constructor(step_b)
+
     def policy_f(state_b, key):
         root_player_b = state_b.game_state.current_player  # shape [B]
         root_logits = one_ply_logits(step_b, state_b, root_player_b)
 
+        key, subkey = jax.random.split(key)
+
         root = mctx.RootFnOutput(
             prior_logits=root_logits,
-            value=jnp.where(state_b.game_state.current_player == root_player_b, 1.0, -1.0) * heuristic(state_b),
+            value=jnp.where(state_b.game_state.current_player == root_player_b, 1.0, -1.0) * heuristic(state_b, subkey),
             embedding=state_b,
         )
 
