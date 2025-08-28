@@ -11,11 +11,12 @@
 #   - pygraphviz + Graphviz "dot" binary (for SVG output)
 #     Without it, falls back to saving .npz tensors.
 # ---------------------------------------------------------------
-
+import html
 from functools import partial
 import os
 import itertools
 from typing import Optional, Sequence
+import re
 
 import jax
 import jax.numpy as jnp
@@ -121,21 +122,6 @@ def ludax_recurrent(root_player_b, step_b, heuristic):
         return out, next_state
     return jax.jit(recurrent_fn)
 
-# ---------- Tree → Graph / Saver ----------
-def _extract_board_from_embedding(emb):
-    """Best-effort: get a board array from a Ludax state embedding."""
-    # Attribute-style access (dataclass / namedtuple)
-    if hasattr(emb, "board"):
-        return emb.board
-    if hasattr(emb, "game_state") and hasattr(emb.game_state, "board"):
-        return emb.game_state.board
-    # Dict-style access (just in case)
-    if isinstance(emb, dict):
-        if "board" in emb:
-            return emb["board"]
-        if "game_state" in emb and isinstance(emb["game_state"], dict) and "board" in emb["game_state"]:
-            return emb["game_state"]["board"]
-    return None
 
 
 def convert_tree_to_graph(
@@ -160,29 +146,21 @@ def convert_tree_to_graph(
     embeddings = getattr(tree, "embeddings", None)
 
     def board_label_for(node_i: int) -> str:
-        if embeddings is None:
-            return ""
-        try:
-            # Index the PyTree at [batch_index, node_i]
-            emb_node = jax.tree_util.tree_map(lambda x: x[batch_index, node_i], embeddings)
-            board = _extract_board_from_embedding(emb_node)
-            if board is None:
-                return ""
-            board_np = np.asarray(jax.device_get(board))
-            # Keep it raw; user asked for state.board specifically.
-            board_str = np.array2string(board_np, separator=" ")
-            return f"Board:\n{board_str}\n"
-        except Exception:
-            # If anything goes sideways, just omit the board to avoid breaking the export.
-            return ""
+        # Index the PyTree at [batch_index, node_i]
+        emb_node = jax.tree_util.tree_map(lambda x: x[batch_index, node_i], embeddings)
+        board_np = np.asarray(jax.device_get(emb_node.game_state.board))
+        board_str = np.array2string(board_np, separator=" ")
+        return f"Board: {board_str}\n"
 
     def node_to_str(node_i, reward, discount):
         return (f"{node_i}\n"
-                f"{board_label_for(node_i)}"
                 f"Reward: {reward}\n"
                 f"Discount: {discount}\n"
                 f"Value: {tree.node_values[batch_index, node_i]}\n"
-                f"Visits: {tree.node_visits[batch_index, node_i]}\n")
+                f"Visits: {tree.node_visits[batch_index, node_i]}\n"
+                f"{board_label_for(node_i)}"
+
+                )
 
     def edge_to_str(node_i, a_i):
         node_index = jnp.full([batch_size], node_i)
@@ -213,6 +191,59 @@ def convert_tree_to_graph(
                 graph.add_edge(node_i, child_i, label=edge_to_str(node_i, a_i))
     return graph
 
+
+
+
+BOARD_TEXT_RE = re.compile(
+    r'(?P<open><text\b(?P<attrs>[^>]*)>)\s*Board:\s*\[(?P<board>[^\]]+)\]\s*(?P<close></text>)',
+    re.IGNORECASE | re.DOTALL
+)
+
+def _attr(attrs: str, name: str):
+    m = re.search(fr'\b{name}\s*=\s*["\']([^"\']+)["\']', attrs)
+    if not m:
+        print(f"Failed to find {name} in {attrs}")
+        return 0
+
+    return float(m.group(1))
+
+def strip_outer_svg(svg_markup: str) -> str:
+    # remove optional XML header
+    s = re.sub(r'^\s*<\?xml[^>]*>\s*', '', svg_markup, flags=re.IGNORECASE)
+    m = re.search(r'<svg\b[^>]*>(?P<inner>.*)</svg\s*>', s, flags=re.IGNORECASE|re.DOTALL)
+    return (m.group('inner') if m else s).strip()
+
+def render_states(svg_path, renderer: InteractiveBoardHandler):
+    with open(svg_path, "r") as f:
+        svg_text = f.read()
+
+    def process_board_text(board_fragment: str) -> str:
+        board = [int(x) for x in re.findall(r'-?\d+', html.unescape(board_fragment))]
+        assert len(board) == renderer.game_info.board_size, f"Expected {renderer.game_info.board_size} cells, got {len(board)}"
+        print("found and processed:", board)
+        render = renderer.render_fn(board, add_button=False)
+        return render
+
+    def _replacer(m: re.Match) -> str:
+        attrs = m.group('attrs')
+        x = _attr(attrs, 'x')
+        y = _attr(attrs, 'y')
+        print(x, y)
+        inner = strip_outer_svg(process_board_text(m.group('board')))
+
+        x += 50
+        y += -75
+        w = h = 10
+        tx, ty = x - w / 2, y - h / 2
+        return f'<g transform="translate({tx:.2f},{ty:.2f}) scale(0.2)">{inner}</g>'
+
+    svg_text = BOARD_TEXT_RE.sub(_replacer, svg_text)
+
+    with open(svg_path, "w") as f:
+        f.write(svg_text)
+
+
+
 def save_search_tree(
     tree: mctx.Tree,
     renderer: InteractiveBoardHandler,
@@ -225,6 +256,7 @@ def save_search_tree(
     g = convert_tree_to_graph(tree, action_labels=action_labels, batch_index=batch_index)
     svg_path = out_path_noext + ".svg"
     g.draw(svg_path, prog="dot", format="svg")
+    render_states(svg_path, renderer)
     return svg_path
 
 
@@ -355,7 +387,7 @@ def main():
         step_b,
         renderer,
         heuristic=None,              # zero heuristic (value from search)
-        num_simulations=500,          # tweak as you like
+        num_simulations=64,          # tweak as you like
         save_tree=True,              # <-- save tree every call
         tree_out_dir="./ttt_trees",  # directory for artifacts
         file_prefix="game0_move",    # filenames like game0_move_step01_b0.png

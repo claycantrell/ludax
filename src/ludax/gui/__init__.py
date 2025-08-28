@@ -8,3 +8,4 @@ except ModuleNotFoundError as exc:
 app = Flask(__name__)
 
 from . import routes
+from .render import InteractiveBoardHandler

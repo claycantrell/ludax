@@ -251,10 +251,12 @@ class InteractiveBoardHandler():
         return points
     
     def render(self, state, add_button=True, show_legal_actions=True):
-
         board = state.game_state.board
-        legal_actions = state.legal_action_mask
+        legal_actions = state.legal_action_mask if show_legal_actions else None
+        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button)
 
+
+    def render_fn(self, board, legal_actions=None, add_button=True):
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
         drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), stroke='black', stroke_width=1, fill='none'))
@@ -267,7 +269,7 @@ class InteractiveBoardHandler():
             drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
             # Draw the legal action mask
-            if legal_actions[i] and show_legal_actions:
+            if legal_actions and legal_actions[i]:
                 drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
 
             # Draw the piece (if present)
@@ -282,4 +284,4 @@ class InteractiveBoardHandler():
         if add_button:
             drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), class_="btn", onclick="handleClick(event)"))
 
-        self.rendered_svg = drawing.tostring()
+        return drawing.tostring()
