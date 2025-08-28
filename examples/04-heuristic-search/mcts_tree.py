@@ -24,6 +24,7 @@ import mctx
 
 from ludax import LudaxEnvironment
 from ludax.games import tic_tac_toe
+from ludax.gui import InteractiveBoardHandler
 
 # ---------- Pretty printing ----------
 np.set_printoptions(threshold=np.inf, linewidth=np.inf)
@@ -120,8 +121,23 @@ def ludax_recurrent(root_player_b, step_b, heuristic):
         return out, next_state
     return jax.jit(recurrent_fn)
 
-
 # ---------- Tree → Graph / Saver ----------
+def _extract_board_from_embedding(emb):
+    """Best-effort: get a board array from a Ludax state embedding."""
+    # Attribute-style access (dataclass / namedtuple)
+    if hasattr(emb, "board"):
+        return emb.board
+    if hasattr(emb, "game_state") and hasattr(emb.game_state, "board"):
+        return emb.game_state.board
+    # Dict-style access (just in case)
+    if isinstance(emb, dict):
+        if "board" in emb:
+            return emb["board"]
+        if "game_state" in emb and isinstance(emb["game_state"], dict) and "board" in emb["game_state"]:
+            return emb["game_state"]["board"]
+    return None
+
+
 def convert_tree_to_graph(
     tree: mctx.Tree,
     action_labels: Optional[Sequence[str]] = None,
@@ -139,8 +155,30 @@ def convert_tree_to_graph(
             f"action_labels has {len(action_labels)} entries; expected {tree.num_actions}"
         )
 
+    # Try to access per-node Ludax states from the stored embeddings.
+    # mctx stores the embedding PyTree with leading [batch, node] axes.
+    embeddings = getattr(tree, "embeddings", None)
+
+    def board_label_for(node_i: int) -> str:
+        if embeddings is None:
+            return ""
+        try:
+            # Index the PyTree at [batch_index, node_i]
+            emb_node = jax.tree_util.tree_map(lambda x: x[batch_index, node_i], embeddings)
+            board = _extract_board_from_embedding(emb_node)
+            if board is None:
+                return ""
+            board_np = np.asarray(jax.device_get(board))
+            # Keep it raw; user asked for state.board specifically.
+            board_str = np.array2string(board_np, separator=" ")
+            return f"Board:\n{board_str}\n"
+        except Exception:
+            # If anything goes sideways, just omit the board to avoid breaking the export.
+            return ""
+
     def node_to_str(node_i, reward, discount):
         return (f"{node_i}\n"
+                f"{board_label_for(node_i)}"
                 f"Reward: {reward}\n"
                 f"Discount: {discount}\n"
                 f"Value: {tree.node_values[batch_index, node_i]}\n"
@@ -154,7 +192,7 @@ def convert_tree_to_graph(
                 f"p: {probs[a_i]}\n")
 
     graph = pygraphviz.AGraph(directed=True)
-    graph.add_node(0, label=node_to_str(0, 0,0), color="green")
+    graph.add_node(0, label=node_to_str(0, 0, 0), color="green")
 
     for node_i in range(tree.num_simulations):
         for a_i in range(tree.num_actions):
@@ -175,40 +213,24 @@ def convert_tree_to_graph(
                 graph.add_edge(node_i, child_i, label=edge_to_str(node_i, a_i))
     return graph
 
-
 def save_search_tree(
     tree: mctx.Tree,
+    renderer: InteractiveBoardHandler,
     out_path_noext: str,
     action_labels: Optional[Sequence[str]] = None,
     batch_index: int = 0,
 ):
     """Save tree to SVG if pygraphviz available; else save raw arrays to .npz."""
     os.makedirs(os.path.dirname(out_path_noext), exist_ok=True)
-    if _HAS_PYGRAPHVIZ:
-        g = convert_tree_to_graph(tree, action_labels=action_labels, batch_index=batch_index)
-        svg_path = out_path_noext + ".svg"
-        g.draw(svg_path, prog="dot", format="svg")
-        return svg_path
-    else:
-        import numpy as _np
-        arr = lambda x: jax.device_get(x)
-        npz_path = out_path_noext + ".npz"
-        _np.savez(
-            npz_path,
-            children_index=arr(tree.children_index)[batch_index],
-            children_rewards=arr(tree.children_rewards)[batch_index],
-            children_discounts=arr(tree.children_discounts)[batch_index],
-            children_prior_logits=arr(tree.children_prior_logits)[batch_index],
-            node_values=arr(tree.node_values)[batch_index],
-            node_visits=arr(tree.node_visits)[batch_index],
-            num_actions=tree.num_actions,
-            num_simulations=tree.num_simulations,
-        )
-        return npz_path
+    g = convert_tree_to_graph(tree, action_labels=action_labels, batch_index=batch_index)
+    svg_path = out_path_noext + ".svg"
+    g.draw(svg_path, prog="dot", format="svg")
+    return svg_path
 
 
 
-def gumbel_policy(step_b, heuristic=None, num_simulations=100,
+
+def gumbel_policy(step_b, renderer, heuristic=None, num_simulations=100,
                   save_tree: bool = False,
                   tree_out_dir: str = "./search_trees",
                   file_prefix: str = "gumbel",
@@ -260,7 +282,7 @@ def gumbel_policy(step_b, heuristic=None, num_simulations=100,
             batch_size = int(tree.node_values.shape[0])
             for b in range(batch_size):
                 out_noext = os.path.join(tree_out_dir, f"{file_prefix}_step{n:02d}_b{b}")
-                path = save_search_tree(tree, out_noext, action_labels=action_labels, batch_index=b)
+                path = save_search_tree(tree, renderer, out_noext, action_labels=action_labels, batch_index=b)
                 print(f"[Tree saved] {path}")
         return action
 
@@ -319,6 +341,7 @@ def self_play_and_log(env: LudaxEnvironment,
 def main():
     # Build environment (tic-tac-toe)
     env = LudaxEnvironment(game_str=tic_tac_toe)
+    renderer = InteractiveBoardHandler(env.game_info, env.rendering_info)
 
     # Initialize state (single game) and step function
     global state_batched  # used in self_play_and_log's host loop
@@ -330,6 +353,7 @@ def main():
     # Choose a policy; both support save_tree=True
     policy = gumbel_policy(
         step_b,
+        renderer,
         heuristic=None,              # zero heuristic (value from search)
         num_simulations=500,          # tweak as you like
         save_tree=True,              # <-- save tree every call
