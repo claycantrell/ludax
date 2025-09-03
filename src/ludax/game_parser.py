@@ -704,17 +704,30 @@ class GameRuleParser(Transformer):
                 inner_indices.append(local_inner_indices)
                 outer_indices.append(local_outer_indices)
 
-            line_indices = jnp.concatenate(line_indices, axis=0)
-            inner_indices = jnp.concatenate(inner_indices, axis=0)
-            outer_indices = jnp.concatenate(outer_indices, axis=0)
+            if len(line_indices) > 0:
+                line_indices = jnp.concatenate(line_indices, axis=0)
+                inner_indices = jnp.concatenate(inner_indices, axis=0)
+                outer_indices = jnp.concatenate(outer_indices, axis=0)
+            else:
+                line_indices = jnp.array([], dtype=jnp.int16)
 
         else:
             n = int(n)
             line_indices = utils._get_line_indices(self.game_info, n+2, orientation)
             inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, n, orientation)
 
+        # If there aren't any valid custodial arrangements, we can just return an empty mask
+        if line_indices.shape[0] == 0:
+            def mask_fn(state):
+                return jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
+            
+            def lookahead_mask_fn(state):
+                return jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
+            
+            return mask_fn, {"lookahead_mask_fn": lookahead_mask_fn}
+        
         full_match_width = line_indices.shape[1]
-
+        
         def mask_fn(state):
             outer_player = (state.current_player + offset) % 2
             inner_player = (outer_player + 1) % 2
@@ -1235,6 +1248,11 @@ class GameRuleParser(Transformer):
 
         if optional_args[OptionalArgs.EXACT] and n < max(self.game_info.board_dims):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
+
+            # If there are no valid lines of this length / orientation, then always return 0
+            if line_indices.size == 0:
+                return lambda state: 0, {}
+
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
             def function_fn(state):
@@ -1249,6 +1267,10 @@ class GameRuleParser(Transformer):
 
         else:
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
+
+            # If there are no valid lines of this length / orientation, then always return 0
+            if line_indices.size == 0:
+                return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int16)}
 
             def function_fn(state):
                 occupied_mask = (state.board == state.current_player)

@@ -573,6 +573,10 @@ def _get_custodial_indices(game_info: GameInfo, inner_n: int, orientation: Orien
     # We extract all the lines of n+2 to account for the two outer pieces
     line_indices = _get_line_indices(game_info, inner_n+2, orientation)
 
+    # If there aren't any valid custodial arrangements, we can just return empty arrays
+    if line_indices.shape[0] == 0:
+        return jnp.array([], dtype=jnp.int16), jnp.array([], dtype=jnp.int16)
+
     inner_indices = line_indices[:, 1:-1]
     outer_indices = jnp.stack([line_indices[:, 0], line_indices[:, -1]], axis=1)
 

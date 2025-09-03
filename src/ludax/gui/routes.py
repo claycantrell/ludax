@@ -97,6 +97,7 @@ def render_game(id):
     global HANDLER
     global STATE
 
+    print(f"Loading the following game:\n{getattr(games, id)}")
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
 
