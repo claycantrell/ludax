@@ -70,7 +70,7 @@ def count(state):
 def debug_state(state: environment.State, env: environment.LudaxEnvironment):
     """Debug the current state of the game."""
     print(f"state.global_step_count: {state.global_step_count}")
-    print(f"state.winner: {state.winner}")
+    print(f"state.winners: {state.winners}")
     print(f"state.terminated: {state.terminated}")
     print(f"state.truncated: {state.truncated}")
     print(f"state.mover_reward: {state.mover_reward}")
@@ -161,7 +161,7 @@ def step():
     time.sleep(0.1)
 
     terminated = bool(STATE.terminated)
-    winner = int(STATE.winner)
+    winners = list(map(int, STATE.winners))
     if hasattr(STATE.game_state, "scores"):
         scores = list(map(float, STATE.game_state.scores))
     else:
@@ -173,7 +173,7 @@ def step():
 
     debug_state(STATE, ENV)
 
-    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "winner": winner, "current_player": int(STATE.game_state.current_player),
+    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "winners": winners, "current_player": int(STATE.game_state.current_player),
             "scores": scores}
 
 @app.route('/reset', methods=['POST'])

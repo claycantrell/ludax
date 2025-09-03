@@ -151,14 +151,16 @@ class LudaxEnvironment():
         state = state.replace(legal_action_mask=new_legal_action_mask)
 
         # Use the new board to compute the winner, terminal, and rewards
-        winner, terminated = self._get_winner(game_state)
-        rewards = jax.lax.select(
-            winner != EMPTY,
-            jnp.float32([-1, -1]).at[winner].set(1),
-            jnp.zeros(2, jnp.float32)
-        )
+        winners, terminated = self._get_winner(game_state)
+        rewards = jnp.where(winners == EMPTY, 0, jnp.where(winners, 1, -1)).astype(jnp.float32)
+
+        # rewards = jax.lax.select(
+        #     winner != EMPTY,
+        #     jnp.float32([-1, -1]).at[winner].set(1),
+        #     jnp.zeros(2, jnp.float32)
+        # )
         mover_reward = rewards[game_state.current_player]
-        state = state.replace(winner=winner, rewards=rewards, terminated=terminated, mover_reward=mover_reward)
+        state = state.replace(winners=winners, rewards=rewards, terminated=terminated, mover_reward=mover_reward)
 
         # If the game hasn't ended, then update the current player
         game_state = jax.lax.cond(

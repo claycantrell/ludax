@@ -42,7 +42,7 @@ class State():
     game_state: type
     current_player: Array
     legal_action_mask: Array
-    winner: Array = EMPTY
+    winners: Array = EMPTY * jnp.ones(2, jnp.int16)
     rewards: Array = jnp.float32([0.0, 0.0])
     mover_reward: Array = jnp.float32(0.0)
     terminated: Array = FALSE
@@ -145,7 +145,7 @@ class OptionalArgs(StrEnum):
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover'},
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CUSTODIAL: {OptionalArgs.MOVER: 'mover', OptionalArgs.ORIENTATION: 'any'},
     Masks.LOOP: {OptionalArgs.MOVER: 'mover'},

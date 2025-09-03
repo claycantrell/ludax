@@ -469,13 +469,13 @@ class GameRuleParser(Transformer):
         # flags the game as terminated
         def combined_end_rules(state):
             index = jnp.arange(n_rules)
-            winners, ends = jax.vmap(lambda i: jax.lax.switch(i, rules, state))(index)
+            winners_by_rule, ends = jax.vmap(lambda i: jax.lax.switch(i, rules, state))(index)
 
-            # Take winner determined by the first active end rule
-            winner = jax.lax.select(ends.any(), winners[jnp.argmax(ends)], EMPTY)
+            # Take winner(s) determined by the first active end rule
+            winners = jax.lax.select(ends.any(), winners_by_rule[jnp.argmax(ends)], EMPTY * jnp.ones(2, jnp.int16))
             end = ends.any()
             
-            return winner, end
+            return winners, end
 
         return {'end_rules': combined_end_rules}
     
@@ -492,7 +492,7 @@ class GameRuleParser(Transformer):
 
         def end_rule_fn(state):
             pred_val = predicate_fn(state)
-            winner = jax.lax.select(pred_val, get_winner(state), EMPTY)
+            winner = jax.lax.select(pred_val, get_winner(state), EMPTY * jnp.ones(2, jnp.int16))
             termination = jax.lax.select(pred_val, TRUE, FALSE)
 
             return winner, termination
@@ -504,13 +504,23 @@ class GameRuleParser(Transformer):
         The specified player wins the game
         '''
         mover_ref = children[0]
-        if mover_ref == PlayerAndMoverRefs.MOVER:
+
+        # In this case, both players win so we can effectively just ignore
+        # the offset by setting the "base" to be all ones
+        if mover_ref == PlayerAndMoverRefs.BOTH:
+            base = jnp.ones(2, jnp.int16)
             offset = 0
+
         else:
-            offset = 1
+            base = jnp.zeros(2, jnp.int16)
+            if mover_ref == PlayerAndMoverRefs.MOVER:
+                offset = 0
+            else:
+                offset = 1
 
         def get_winner(state):
-            return state.current_player + offset
+            winners = base.at[(state.current_player + offset) % 2].set(1)
+            return winners
         
         info = {}
 
@@ -521,13 +531,23 @@ class GameRuleParser(Transformer):
         The specified player loses the game
         '''
         mover_ref = children[0]
-        if mover_ref == PlayerAndMoverRefs.MOVER:
+
+        # The inverse of the above: we can set the base to be all zeros
+        # and ignore the offset
+        if mover_ref == PlayerAndMoverRefs.BOTH:
+            base = jnp.zeros(2, jnp.int16)
             offset = 0
+
         else:
-            offset = 1
+            base = jnp.ones(2, jnp.int16)
+            if mover_ref == PlayerAndMoverRefs.MOVER:
+                offset = 0
+            else:
+                offset = 1
 
         def get_winner(state):
-            return (state.current_player + offset + 1)%2
+            winners = base.at[(state.current_player + offset) % 2].set(0)
+            return winners
         
         info = {}
 
@@ -538,7 +558,8 @@ class GameRuleParser(Transformer):
         The game ends in a draw
         '''
         def get_winner(state):
-            return EMPTY
+            winners = EMPTY * jnp.ones(2, jnp.int16)
+            return winners
         
         info = {}
 
@@ -548,11 +569,16 @@ class GameRuleParser(Transformer):
         '''
         The game is won by the player with the highest score (draw if scores are equal)
         '''
+
+        draw_result = EMPTY * jnp.ones(2, jnp.int16)
+        p1_win_result = jnp.array([1, 0], dtype=jnp.int16)
+        p2_win_result = jnp.array([0, 1], dtype=jnp.int16)
+
         def get_winner(state):
             is_draw = state.scores[0] == state.scores[1]
             p1_wins = state.scores[0] > state.scores[1]
 
-            return jax.lax.select(is_draw, EMPTY, jax.lax.select(p1_wins, P1, P2))
+            return jax.lax.select(is_draw, draw_result, jax.lax.select(p1_wins, p1_win_result, p2_win_result))
         
         info = {}
 
@@ -1246,6 +1272,22 @@ class GameRuleParser(Transformer):
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
 
+        player = optional_args[OptionalArgs.PLAYER]
+        if player == PlayerAndMoverRefs.MOVER:
+            def get_mask(state):
+                return (state.board == state.current_player).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.OPPONENT:
+            def get_mask(state):
+                return (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.P1:
+            def get_mask(state):
+                return (state.board == P1).astype(jnp.int16)
+        elif player == PlayerAndMoverRefs.P2:
+            def get_mask(state):
+                return (state.board == P2).astype(jnp.int16)
+        else:
+            raise ValueError(f"Invalid player reference: {player}")
+
         if optional_args[OptionalArgs.EXACT] and n < max(self.game_info.board_dims):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
 
@@ -1256,7 +1298,7 @@ class GameRuleParser(Transformer):
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 num_lines = line_matches.sum()
                 num_overshoot_lines = jax.lax.cond(num_lines, lambda: 0, lambda: (occupied_mask[overshoot_line_indices] == 1).all(axis=1).sum())
@@ -1273,13 +1315,13 @@ class GameRuleParser(Transformer):
                 return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int16)}
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 return line_matches.sum()
             
             num_lines = line_indices.shape[0]
             def lookahead_mask_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_mask(state)
 
                 line_mask = (occupied_mask[line_indices] == 1)
                 almost_line_mask = (line_mask.sum(axis=1) == n-1)
