@@ -26,6 +26,7 @@ class MCTSParams(NamedTuple):
     - rewards (array of shape [num_sims, num_actions]): the total reward W(s,a) for each node / action
     - to_play (array of shape [num_sims,]): the player to play at each node (used to flip the sign of rewards for the opponent)
     '''
+    player_idx: int
     node_num: int
     transitions: jnp.ndarray
     states: jnp.ndarray
@@ -64,17 +65,16 @@ def initialize(environment: LudaxEnvironment, root_state: State, num_sims: int, 
     key = jax.random.PRNGKey(seed)
 
     transitions = -jnp.ones((num_sims, environment.num_actions), dtype=jnp.int32)
-    # states = jnp.zeros((num_sims,) + state.shape, dtype=state.dtype)
-    # states = states.at[0].set(state)
-
+    states = jax.vmap(lambda i: root_state)(jnp.arange(num_sims))
     visits = jnp.zeros((num_sims, environment.num_actions), dtype=jnp.int32)
     rewards = jnp.zeros((num_sims, environment.num_actions), dtype=jnp.float32)
     to_play = jnp.zeros((num_sims,), dtype=jnp.int32)
     
     params = MCTSParams(
-        node_num=1,
+        player_idx=root_state.current_player,
+        node_num=0,
         transitions=transitions,
-        states=root_state,
+        states=states,
         visits=visits,
         rewards=rewards,
         to_play=to_play
@@ -119,9 +119,9 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, c: float = 1.44) -
     )
     
     max_action = jnp.argmax(ucb_values)
-    return int(max_action)
+    return max_action
 
-def proceed_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
+def rollout_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
     '''
     Proceeds from the root node to a leaf node by selecting actions using UCB
 
@@ -159,6 +159,65 @@ def proceed_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
 
     return rollout
 
+def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: LudaxEnvironment) -> MCTSParams:
+    '''
+    Expands the leaf node reached by the given rollout
+
+    Params:
+    - mcts_params (MCTSParams): the current MCTS parameters
+    - rollout (MCTSRollout): the rollout information
+    - environment (LudaxEnvironment): the environment to use for expansion
+
+    Returns:
+    - mcts_params (MCTSParams): the updated MCTS parameters
+    '''
+    
+    num_steps = len(rollout.nodes)
+    last_valid_step = jnp.argmax(jnp.where(rollout.valid, jnp.arange(num_steps), 0))
+    node_idx, action = rollout.nodes[last_valid_step], rollout.actions[last_valid_step]
+
+    # leaf_state = mcts_params.states[node_idx]
+    leaf_state = jax.tree_util.tree_map(lambda x: x[node_idx], mcts_params.states)
+    next_state = environment.step(leaf_state, action) # TODO: use JITted step function!
+    reward = evaluate_state(mcts_params, environment, next_state, jax.random.PRNGKey(0)) # TODO: use a better key!
+
+    expansion_node_idx = mcts_params.node_num + 1
+
+    # The state needs to be updated using a tree map since it's a pytree (struct of arrays)
+    updated = jax.tree_util.tree_map(lambda arr, new: arr.at[expansion_node_idx].set(new), mcts_params.states, next_state)
+
+    mcts_params = mcts_params._replace(
+        node_num=expansion_node_idx,
+        states=updated,
+        visits=mcts_params.visits.at[node_idx, action].add(1),
+        rewards=mcts_params.rewards.at[node_idx, action].add(reward),
+    )
+
+    return mcts_params
+
+def evaluate_state(mcts_params: MCTSParams, environment: LudaxEnvironment, state: State, key: jax.random.PRNGKey) -> float:
+    '''
+    Evaluates the given state by running a random rollout to a terminal state and returning the final reward
+    '''
+
+    def cond_fn(args):
+        state, _ = args
+        return ~(state.terminated | state.truncated).all()
+
+    def body_fn(args):
+        state, key = args
+        key, subkey = jax.random.split(key)
+        logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
+        action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+        state = environment.step(state, action)
+        return state, key
+
+    state, key = jax.lax.while_loop(cond_fn, body_fn, (state, key))
+
+    # Return the reward for the player to play at the root
+    reward = state.rewards[mcts_params.player_idx]
+    return reward
+
 if __name__ == "__main__":
     import time
     from ludax.games import tic_tac_toe
@@ -167,11 +226,17 @@ if __name__ == "__main__":
 
     environment = LudaxEnvironment(game_str=tic_tac_toe)
     root_state = environment.init(key)
-    num_sims = 1000
-    max_depth = 100
-    params, key = initialize(environment, root_state, num_sims, max_depth)
 
+    num_sims = 1000
+    max_depth = 15
+
+    params, key = initialize(environment, root_state, num_sims, max_depth)
     print("Initialized MCTSParams!")
     
-    action = select_action_ucb(params, 0)
-    print(f"Selected action {action} at root node")
+    rollout = rollout_to_leaf(params, max_depth)
+    print("Completed rollout to leaf!")
+
+    params = expand_leaf(params, rollout, environment)
+    print("Expanded leaf node!")
+
+    breakpoint()
