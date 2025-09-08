@@ -13,7 +13,9 @@ import numpy as np
 
 from ludax import LudaxEnvironment
 from ludax.config import State
+from ludax.struct import dataclass
 
+# @dataclass
 class MCTSParams(NamedTuple):
     '''
     The main data structure that stores the current state of the MCTS tree
@@ -34,6 +36,8 @@ class MCTSParams(NamedTuple):
     rewards: jnp.ndarray
     to_play: jnp.ndarray
 
+
+# @dataclass
 class MCTSRollout(NamedTuple):
     '''
     Stores the information from a single rollout from the root to a leaf node
@@ -137,7 +141,7 @@ def rollout_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
         node_idx, action, valid = carry
 
         # If we've reached an unexpanded node, then all subsequent steps are invalid
-        valid = valid & is_valid_node(mcts_params, node_idx, action)
+        new_valid = valid & is_valid_node(mcts_params, node_idx, action)
 
         # Advance to the next node and select the next action. We don't need to worry about
         # the behavior here if the current node is invalid, since later all that information
@@ -145,7 +149,7 @@ def rollout_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
         next_node_idx = next_state(mcts_params, node_idx, action)
         next_action = select_action_ucb(mcts_params, next_node_idx)
 
-        new_carry = (next_node_idx, next_action, valid)
+        new_carry = (next_node_idx, next_action, new_valid)
         output = (node_idx, action, valid)
 
         return new_carry, output
@@ -159,7 +163,7 @@ def rollout_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
 
     return rollout
 
-def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: LudaxEnvironment) -> MCTSParams:
+def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: LudaxEnvironment, step_fn: callable) -> MCTSParams:
     '''
     Expands the leaf node reached by the given rollout
 
@@ -176,26 +180,39 @@ def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: Luda
     last_valid_step = jnp.argmax(jnp.where(rollout.valid, jnp.arange(num_steps), 0))
     node_idx, action = rollout.nodes[last_valid_step], rollout.actions[last_valid_step]
 
-    # leaf_state = mcts_params.states[node_idx]
+    # print(f"Rollout to depth {last_valid_step}, expanding node {node_idx} with action {action}")
+
     leaf_state = jax.tree_util.tree_map(lambda x: x[node_idx], mcts_params.states)
-    next_state = environment.step(leaf_state, action) # TODO: use JITted step function!
-    reward = evaluate_state(mcts_params, environment, next_state, jax.random.PRNGKey(0)) # TODO: use a better key!
+    next_state = step_fn(leaf_state, action.astype(jnp.int16))
+    reward = evaluate_state(mcts_params, next_state, step_fn, jax.random.PRNGKey(0))
 
     expansion_node_idx = mcts_params.node_num + 1
 
     # The state needs to be updated using a tree map since it's a pytree (struct of arrays)
-    updated = jax.tree_util.tree_map(lambda arr, new: arr.at[expansion_node_idx].set(new), mcts_params.states, next_state)
+    updated_states = jax.tree_util.tree_map(lambda arr, new: arr.at[expansion_node_idx].set(new), mcts_params.states, next_state)
+
+    num_sims = len(mcts_params.transitions)
+    valid_node_idxs = jnp.where(rollout.valid, rollout.nodes, num_sims + 1)
+    valid_actions = jnp.where(rollout.valid, rollout.actions, environment.num_actions + 1)
+
+    # Increment the visit counts and rewards along the path (including the newly expanded node)
+    updated_visits = mcts_params.visits.at[valid_node_idxs, valid_actions].add(1)
+    updated_rewards = mcts_params.rewards.at[valid_node_idxs, valid_actions].add(reward)
+
+    updated_visits = updated_visits.at[node_idx, action].add(1)
+    updated_rewards = updated_rewards.at[node_idx, action].add(reward)
 
     mcts_params = mcts_params._replace(
         node_num=expansion_node_idx,
-        states=updated,
-        visits=mcts_params.visits.at[node_idx, action].add(1),
-        rewards=mcts_params.rewards.at[node_idx, action].add(reward),
+        transitions=mcts_params.transitions.at[node_idx, action].set(expansion_node_idx),
+        states=updated_states,
+        visits=updated_visits,
+        rewards=updated_rewards,
     )
 
     return mcts_params
 
-def evaluate_state(mcts_params: MCTSParams, environment: LudaxEnvironment, state: State, key: jax.random.PRNGKey) -> float:
+def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key: jax.random.PRNGKey) -> float:
     '''
     Evaluates the given state by running a random rollout to a terminal state and returning the final reward
     '''
@@ -209,7 +226,7 @@ def evaluate_state(mcts_params: MCTSParams, environment: LudaxEnvironment, state
         key, subkey = jax.random.split(key)
         logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
         action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
-        state = environment.step(state, action)
+        state = step_fn(state, action)
         return state, key
 
     state, key = jax.lax.while_loop(cond_fn, body_fn, (state, key))
@@ -225,6 +242,7 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0) 
 
     environment = LudaxEnvironment(game_str=tic_tac_toe)
+    step_fn = jax.jit(environment.step)
     root_state = environment.init(key)
 
     num_sims = 1000
@@ -233,10 +251,24 @@ if __name__ == "__main__":
     params, key = initialize(environment, root_state, num_sims, max_depth)
     print("Initialized MCTSParams!")
     
-    rollout = rollout_to_leaf(params, max_depth)
-    print("Completed rollout to leaf!")
 
-    params = expand_leaf(params, rollout, environment)
-    print("Expanded leaf node!")
+    def body_fn(i, params):
+        rollout = rollout_to_leaf(params, max_depth)
+        params = expand_leaf(params, rollout, environment, step_fn)
 
-    breakpoint()
+        return params
+    
+    params = jax.lax.fori_loop(0, 1000, body_fn, params)
+    print("Completed 1000 simulations!")
+    print("Visit counts at root:", params.visits[0])
+
+    params, key = initialize(environment, root_state, num_sims, max_depth)
+    print("Initialized MCTSParams!")
+
+    for i in range(100):
+        print(f"-----Simulation {i+1}/100-----")
+        rollout = rollout_to_leaf(params, max_depth)
+        params = expand_leaf(params, rollout, environment, step_fn)
+
+    print("Completed 100 simulations!")
+    print("Visit counts at root:", params.visits[0])
