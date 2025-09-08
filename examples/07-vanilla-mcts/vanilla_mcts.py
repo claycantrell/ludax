@@ -151,6 +151,7 @@ def rollout_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSRollout:
 
     # Initialize the scan with the root node and an initial action
     node_idx, action = 0, select_action_ucb(mcts_params, 0)
+    # jax.debug.print("\nStarting rollout from node {}, action {}", node_idx, action)
     init_carry = (node_idx, action, True)
     _, (nodes, actions, valid) = jax.lax.scan(body_fn, init_carry, jnp.arange(max_depth))
 
@@ -175,11 +176,19 @@ def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: Luda
     last_valid_step = jnp.argmax(jnp.where(rollout.valid, jnp.arange(num_steps), 0))
     node_idx, action = rollout.nodes[last_valid_step], rollout.actions[last_valid_step]
 
-    # print(f"Rollout to depth {last_valid_step}, expanding node {node_idx} with action {action}")
-
+    # jax.debug.print(" - Expanding leaf at depth {}, node {}, action {}", last_valid_step, node_idx, action)
+    # jax.debug.print(" - Expanding leaf at depth {}, node {}, actions {}", last_valid_step, node_idx, rollout.actions)
     leaf_state = jax.tree_util.tree_map(lambda x: x[node_idx], mcts_params.states)
     next_state = step_fn(leaf_state, action.astype(jnp.int16))
+    # jax.debug.print(" - Next state board: {}", next_state.game_state.board)
     reward = evaluate_state(mcts_params, next_state, step_fn, jax.random.PRNGKey(0))
+
+    # If the leaf was terminal, then we use the actual reward instead of a rollout reward
+    leaf_reward = (leaf_state.rewards[mcts_params.player_idx] + 1) / 2
+    reward = jax.lax.select(leaf_state.terminated | leaf_state.truncated, leaf_reward, reward)
+
+    # jax.debug.print(" - Leaf state was terminated: {}, truncated: {}, leaf reward: {}", leaf_state.terminated, leaf_state.truncated, leaf_reward)
+    # jax.debug.print(" - Evaluated leaf state with reward {}", reward)
 
     expansion_node_idx = mcts_params.node_num + 1
 
@@ -198,11 +207,20 @@ def expand_leaf(mcts_params: MCTSParams, rollout: MCTSRollout, environment: Luda
     updated_rewards = updated_rewards.at[node_idx, action].add(reward)
 
     mcts_params = mcts_params._replace(
-        node_num=expansion_node_idx,
-        transitions=mcts_params.transitions.at[node_idx, action].set(expansion_node_idx),
-        states=updated_states,
         visits=updated_visits,
         rewards=updated_rewards,
+    )
+
+    # Only update the transitions if the leaf node is not terminal
+    mcts_params = jax.lax.cond(
+        ~(leaf_state.terminated | leaf_state.truncated),
+        lambda params: params._replace(
+            node_num=expansion_node_idx,
+            states=updated_states,
+            transitions=params.transitions.at[node_idx, action].set(expansion_node_idx)
+        ),
+        lambda params: params,
+        mcts_params
     )
 
     return mcts_params
@@ -228,6 +246,10 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
 
     # Return the reward for the player to play at the root
     reward = state.rewards[mcts_params.player_idx]
+
+    # Scale [-1, 1] to [0, 1]
+    reward = (reward + 1) / 2
+
     return reward
 
 if __name__ == "__main__":
@@ -257,7 +279,28 @@ if __name__ == "__main__":
     step_fn = jax.jit(environment.step)
 
     num_sims = 1000
-    max_depth = 15
+    max_depth = 10
+
+    # Debugging!
+    root_state = environment.init(key)
+    root_state = environment.step(root_state, 6)
+    root_state = environment.step(root_state, 7)
+    root_state = environment.step(root_state, 8)
+    root_state = environment.step(root_state, 5)
+    display_board(root_state, environment)
+
+    params, key = initialize(environment, root_state, num_sims, max_depth)
+
+    def body_fn(i, params):
+        jax.debug.print("\nIteration {}: rewards[0] = {}", i, params.rewards[0])
+        jax.debug.print(" - visits[0] = {} ({})", params.visits[0], jnp.argmax(params.visits[0]))
+        rollout = rollout_to_leaf(params, max_depth)
+        params = expand_leaf(params, rollout, environment, step_fn)
+
+        return params
+
+    params = jax.lax.fori_loop(0, 10000, body_fn, params)
+    exit()
 
     root_state = environment.init(key)
     while not root_state.terminated and not root_state.truncated:
@@ -268,13 +311,14 @@ if __name__ == "__main__":
         print("Initialized MCTSParams!")
 
         def body_fn(i, params):
+            # jax.debug.print("Iteration {}: rewards[0] = {}", i, params.rewards[0])
             rollout = rollout_to_leaf(params, max_depth)
             params = expand_leaf(params, rollout, environment, step_fn)
 
             return params
         
         print(f"Performing MCTS from the perspective of player {params.player_idx}...")
-        params = jax.lax.fori_loop(0, 1000, body_fn, params)
+        params = jax.lax.fori_loop(0, 10000, body_fn, params)
         action = jnp.argmax(params.visits[0])
 
         print(f"Player {root_state.current_player} selecting action {action} with {params.visits[0, action]} visits")
