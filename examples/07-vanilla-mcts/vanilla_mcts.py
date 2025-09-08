@@ -13,9 +13,6 @@ import numpy as np
 
 from ludax import LudaxEnvironment
 from ludax.config import State
-from ludax.struct import dataclass
-
-# @dataclass
 class MCTSParams(NamedTuple):
     '''
     The main data structure that stores the current state of the MCTS tree
@@ -36,8 +33,6 @@ class MCTSParams(NamedTuple):
     rewards: jnp.ndarray
     to_play: jnp.ndarray
 
-
-# @dataclass
 class MCTSRollout(NamedTuple):
     '''
     Stores the information from a single rollout from the root to a leaf node
@@ -238,37 +233,49 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
 if __name__ == "__main__":
     import time
     from ludax.games import tic_tac_toe
+    from ludax.config import BoardShapes
+
+    def display_board(state, env):
+        if env.game_info.board_shape != BoardShapes.HEXAGON:
+            shaped_board = state.game_state.board.reshape(env.obs_shape[:2])
+            for row in shaped_board:
+                pretty_row = ' '.join(str(cell) for cell in row + 1)
+                print(pretty_row.replace('0', '.').replace('1', 'X').replace('2', 'O'))
+            print()
+            if hasattr(state.game_state, "connected_components"):
+                shaped_components = state.game_state.connected_components.reshape(env.obs_shape[:2])
+                print(shaped_components)
+        else:
+            print(f"Observation shape: {env.obs_shape}")
+            print(f"Board: {state.game_state.board}")
+            if hasattr(state.game_state, "connected_components"):
+                print(f"Components: {state.game_state.connected_components}")
 
     key = jax.random.PRNGKey(0) 
 
     environment = LudaxEnvironment(game_str=tic_tac_toe)
     step_fn = jax.jit(environment.step)
-    root_state = environment.init(key)
 
     num_sims = 1000
     max_depth = 15
 
-    params, key = initialize(environment, root_state, num_sims, max_depth)
-    print("Initialized MCTSParams!")
-    
+    root_state = environment.init(key)
+    while not root_state.terminated and not root_state.truncated:
+        print("\nCurrent board:")
+        display_board(root_state, environment)
 
-    def body_fn(i, params):
-        rollout = rollout_to_leaf(params, max_depth)
-        params = expand_leaf(params, rollout, environment, step_fn)
+        params, key = initialize(environment, root_state, num_sims, max_depth)
+        print("Initialized MCTSParams!")
 
-        return params
-    
-    params = jax.lax.fori_loop(0, 1000, body_fn, params)
-    print("Completed 1000 simulations!")
-    print("Visit counts at root:", params.visits[0])
+        def body_fn(i, params):
+            rollout = rollout_to_leaf(params, max_depth)
+            params = expand_leaf(params, rollout, environment, step_fn)
 
-    params, key = initialize(environment, root_state, num_sims, max_depth)
-    print("Initialized MCTSParams!")
+            return params
+        
+        print(f"Performing MCTS from the perspective of player {params.player_idx}...")
+        params = jax.lax.fori_loop(0, 1000, body_fn, params)
+        action = jnp.argmax(params.visits[0])
 
-    for i in range(100):
-        print(f"-----Simulation {i+1}/100-----")
-        rollout = rollout_to_leaf(params, max_depth)
-        params = expand_leaf(params, rollout, environment, step_fn)
-
-    print("Completed 100 simulations!")
-    print("Visit counts at root:", params.visits[0])
+        print(f"Player {root_state.current_player} selecting action {action} with {params.visits[0, action]} visits")
+        root_state = step_fn(root_state, action.astype(jnp.int16))
