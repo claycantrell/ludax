@@ -120,7 +120,7 @@ def is_valid_node(mcts_params: MCTSParams, node_idx: int, action: int) -> bool:
     # return mcts_params.transitions[node_idx, action] != -1 & mcts_params.legal_actions[node_idx, action]
     return mcts_params.transitions[node_idx, action] != -1
 
-def select_action_ucb(mcts_params: MCTSParams, node_idx: int, c: float = 1.41) -> int:
+def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PRNGKey, c: float = 1.41) -> int:
     '''
     Selects an action at the given node using the UCB formula
 
@@ -159,13 +159,16 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, c: float = 1.41) -
     # ucb_values = rewards / (visits + 1e-6) + c * jnp.sqrt(jnp.log(total_visits + 1) / (visits + 1e-6))
 
     ucb_values = jnp.where(legal_actions, ucb_values, -jnp.inf)
-    max_action = jnp.argmax(ucb_values)
+    # max_action = jnp.argmax(ucb_values)
+
+    logits = jnp.where(ucb_values == ucb_values.max(), 0.0, -jnp.inf)
+    max_action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
 
     # jax.debug.print("Selecting action {} at node {}, to_play {}, root_player {}", max_action, node_idx, mcts_params.to_play[node_idx], mcts_params.player_idx)
 
     return max_action, ucb_values
 
-def traverse_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSTraversal:
+def traverse_to_leaf(mcts_params: MCTSParams, max_depth: int, key: jax.random.PRNGKey) -> MCTSTraversal:
     '''
     Proceeds from the root node to a leaf node by selecting actions using UCB
 
@@ -178,7 +181,9 @@ def traverse_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSTraversal:
     '''
 
     def body_fn(carry, i):
-        node_idx, action, valid = carry
+        node_idx, action, valid, key = carry
+
+        key, subkey = jax.random.split(key)
 
         # If we've reached an unexpanded node, then all subsequent steps are invalid
         new_valid = valid & is_valid_node(mcts_params, node_idx, action)
@@ -187,22 +192,22 @@ def traverse_to_leaf(mcts_params: MCTSParams, max_depth: int) -> MCTSTraversal:
         # the behavior here if the current node is invalid, since later all that information
         # will get discarded
         next_node_idx = next_state(mcts_params, node_idx, action)
-        next_action, _ = select_action_ucb(mcts_params, next_node_idx)
+        next_action, _ = select_action_ucb(mcts_params, next_node_idx, key)
 
-        new_carry = (next_node_idx, next_action, new_valid)
+        new_carry = (next_node_idx, next_action, new_valid, key)
         output = (node_idx, action, valid)
 
         return new_carry, output
 
     # Initialize the scan with the root node and an initial action
-    node_idx, (action, _) = 0, select_action_ucb(mcts_params, 0)
+    node_idx, (action, _) = 0, select_action_ucb(mcts_params, 0, key)
     # jax.debug.print("\nStarting rollout from node {}, action {}", node_idx, action)
-    init_carry = (node_idx, action, True)
-    _, (nodes, actions, valid) = jax.lax.scan(body_fn, init_carry, jnp.arange(max_depth))
+    init_carry = (node_idx, action, True, key)
+    (_, _, _, key), (nodes, actions, valid) = jax.lax.scan(body_fn, init_carry, jnp.arange(max_depth))
 
     rollout = MCTSTraversal(nodes=nodes, actions=actions, valid=valid)
 
-    return rollout
+    return rollout, key
 
 def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: LudaxEnvironment, step_fn: callable, key: jax.random.PRNGKey) -> MCTSParams:
     '''
@@ -360,7 +365,7 @@ if __name__ == "__main__":
 
     # Debugging!
     root_state = environment.init(jax.random.PRNGKey(seed))
-    root_state = environment.step(root_state, 20)
+    root_state = environment.step(root_state, 30)
     root_state = environment.step(root_state, 36)
     # root_state = environment.step(root_state, 6)
     # root_state = environment.step(root_state, 2)
@@ -374,8 +379,8 @@ if __name__ == "__main__":
         params, key = carry
         key, subkey = jax.random.split(key)
 
-        jax.debug.print("\nIteration {}: rewards[0] = {}", i, params.rewards[0])
-        jax.debug.print(" - visits[0] = {} ({})", params.visits[0], jnp.argmax(params.visits[0]))
+        # jax.debug.print("\nIteration {}: rewards[0] = {}", i, params.rewards[0])
+        # jax.debug.print(" - visits[0] = {} ({})", params.visits[0], jnp.argmax(params.visits[0]))
 
         rewards = params.rewards[0]
         visits = params.visits[0]
@@ -384,12 +389,12 @@ if __name__ == "__main__":
         avg_rewards = rewards / (visits + 1e-6)
         jax.debug.callback(logging_callback, "[Iter {}] avg. reward = {:.3f} --  prop. best action = {:.3f} -- best action {}", i, jnp.mean(avg_rewards), prop_best_action, best_action)
 
-        rollout = traverse_to_leaf(params, max_depth)
+        rollout, key = traverse_to_leaf(params, max_depth, key)
         params, key = expand_leaf(params, rollout, environment, step_fn, key)
 
         return params, key
 
-    params, _ = jax.lax.fori_loop(0, 10000, body_fn, (params, key))
+    params, _ = jax.lax.fori_loop(0, 50000, body_fn, (params, key))
     display_board(root_state, environment)
 
     node_from_8 = params.transitions[0, 8]
