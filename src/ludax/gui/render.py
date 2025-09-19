@@ -269,7 +269,7 @@ class InteractiveBoardHandler():
             drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
             # Draw the legal action mask
-            if legal_actions and legal_actions[i]:
+            if legal_actions is not None and legal_actions[i]:
                 drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
 
             # Draw the piece (if present)

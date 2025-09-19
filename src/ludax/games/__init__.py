@@ -8,6 +8,7 @@ def _read_game(game_name: str) -> str:
 complexity_demo = _read_game('complexity_demo')
 connect_four = _read_game('connect_four')
 connect_six = _read_game('connect_six')
+cooperative = _read_game('cooperative')
 hex = _read_game('hex')
 gomoku = _read_game('gomoku')
 pente = _read_game('pente')
@@ -21,6 +22,7 @@ __all__ = [
     "complexity_demo",
     "connect_four",
     "connect_six",
+    "cooperative",
     "hex",
     "gomoku",
     "pente",
