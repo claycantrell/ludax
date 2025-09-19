@@ -147,7 +147,7 @@ def step():
             return jsonify({
                 "svg": HANDLER.rendered_svg,
                 "terminated": bool(STATE.terminated),
-                "winner": int(STATE.winner),
+                "winner": int(state.winners),
                 "current_player": int(STATE.game_state.current_player),
                 "scores": scores,
                 "error": "Illegal move! Please select a valid action."

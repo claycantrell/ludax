@@ -62,9 +62,9 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     state_b, key = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
 
     # Count the results
-    wins = jnp.sum(state_b.winner == 0)
-    draws = jnp.sum(state_b.winner == -1)
-    losses = jnp.sum(state_b.winner == 1)
+    wins = jnp.sum(state_b.winners == 0)
+    draws = jnp.sum(state_b.winners == -1)
+    losses = jnp.sum(state_b.winners == 1)
     return (wins, draws, losses), key
 
 tri_hex = """

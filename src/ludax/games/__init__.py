@@ -5,10 +5,8 @@ def _read_game(game_name: str) -> str:
         return f.read()
 
 # Package a subset of default game implementations
-complexity_demo = _read_game('complexity_demo')
 connect_four = _read_game('connect_four')
 connect_six = _read_game('connect_six')
-cooperative = _read_game('cooperative')
 hex = _read_game('hex')
 gomoku = _read_game('gomoku')
 pente = _read_game('pente')
@@ -19,10 +17,8 @@ yavalax = _read_game('yavalax')
 
 # List of all games available in the package
 __all__ = [
-    "complexity_demo",
     "connect_four",
     "connect_six",
-    "cooperative",
     "hex",
     "gomoku",
     "pente",

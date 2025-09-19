@@ -38,7 +38,7 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
         )
     """
 
-    B = state_b.winner.shape[0]
+    B = state_b.winners.shape[0]
     occ0 = state_b.game_state.board != -1
     agency_num0 = jnp.zeros((B,), jnp.int32)  # turns with >1 legal move
     agency_den0 = jnp.zeros((B,), jnp.int32)  # total turns taken (per game)
@@ -70,11 +70,11 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
     state_b, key, t, a_num, a_den, covered = jax.lax.while_loop(cond_fn, body_fn, carry0)
 
     # Existing metrics
-    wins = jnp.sum(state_b.winner == 0)
-    draws = jnp.sum(state_b.winner == -1)
-    losses = jnp.sum(state_b.winner == 1)
+    wins = jnp.sum(state_b.winners == 0)
+    draws = jnp.sum(state_b.winners == -1)
+    losses = jnp.sum(state_b.winners == 1)
     truncated = jnp.sum(~state_b.terminated)
-    total_games = state_b.winner.shape[0]
+    total_games = state_b.winners.shape[0]
     jax.debug.print("wins: {wins}, draws: {draws}, losses: {losses}, truncated: {truncated}, total_games: {total_games}",
                     wins=wins, draws=draws, losses=losses, truncated=truncated, total_games=total_games)
     balance = 1 - (jnp.abs(wins - losses) / total_games)
@@ -121,9 +121,9 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     state_b, key = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
 
     # Count the results
-    wins = jnp.sum(state_b.winner == 0)
-    draws = jnp.sum(state_b.winner == -1)
-    losses = jnp.sum(state_b.winner == 1)
+    wins = jnp.sum(state_b.winners == 0)
+    draws = jnp.sum(state_b.winners == -1)
+    losses = jnp.sum(state_b.winners == 1)
     return (wins, draws, losses), key
 
 

@@ -30,4 +30,4 @@ while not bool(state.terminated):
 
 print("Game over!")
 
-print(f"Winner (0: first player, 1: second player, -1: draw): {state.winner}")
+print(f"Winner (0: first player, 1: second player, -1: draw): {state.winners}")

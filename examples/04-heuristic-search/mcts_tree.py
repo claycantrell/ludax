@@ -420,7 +420,7 @@ def self_play_and_log(env: LudaxEnvironment,
         state_b = step_b(state_b, action)
 
     # Report outcome
-    winner = int(jax.device_get(state_b.winner[0]))
+    winner = int(jax.device_get(state_b.winners[0]))
     if winner == -1:
         print("Game over: DRAW.")
     else:
