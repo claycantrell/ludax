@@ -1,0 +1,120 @@
+## Game Invention: Blooming Garden
+
+The game "Blooming Garden" is a strategic board game for two players. The game is played on a square board of size 11x11. The objective of the game is to create a garden by planting flowers in a way that maximizes the score.
+
+### Game Rules
+
+* The game starts with an empty board.
+* Player 1 starts by placing a flower in the center of the board.
+* Players take turns placing flowers on the board.
+* A player can only place a flower on an empty space that is adjacent to a flower already on the board.
+* If a player creates a line of 5 or more flowers, they score points for that line.
+* The game ends when the board is full or a player has no more moves left.
+* The player with the highest score wins.
+
+### Ludax Implementation
+
+```ludax
+(game "Blooming Garden"
+    (players 2)
+    (equipment 
+        (board (square 11))
+    ) 
+    
+    (rules 
+        (start
+            (place P1 (center))
+        )
+        (play
+            (once_through (P1)
+                (place (destination center))
+            )
+            (repeat (P1 P2)
+                (place 
+                    (destination (and empty (adjacent occupied)))
+                )
+            )
+        )
+        (end 
+            (if (full_board) (by_score))
+            (if (>= (line 5) 1) (mover win))
+        )
+    )
+    (rendering
+        (color P1 green)
+        (color P2 red)
+    )
+)
+```
+
+However, to make the game more interesting, let\'s add some additional rules.
+
+### Additional Rules
+
+* When a player creates a line of 5 or more flowers, they can choose to "bloom" that line, which gives them a bonus score.
+* If a player has no more moves left, they can choose to "prune" a line of flowers on the board, which removes that line and gives them a penalty score.
+
+### Updated Ludax Implementation
+
+```ludax
+(game "Blooming Garden"
+    (players 2)
+    (equipment 
+        (board (square 11))
+    ) 
+    
+    (rules 
+        (start
+            (place P1 (center))
+        )
+        (play
+            (once_through (P1)
+                (place (destination center))
+            )
+            (repeat (P1 P2)
+                (place 
+                    (destination (and empty (adjacent occupied)))
+                    (effects 
+                        (increment_score mover (count (line 5))))
+                    )
+                )
+                (force_pass)
+            )
+        )
+        (end 
+            (if (full_board) (by_score))
+            (if (>= (line 5) 1) 
+                (mover 
+                    (bloom (line 5))
+                    (win)
+                )
+            )
+        )
+    )
+    (rendering
+        (color P1 green)
+        (color P2 red)
+    )
+)
+```
+
+Note that this implementation uses some advanced features of Ludax, such as the `effects` clause to increment the score, and the `bloom` action to give a bonus score. The `force_pass` clause is used to ensure that players take turns.
+
+Also, the `bloom` action is not a built-in feature of Ludax, so it would need to be implemented separately. This could involve adding a new `action` clause to the game rules, and defining the behavior of the `bloom` action.
+
+### Bloom Action Implementation
+
+```ludax
+(action "bloom"
+    (parameters 
+        (line_length)
+    )
+    (behavior 
+        (increment_score mover (* line_length 2))
+    )
+)
+```
+
+This implementation defines a `bloom` action that takes a `line_length` parameter, and increments the score of the player by twice the length of the line. The `behavior` clause defines the effect of the action on the game state.
+
+With these additional rules and features, the game "Blooming Garden" becomes more complex and interesting, and players must strategize to maximize their score while blocking their opponent\'s moves.

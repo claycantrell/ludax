@@ -12,7 +12,7 @@ from heuristics.hex import distance_heuristic, connectivity_heuristic
 from heuristics.test import bad_heuristic
 from heuristics.connect_four import connect_four_heuristic
 
-from ludax.policies import mcts_policy, gumbel_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy
+from ludax.policies import muzero_policy, gumbel_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy, construct_playout_heuristic, zero_heuristic, legal_logits
 # from ludax.policies.mcts2 import mcts_policy as mcts_policy2, gumbel_policy as gumbel_policy2
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
@@ -49,12 +49,12 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
 
     def body_fn(args):
         state, key = args
-        key, subkey = jax.random.split(key)
+        key, k1, k2 = jax.random.split(key, 3)
 
         # ToDo: Find a more efficient way. Right now, we're calling both policies every step.
         # Get the action from the policy of the current player
-        action1 = policy_p1(state, subkey)
-        action2 = policy_p2(state, subkey)
+        action1 = policy_p1(state, k1)
+        action2 = policy_p2(state, k2)
         action = jnp.where(state.game_state.current_player == 0, action1, action2)
         state = step_b(state, action)
         return state, key
@@ -102,15 +102,15 @@ def main():
         # game_str=complexity_demo,
         # game_str=hex,
         # game_str=tri_hex,
-        game_str=connect_four,
-        # game_str=reversi,
+        # game_str=connect_four,
+        game_str=reversi,
         # game_str=tic_tac_toe,
     )
 
     # Initialize the environment and state
-    state_b, step_b, key = initialize(env, batch_size=100, seed=42)
+    state_b, step_b, key = initialize(env, batch_size=15, seed=42)
 
-    # AGENT1 = random_policy()
+    AGENT1 = random_policy()
     # AGENT1 = one_ply_policy(step_b, heuristic=connect_four_heuristic)
     # AGENT1 = one_ply_policy(step_b)
     # AGENT1 = one_ply_policy(step_b, connectivity_heuristic)
@@ -119,11 +119,11 @@ def main():
     # AGENT1 = negamax_policy(step_b, depth=2, heuristic=connect_four_heuristic)
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
     # AGENT1 = negamax_policy(step_b, depth=3)
-    AGENT1 = gumbel_policy(step_b, num_simulations=100)
+    # AGENT1 = gumbel_policy(step_b, logit_fn=legal_logits, num_simulations=50)
 
 
     # AGENT2 = gumbel_policy(step_b, num_simulations=20)
-    # AGENT2 = random_policy()
+    AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
@@ -131,8 +131,7 @@ def main():
     # AGENT2 = one_ply_policy(step_b)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
     # AGENT2 = negamax_policy(step_b, depth=3)
-    AGENT2 = gumbel_policy(step_b, num_simulations=100)
-
+    # AGENT2 = gumbel_policy(step_b, num_simulations=50)
 
     start_time = time.time()
     key, sub_key = jax.random.split(key)

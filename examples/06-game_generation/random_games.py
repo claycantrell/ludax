@@ -2,6 +2,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+from jax import disable_jit
 from lark import Lark, Token
 
 from ludax import LudaxEnvironment
@@ -89,20 +90,26 @@ def simple_eval(game_str):
         state_b, step_b, key = initialize(env, batch_size=100, seed=42)
     except Exception as e:
         print(f"Error initializing game: {e}")
-        return -3
+        return "Uninitializable"
 
     r_policy = random_policy()
-    g_policy = gumbel_policy(step_b, num_simulations=100)
+    # g_policy = gumbel_policy(step_b, num_simulations=100)
 
     try:
-        (r_balance, r_decisiveness, _, r_agency, _), key = gavel_metrics(r_policy, state_b, step_b, key)
+        (r_balance, r_decisiveness, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
     except Exception as e:
-        return -2
+        print(f"Error during first evaluation: {e}")
+        return "Unplayable"
 
-    if r_balance < 0.3 or r_agency < 0.3 or r_decisiveness < 0.3:
-        return -1
+    print(r_balance, r_decisiveness, r_agency, wins, draws, losses, truncated, total)
 
-    return 0
+    if wins + losses + draws + truncated < total:
+        return "Contradictory"
+
+    if r_balance < 0.2 or r_agency < 0.2 or r_decisiveness < 0.2:
+        return "Uninteresting"
+
+    return "Playable"
 
 if __name__ == "__main__":
     print(simple_eval(tic_tac_toe))
@@ -120,12 +127,13 @@ if __name__ == "__main__":
         #
         #     fitness.append(-4)
 
-    print(f"Generated {total} games with the fitness scores:")
-    print(f"-4: ({fitness.count(-4)})")
-    print(f"-3: ({fitness.count(-3)})")
-    print(f"-2: ({fitness.count(-2)})")
-    print(f"-1: ({fitness.count(-1)})")
-    print(f"0: ({fitness.count(0)})")
+    print(f"Generated {total} games with the following fitness scores:")
+    print(f"Uninitializable: {fitness.count('Uninitializable')}")
+    print(f"Unplayable: {fitness.count('Unplayable')}")
+    print(f"Contradictory: {fitness.count('Contradictory')}")
+    print(f"Uninteresting: {fitness.count('Uninteresting')}")
+    print(f"Playable: {fitness.count('Playable')}")
+
 
 
 

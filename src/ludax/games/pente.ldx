@@ -6,7 +6,7 @@
     
     (rules 
         (play
-            (once-through (P1)
+            (once_through (P1)
                 (place (destination center))
             )
             (repeat (P2 P1)

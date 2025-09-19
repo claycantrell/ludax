@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import jax
 
 @jax.jit
-def zero_heuristic(state_b):
+def zero_heuristic(state_b, *_):
     """
     A zero heuristic that returns 0.0 for all states.
     """
@@ -12,31 +12,32 @@ def zero_heuristic(state_b):
     return jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
 
 
-def random_playout_heuristic_constructor(step_b, num_playouts=10):
+def construct_playout_heuristic(step_b, num_playouts=20):
     """
     A heuristic that performs random playouts from the current state and returns the average outcome from the
     perspective of the current player.
     """
-    def random_playout_heuristic(state_b, key):
 
-        def cond_fn(carry):
-            state, _key = carry
-            # continue while at least one playout is not terminated
-            return jnp.any(~state.terminated)
+    def cond_fn(carry):
+        state, _key = carry
+        # continue while at least one playout is not terminated
+        return jnp.any(~state.terminated)
 
-        def body_fn(carry):
-            state, _key = carry
-            _key, subkey = jax.random.split(_key)
+    def body_fn(carry):
+        state, _key = carry
+        _key, subkey = jax.random.split(_key)
 
-            legal_action_mask = state.legal_action_mask  # [N, A] after repeat
-            # build logits: 0 for legal moves, -inf for illegal
-            logits = jnp.where(legal_action_mask.astype(bool), 0.0, -jnp.inf)  # [N, A]
+        legal_action_mask = state.legal_action_mask  # [N, A] after repeat
+        # build logits: 0 for legal moves, -inf for illegal
+        logits = jnp.where(legal_action_mask.astype(bool), 0.0, -jnp.inf)  # [N, A]
 
-            # sample one action per state (remove the last axis → shape [N])
-            action = jax.random.categorical(subkey, logits=logits, axis=-1).astype(jnp.int16)
+        # sample one action per state (remove the last axis → shape [N])
+        action = jax.random.categorical(subkey, logits=logits, axis=-1).astype(jnp.int16)
 
-            state = step_b(state, action)
-            return state, _key
+        state = step_b(state, action)
+        return state, _key
+
+    def random_playout_heuristic_multi(state_b, key):
 
         # Repeat each element of the batch num_playouts times along axis 0
         state_repeated = jax.tree_util.tree_map(
@@ -56,7 +57,14 @@ def random_playout_heuristic_constructor(step_b, num_playouts=10):
 
         return avg_rewards
 
-    return jax.jit(random_playout_heuristic)
+    def random_playout_heuristic_single(state_b, key):
+        final_state, _ = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
+        return final_state.rewards[jnp.arange(final_state.rewards.shape[0]), state_b.game_state.current_player]
+
+    if num_playouts == 1:
+        return jax.jit(random_playout_heuristic_single)
+
+    return jax.jit(random_playout_heuristic_multi)
 
 
 

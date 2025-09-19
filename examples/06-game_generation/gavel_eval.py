@@ -5,7 +5,8 @@ import jax.numpy as jnp
 
 from ludax import LudaxEnvironment
 from ludax.games import *
-from ludax.policies import random_policy, gumbel_policy
+from ludax.policies import simple_mctx_policy, lookahead_mctx_policy, random_policy
+
 
 def initialize(env: LudaxEnvironment, batch_size: int = 10 ** 3, seed: int = 0) -> tuple:
     """
@@ -33,6 +34,7 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
         3. *completion*: the proportion of games that reach an end state,
         4. *agency*: the proportion of turns for which the player to move has more than one legal move,
         5. *coverage*: the proportion of board sites (e.g. squares on a chessboard) that get occupied by a game piece at least once in a playout
+        6. Raw game statistics: (wins, draws, losses, truncated, total_games)
         )
     """
 
@@ -88,7 +90,7 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
     coverage_per_game = jnp.mean(covered, axis=1)  # covered is [B, S] bool
     coverage = jnp.mean(coverage_per_game)
 
-    return (balance, decisiveness, completion, agency, coverage), key
+    return (balance, decisiveness, completion, agency, coverage, (wins, draws, losses, truncated, total_games)), key
 
 
 @partial(jax.jit, static_argnames=['policy_p1', 'policy_p2', 'step_b'])
@@ -106,12 +108,12 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
 
     def body_fn(args):
         state, key = args
-        key, subkey = jax.random.split(key)
+        key, k1, k2 = jax.random.split(key, 3)
 
         # ToDo: Find a more efficient way. Right now, we're calling both policies every step.
         # Get the action from the policy of the current player
-        action1 = policy_p1(state, subkey)
-        action2 = policy_p2(state, subkey)
+        action1 = policy_p1(state, k1)
+        action2 = policy_p2(state, k2)
         action = jnp.where(state.game_state.current_player == 0, action1, action2)
         state = step_b(state, action)
         return state, key
@@ -129,24 +131,28 @@ def evaluate_game(game_str):
     """Evaluate the game string to check if it is valid."""
     try:
         env = LudaxEnvironment(game_str=game_str)
-        state_b, step_b, key = initialize(env, batch_size=100, seed=42)
+        state_b, step_b, key = initialize(env, batch_size=10, seed=42)
     except Exception as e:
         return -3
 
     r_policy = random_policy()
-    g_policy = gumbel_policy(step_b, num_simulations=100)
+    # g_policy = simple_mctx_policy(step_b, num_simulations=100)
+    g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
 
     try:
-        (r_balance, _, _, r_agency, _), key = gavel_metrics(random_policy(), state_b, step_b, key)
+        (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
     except Exception as e:
+        print("Error during first evaluation:", e)
         return -2
 
-    if r_balance < 0.5 or r_agency < 0.5:
+    if r_balance < 0.5 or r_agency < 0.5 or wins + losses + draws + truncated < total:
         return -1
+
+    print("Passed random policy sanity check.")
 
     try:
         # ToDO why is P1 always winning instead of drawing?
-        (balance, decisiveness, completion, agency, coverage), key = gavel_metrics(g_policy, state_b, step_b, key)
+        (balance, decisiveness, completion, agency, coverage, _), key = gavel_metrics(g_policy, state_b, step_b, key)
 
         # Evaluate strategic depth
         (w1, d1, l1), key = evaluate_policy(g_policy, r_policy, state_b, step_b, key)
