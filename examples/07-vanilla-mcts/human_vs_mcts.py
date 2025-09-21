@@ -5,7 +5,7 @@ from ludax import LudaxEnvironment
 from ludax.config import BoardShapes
 from ludax.games import connect_four
 
-from vanilla_mcts import initialize, traverse_to_leaf, expand_leaf
+from ludax.policies import uct_mcts_policy
 
 tic_tac_big = '''
 (game "Tic-Tac-Toe" 
@@ -43,11 +43,13 @@ def display_board(state, env):
 environment = LudaxEnvironment(game_str=tic_tac_big)
 step_fn = jax.jit(environment.step)
 
-NUM_SIMS = 100000
+NUM_SIMS = 1000
 MAX_DEPTH = 25
 SEED = 0
+key = jax.random.PRNGKey(SEED)
 
 root_state = environment.init(jax.random.PRNGKey(SEED))
+mcts_policy = uct_mcts_policy(environment, num_simulations=NUM_SIMS, max_depth=MAX_DEPTH)
 # root_state = step_fn(root_state, 0)
 turn_idx = 0
 while not root_state.terminated and not root_state.truncated:
@@ -64,22 +66,11 @@ while not root_state.terminated and not root_state.truncated:
         turn_idx += 1
         continue
 
-    params, key = initialize(environment, root_state, NUM_SIMS, MAX_DEPTH, SEED)
-    print("Initialized MCTSParams!")
+    key, subkey = jax.random.split(key)
+    root_state_b = jax.tree.map(lambda x: x[None, ...], root_state)  # Add batch dim
+    action = mcts_policy(root_state_b, subkey)[0]
 
-    def body_fn(i, carry):
-        params, key = carry
-        key, subkey = jax.random.split(key)
-        rollout, key = traverse_to_leaf(params, MAX_DEPTH, key)
-        params, key = expand_leaf(params, rollout, environment, step_fn, key)
-
-        return params, key
-
-    print(f"Performing MCTS from the perspective of player {params.player_idx}...")
-    params, key = jax.lax.fori_loop(0, NUM_SIMS, body_fn, (params, key))
-    action = jnp.argmax(params.visits[0])
-
-    print(f"Player {root_state.current_player} selecting action {action} with {params.visits[0, action]} visits")
+    print(f"Player {root_state.current_player} selecting action {action}")
     root_state = step_fn(root_state, action.astype(jnp.int16))
 
     turn_idx += 1
