@@ -10,3 +10,4 @@ baselines/
 wandb/
 submit.sh
 checkpoints
+*.log

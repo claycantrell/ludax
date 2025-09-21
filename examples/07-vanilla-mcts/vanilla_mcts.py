@@ -162,7 +162,7 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PR
     # max_action = jnp.argmax(ucb_values)
 
     logits = jnp.where(ucb_values == ucb_values.max(), 0.0, -jnp.inf)
-    max_action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+    max_action = jax.random.categorical(key, logits=logits, axis=0).astype(jnp.int16)
 
     # jax.debug.print("Selecting action {} at node {}, to_play {}, root_player {}", max_action, node_idx, mcts_params.to_play[node_idx], mcts_params.player_idx)
 
@@ -302,7 +302,7 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
         state, key = args
         key, subkey = jax.random.split(key)
         logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-        action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+        action = jax.random.categorical(key, logits=logits, axis=0).astype(jnp.int16)
         state = step_fn(state, action)
         return state, key
 
