@@ -238,6 +238,8 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
     leaf_reward = leaf_state.rewards[mcts_params.player_idx] * REWARD_SCALE
     reward = jax.lax.select(leaf_state.terminated | leaf_state.truncated, leaf_reward, reward)
 
+    jax.debug.callback(logging_callback, "leaf idx: {} -- leaf term. {} -- leaf reward: {:.3f} -- next term. {} -- next reward: {:.3f} -- reward: {}", node_idx, leaf_state.terminated, leaf_reward, next_state.terminated, next_state.rewards[mcts_params.player_idx], reward)
+
     # jax.debug.print(" - Leaf state was terminated: {}, truncated: {}, leaf reward: {}", leaf_state.terminated, leaf_state.truncated, leaf_reward)
     # jax.debug.print(" - Evaluated leaf state with reward {}", reward)
 
@@ -282,6 +284,8 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
         lambda params: params,
         mcts_params
     )
+
+    jax.debug.callback(logging_callback, "expanding? {} -- exp idx: {} -- terminated at exp: {}", ~(leaf_state.terminated | leaf_state.truncated), expansion_node_idx, next_state.terminated)
 
     return mcts_params, key
 
@@ -360,13 +364,22 @@ if __name__ == "__main__":
     environment = LudaxEnvironment(game_str=tic_tac_big)
     step_fn = jax.jit(environment.step)
 
-    num_sims = 1000
+    num_sims = 10000
     max_depth = 25
 
     # Debugging!
     root_state = environment.init(jax.random.PRNGKey(seed))
-    root_state = environment.step(root_state, 30)
-    root_state = environment.step(root_state, 36)
+    root_state = environment.step(root_state, 0)
+    # root_state = environment.step(root_state, 36)
+    # root_state = environment.step(root_state, 31)
+    # root_state = environment.step(root_state, 20)
+    # root_state = environment.step(root_state, 32)
+
+    # print("Root state rewards:", root_state.rewards)
+    # print("Root state eval: ", evaluate_state(MCTSParams(0,0,None,None,None,None,None,None), root_state, step_fn, jax.random.PRNGKey(seed))[0])
+    # display_board(root_state, environment)
+    # breakpoint()
+
     # root_state = environment.step(root_state, 6)
     # root_state = environment.step(root_state, 2)
     # root_state = environment.step(root_state, 7)
@@ -394,7 +407,7 @@ if __name__ == "__main__":
 
         return params, key
 
-    params, _ = jax.lax.fori_loop(0, 50000, body_fn, (params, key))
+    params, _ = jax.lax.fori_loop(0, num_sims, body_fn, (params, key))
     display_board(root_state, environment)
 
     node_from_8 = params.transitions[0, 8]
@@ -422,9 +435,7 @@ if __name__ == "__main__":
     root_state = step_fn(root_state, action.astype(jnp.int16))
     display_board(root_state, environment)
 
-    breakpoint()
-
-    root_state = environment.init(key)
+    root_state = environment.init(jax.random.PRNGKey(seed))
     while not root_state.terminated and not root_state.truncated:
         print("\nCurrent board:")
         display_board(root_state, environment)
@@ -432,16 +443,19 @@ if __name__ == "__main__":
         params, key = initialize(environment, root_state, num_sims, max_depth)
         print("Initialized MCTSParams!")
 
-        def body_fn(i, params):
-            # jax.debug.print("Iteration {}: rewards[0] = {}", i, params.rewards[0])
-            rollout = traverse_to_leaf(params, max_depth)
-            params = expand_leaf(params, rollout, environment, step_fn)
+        def body_fn(i, carry):
+            params, key = carry
+            key, subkey = jax.random.split(key)
+            rollout, key = traverse_to_leaf(params, max_depth, key)
+            params, key = expand_leaf(params, rollout, environment, step_fn, key)
 
-            return params
-        
+            return params, key
+
         print(f"Performing MCTS from the perspective of player {params.player_idx}...")
-        params = jax.lax.fori_loop(0, 100000, body_fn, params)
+        params, key = jax.lax.fori_loop(0, 10000, body_fn, (params, key))
         action = jnp.argmax(params.visits[0])
 
         print(f"Player {root_state.current_player} selecting action {action} with {params.visits[0, action]} visits")
         root_state = step_fn(root_state, action.astype(jnp.int16))
+
+    display_board(root_state, environment)
