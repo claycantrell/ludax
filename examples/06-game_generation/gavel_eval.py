@@ -5,7 +5,7 @@ import jax.numpy as jnp
 
 from ludax import LudaxEnvironment
 from ludax.games import *
-from ludax.policies import simple_mctx_policy, lookahead_mctx_policy, random_policy
+from ludax.policies import simple_mctx_policy, lookahead_mctx_policy, uct_mcts_policy, random_policy
 
 
 def initialize(env: LudaxEnvironment, batch_size: int = 10 ** 3, seed: int = 0) -> tuple:
@@ -70,9 +70,9 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
     state_b, key, t, a_num, a_den, covered = jax.lax.while_loop(cond_fn, body_fn, carry0)
 
     # Existing metrics
-    wins = jnp.sum(state_b.winners == 0)
-    draws = jnp.sum(state_b.winners == -1)
-    losses = jnp.sum(state_b.winners == 1)
+    wins = jnp.sum(state_b.winners == 1, axis=0)[0]
+    losses = jnp.sum(state_b.winners == 0, axis=0)[0]
+    draws = jnp.sum(state_b.winners == -1, axis=0)[0]
     truncated = jnp.sum(~state_b.terminated)
     total_games = state_b.winners.shape[0]
     jax.debug.print("wins: {wins}, draws: {draws}, losses: {losses}, truncated: {truncated}, total_games: {total_games}",
@@ -137,7 +137,8 @@ def evaluate_game(game_str):
 
     r_policy = random_policy()
     # g_policy = simple_mctx_policy(step_b, num_simulations=100)
-    g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
+    # g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
+    g_policy = uct_mcts_policy(env, num_simulations=20, max_depth=25)
 
     try:
         (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)

@@ -302,7 +302,7 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
     return reward, key
 
 
-def uct_mcts_policy(environment, max_depth=20, num_simulations=100):
+def uct_mcts_policy(environment, num_simulations=100, max_depth=20):
     step_fn = jax.jit(environment.step)
 
     def policy_single(state, key):
@@ -317,7 +317,7 @@ def uct_mcts_policy(environment, max_depth=20, num_simulations=100):
             return params, key
 
         params, key = jax.lax.fori_loop(0, num_simulations, body_fn, (params, key))
-        return jnp.argmax(params.visits[0])
+        return jnp.argmax(params.visits[0]).astype(jnp.int16)
 
     def policy_f(state_b, key):
         return jax.vmap(policy_single)(state_b, jax.random.split(key, state_b.rewards.shape[0]))

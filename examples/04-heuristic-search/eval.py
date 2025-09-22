@@ -6,13 +6,13 @@ import numpy as np
 
 from ludax import LudaxEnvironment
 
-from ludax.games import hex, connect_four, reversi, tic_tac_toe, complexity_demo
+from ludax.games import hex, connect_four, reversi, tic_tac_toe
 
 from heuristics.hex import distance_heuristic, connectivity_heuristic
 from heuristics.test import bad_heuristic
 from heuristics.connect_four import connect_four_heuristic
 
-from ludax.policies import muzero_policy, gumbel_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy, construct_playout_heuristic, zero_heuristic, legal_logits
+from ludax.policies import simple_mctx_policy, lookahead_mctx_policy, uct_mcts_policy, one_ply_policy, random_policy, beam_search_policy,  negamax_policy, construct_playout_heuristic
 # from ludax.policies.mcts2 import mcts_policy as mcts_policy2, gumbel_policy as gumbel_policy2
 
 jax.numpy.set_printoptions(threshold=np.inf, linewidth=np.inf)
@@ -61,11 +61,11 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
 
     state_b, key = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
 
-    # Count the results
-    wins = jnp.sum(state_b.winners == 0)
-    draws = jnp.sum(state_b.winners == -1)
-    losses = jnp.sum(state_b.winners == 1)
+    wins = jnp.sum(state_b.winners == 1, axis=0)[0]
+    losses = jnp.sum(state_b.winners == 0, axis=0)[0]
+    draws = jnp.sum(state_b.winners == -1, axis=0)[0]
     return (wins, draws, losses), key
+
 
 tri_hex = """
 (game "Tri‑Hex"
@@ -100,10 +100,10 @@ def main():
 
     env = LudaxEnvironment(
         # game_str=complexity_demo,
-        # game_str=hex,
+        game_str=hex,
         # game_str=tri_hex,
         # game_str=connect_four,
-        game_str=reversi,
+        # game_str=reversi,
         # game_str=tic_tac_toe,
     )
 
@@ -120,10 +120,13 @@ def main():
     # AGENT1 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
     # AGENT1 = negamax_policy(step_b, depth=3)
     # AGENT1 = gumbel_policy(step_b, logit_fn=legal_logits, num_simulations=50)
+    # AGENT1 = simple_mctx_policy(step_b, num_simulations=200)
+    AGENT1 = uct_mcts_policy(env, num_simulations=50, max_depth=9)
+
 
 
     # AGENT2 = gumbel_policy(step_b, num_simulations=20)
-    AGENT2 = random_policy()
+    # AGENT2 = random_policy()
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = mcts_policy(step_b, heuristic=distance_heuristic, num_simulations=10)
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=200)
@@ -132,6 +135,7 @@ def main():
     # AGENT2 = gumbel_policy(step_b, heuristic=distance_heuristic, num_simulations=20)
     # AGENT2 = negamax_policy(step_b, depth=3)
     # AGENT2 = gumbel_policy(step_b, num_simulations=50)
+    AGENT2 = uct_mcts_policy(env, num_simulations=50, max_depth=9)
 
     start_time = time.time()
     key, sub_key = jax.random.split(key)
