@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 from lark import Lark
 
-from .config import Array, PRNGKey, State, EMPTY, TRUE
+from .config import Array, PRNGKey, State, EMPTY, TRUE, MAX_STEP_COUNT
 from .game_info import GameInfoExtractor
 from .game_parser import GameRuleParser
 
@@ -17,7 +17,7 @@ class LudaxEnvironment():
         
         assert game_path is not None or game_str is not None, "Must provide either a game path or a game string!"
         assert game_path is None or game_str is None, "Cannot provide both a game path and a game string!"
-
+        
         if game_path is not None:
             with open(game_path, 'r') as f:
                 game_str = f.read()
@@ -48,18 +48,18 @@ class LudaxEnvironment():
 
     def init(self, rng: PRNGKey) -> State:
 
-        board = jnp.ones(self.board_size, dtype=jnp.int16) * EMPTY
-        board = self._initialize_board(board)
-
         # Temporarily hard-coding the init of the game state
         temp_current_player = jnp.int16(0)
         game_state = self.game_state_cls(
-            board=board,
+            board=jnp.ones(self.board_size, dtype=jnp.int16) * EMPTY,
             current_player=temp_current_player,
             phase_idx=jnp.int16(0),
             phase_step_count=jnp.int16(0),
             previous_actions=jnp.int16([-1, -1]),
         )
+
+        # Initialize the board using the game rules
+        game_state = self._initialize_board(game_state)
 
         # Compute the actual starting player
         current_player = self._get_next_player(game_state)
@@ -113,7 +113,7 @@ class LudaxEnvironment():
         # to, for example, the RL training loop using env._observe(state, player_id)
 
         return state
-    
+
     def _step(self, state: State, action: Array, key) -> State:
 
         # Currently, Ludax games don't have any stochastic elements, so we don't use the key
@@ -172,10 +172,10 @@ class LudaxEnvironment():
         state = state.replace(game_state=game_state, current_player=game_state.current_player)
 
         # Increment the global step count
-        state = state.replace(global_step_count=state.global_step_count + 1)
+        state = state.replace(global_step_count=state.global_step_count + 1, truncated=state.global_step_count >= MAX_STEP_COUNT)
 
         return state
-
+    
     def observe(self, state: State, player_id: Array) -> Array:
         """
         Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor
@@ -201,7 +201,7 @@ class LudaxEnvironment():
         Negative reward given when illegal action is selected
         """
         return -1.0
-
+    
     def _step_with_illegal_action(self, state: State, loser: Array) -> State:
         penalty = self._illegal_action_penalty
         reward = jnp.ones_like(state.rewards) * (-1 * penalty) * (self.game_info.num_players - 1)

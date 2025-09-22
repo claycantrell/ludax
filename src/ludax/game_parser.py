@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, Directions, PlayerAndMoverRefs, OptionalArgs
 from .game_info import GameInfo
 from . import utils
 
@@ -54,7 +54,7 @@ class GameRuleParser(Transformer):
         # Handle the case where there are no start rules
         if len(game_rule_dicts) == 2:
             play_rule_dict, end_rule_dict = game_rule_dicts
-            info_dict = {'start_rules': lambda board: board, **play_rule_dict, **end_rule_dict}
+            info_dict = {'start_rules': lambda state: state, **play_rule_dict, **end_rule_dict}
         
         else:
             start_rule_dict, play_rule_dict, end_rule_dict = game_rule_dicts
@@ -90,15 +90,14 @@ class GameRuleParser(Transformer):
     def start_rules(self, children):
         '''
         Start rules are optional, but we assume that if they are present then
-        there's at least one. Start rules are also unique in that they operate
-        over boards instead of states
+        there's at least one
         '''
         rules = children
         n_rules = len(rules)
         
-        def combined_start_rules(board):
-            body_fn = lambda i, board: jax.lax.switch(i, rules, board)
-            result = jax.lax.fori_loop(0, n_rules, body_fn, board)
+        def combined_start_rules(state):
+            body_fn = lambda i, state: jax.lax.switch(i, rules, state)
+            result = jax.lax.fori_loop(0, n_rules, body_fn, state)
             return result
 
         return {'start_rules': combined_start_rules}
@@ -108,17 +107,38 @@ class GameRuleParser(Transformer):
         Begin the game by placing one or more pieces belong to a specific
         player at specified locations on the board
         '''
-        player_ref, (_, pattern) = children
+        player_ref, (place_arg_type, place_arg_info) = children
 
         if player_ref == PlayerAndMoverRefs.P1:
             player = P1
         elif player_ref == PlayerAndMoverRefs.P2:
             player = P2
 
-        pattern = jnp.array(pattern, dtype=jnp.int16)
+        if place_arg_type == OptionalArgs.PATTERN:
+            pattern = jnp.array(place_arg_info, dtype=jnp.int16)
 
-        def start_fn(board):
-            return board.at[pattern].set(player)
+            def start_fn(state):
+                board = state.board.at[pattern].set(player)
+                return state._replace(board=board)
+            
+        elif place_arg_type == OptionalArgs.MULTI_MASK:
+
+            # Case where there's only one mask function (it will be a tuple of (fn, info))
+            if isinstance(place_arg_info, tuple):
+                place_mask_fns = [place_arg_info[0]]
+            else:
+                place_mask_fns, _ = list(zip(*place_arg_info))
+            
+            collect_values = utils._get_collect_values_fn(place_mask_fns)
+
+            def start_fn(state):
+                all_masks = collect_values(state)
+                result = all_masks.any(axis=0).astype(jnp.int16)
+                board = jnp.where(result, player, state.board)
+                return state._replace(board=board)
+
+        else:
+            raise NotImplementedError(f"Start place argument type {place_arg_type} not implemented yet!")
         
         return start_fn
 
@@ -204,7 +224,7 @@ class GameRuleParser(Transformer):
     =========Play mechanics=========
     '''
 
-    def play_mechanic(self, children):
+    def play_super_mechanic(self, children):
         '''
         A play mechanic is responsible for collecting the information about how to apply actions,
         determine legal actions, and apply effects before making any high-level modifications
@@ -294,8 +314,85 @@ class GameRuleParser(Transformer):
         
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
     
+    def play_move(self, children):
+        '''
+        Players move a piece from one position on the board to another according to some
+        rule (e.g. sliding, jumping, ...)
+        '''
+
+        base_constraint_fns, (source_constraint_fn, _), (destination_constraint_fn, _), *optional_args = children
+
+        if not isinstance(base_constraint_fns, list):
+            base_constraint_fns = [base_constraint_fns]
+
+        collect_values = utils._get_collect_values_fn(base_constraint_fns)
+
+        # If a game allows multiple move types, then any of them can be used at each turn
+        def base_constraint_fn(state, start):
+            base_values = collect_values(state, start)
+            return base_values.any(axis=0).astype(jnp.int16)
+
+        def move_piece_fn(state, action):
+            start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+            board = state.board.at[end_idx].set(state.current_player)
+            board = board.at[start_idx].set(EMPTY)
+            return state._replace(board=board)
+
+        # Case 1: no optional arguments -- legal actions determined by the destination constraint
+        # and there are no effects
+        if len(optional_args) == 0:
+            result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int16)
+            apply_effects_fn = lambda state, original_player: state
+
+        # Case 2: one optional argument is specified -- either a result constraint or an effect
+        elif len(optional_args) == 1:
+            arg = optional_args[0]
+            if arg.__name__ == "result_constraint_fn" or arg.__name__ == "lookahead_mask_fn":
+                result_constraint_fn = lambda state: arg(state)
+                apply_effects_fn = lambda state, original_player: state
+
+            elif arg.__name__ == "apply_effects_fn":
+                result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int16)
+                apply_effects_fn = arg
+
+        # Case 3: two optional arguments are specified -- result constraints and effects, always
+        # in that order
+        else:
+            result_constraint_fn, apply_effects_fn = optional_args
+        
+        # We model the action space as "take a piece from any board position and move it to
+        # any other board position"
+        action_size = self.game_info.board_size ** 2
+
+        def legal_action_mask_fn(state):
+            # Construct the meta mask of all legal slides starting at any board position
+            base_mask = jax.vmap(base_constraint_fn, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+
+            # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape)
+            source_mask = source_constraint_fn(state)
+            base_mask = jnp.where(
+                source_mask[:, jnp.newaxis],
+                base_mask, jnp.zeros_like(base_mask)
+            )
+
+            # Keep only the columns corresponding to valid positions under the destination and
+            # result constraints (but keep the shape)
+            destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
+            base_mask = jnp.where(
+                destination_mask[jnp.newaxis, :],
+                base_mask, jnp.zeros_like(base_mask)
+            )
+
+            # Finally, flatten the mask to get the legal action mask
+            legal_mask = base_mask.flatten()
+
+            return legal_mask.astype(jnp.int16)
+        
+        return action_size, move_piece_fn, legal_action_mask_fn, apply_effects_fn
+
+
     '''
-    Play constraints
+    Place rules
     '''
     def place_result_constraint(self, children):
         '''
@@ -334,6 +431,96 @@ class GameRuleParser(Transformer):
         return result_constraint_fn
 
     '''
+    Move rules
+    '''
+    def move_hop(self, children):
+        '''
+        Move a piece from one position to another by jumping over a piece
+
+        TODO: add a 'hopped' field to the state so that hopped pieces can be captured later
+
+        TODO: sort out the distinction between directions and orientations
+        '''
+
+        if len(children) == 0:
+            direction = Directions.ANY
+        else:
+            direction = children[0][1]
+        
+        # We use same logic as in mask_custodial since that's what hopping looks like
+        inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
+
+        def legal_hop_mask_fn(state, start):
+            occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+
+            # We're looking for occupied cells with exactly one piece in the outer indices, and
+            # we filter to only include arrangements that actually contain the start position
+            contains_start = (outer_indices == start).any(axis=1)[:, jnp.newaxis]
+            outer_match = ((occupied_mask[outer_indices] == 1).sum(axis=1) == 1)[:, jnp.newaxis]
+            inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)[:, jnp.newaxis]
+            full_match = contains_start & outer_match & inner_match
+
+            # Ensure invalid indices are set to one larger than the board size so that they're not indexed
+            matched_indices = jnp.where(full_match, outer_indices, self.game_info.board_size+1).flatten()
+            mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
+            mask = mask.at[matched_indices].set(1)
+
+            # Make sure the start position is not included in the mask
+            mask = mask.at[start].set(0)
+
+            return mask
+        
+        return legal_hop_mask_fn
+
+    def move_slide(self, children):
+        '''
+        Slide a piece in one of the specified directions (default to any) any number of spaces,
+        limited by the board boundaries and the non-empty cell encountered
+
+        TODO: add limited number of spaces that can be moved
+
+        TODO: do this as one big matrix operation instead of taking 'start' as an argument
+        '''
+        if len(children) == 0:
+            direction = Directions.ANY
+        else:
+            direction = children[0][1]
+
+        slide_lookup = utils._get_slide_lookup(self.game_info)
+        direction_indices = utils._get_direction_indices(self.game_info, direction)
+
+        def legal_slide_mask_fn(state, start):
+            # Temporarily remove the piece at the start position
+            occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+            occupied_mask = occupied_mask.at[start].set(0)
+            slide_indices = slide_lookup[direction_indices, start]
+
+            # Get the occupied mask at the slide indices and pad it with 'occupied' to
+            # represent the edge of the board, then find the index of the first occupied cell
+            occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
+            occupied_at_slide = jnp.concatenate([occupied_at_slide, jnp.ones((len(direction_indices), 1))], axis=1)
+            slide_until_idx = jnp.argmax(occupied_at_slide, axis=1)
+
+            # Extract the board indices corresponding to legal slides, replacing the other
+            # indices with a pad value that's larger than the board size
+            general_indices = jnp.indices(slide_indices.shape, dtype=jnp.int16)[1]
+            final_indices = jnp.where(
+                general_indices < slide_until_idx[:, jnp.newaxis],
+                slide_indices, self.game_info.board_size+1
+            ).flatten()
+
+            # Create the mask and finally zero out the original position. At this point, the
+            # illegal indices are set to the pad value and get ignored
+            mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
+            mask = mask.at[final_indices].set(1)
+            mask = mask.at[start].set(0)
+
+            return mask
+        
+        return legal_slide_mask_fn
+
+
+    '''
     Play effects
     '''
     def play_effects(self, children):
@@ -367,7 +554,7 @@ class GameRuleParser(Transformer):
         else:
             offset = 1
 
-        increment_score = optional_args[OptionalArgs.INCREMENT_SCORE_ARG]
+        increment_score = optional_args[OptionalArgs.INCREMENT_SCORE]
 
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
@@ -628,7 +815,7 @@ class GameRuleParser(Transformer):
         (child_mask_fn, child_info), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
-        direction_indices = utils._get_adjacency_direction_indices(self.game_info, optional_args)
+        direction_indices = utils._get_direction_indices(self.game_info, optional_args[OptionalArgs.DIRECTION])
         local_lookup = self.adjacency_lookup[direction_indices]
 
         def mask_fn(state):
@@ -650,6 +837,19 @@ class GameRuleParser(Transformer):
         def mask_fn(state):
             return mask
 
+        return mask_fn, {}
+    
+    def mask_column(self, children):
+        '''
+        Return a mask that's true for all positions in the specified column
+        '''
+        column_idx = int(children[0])
+        column_indices = utils._get_column_indices(self.game_info, column_idx)
+        mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[column_indices].set(1)
+
+        def mask_fn(state):
+            return mask
+        
         return mask_fn, {}
 
     def mask_corners(self, children):
@@ -832,6 +1032,19 @@ class GameRuleParser(Transformer):
             mask = jax.lax.select(prev_move != -1, mask.at[prev_move].set(True), mask)
 
             return mask.astype(jnp.int16)
+        
+        return mask_fn, {}
+
+    def mask_row(self, children):
+        '''
+        Return a mask that's true for all positions in the specified row
+        '''
+        row_idx = int(children[0])
+        row_indices = utils._get_row_indices(self.game_info, row_idx)
+        mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[row_indices].set(1)
+
+        def mask_fn(state):
+            return mask
         
         return mask_fn, {}
 
@@ -1233,12 +1446,33 @@ class GameRuleParser(Transformer):
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
 
+        if optional_args[OptionalArgs.EXCLUDE] is not None:
+            _, exclude_mask_info = optional_args[OptionalArgs.EXCLUDE]
+
+            # Case where there's only one mask function (it will be a tuple of (fn, info))
+            if isinstance(exclude_mask_info, tuple):
+                exclude_mask_fns = [exclude_mask_info[0]]
+            else:
+                exclude_mask_fns, _ = list(zip(*exclude_mask_info))
+            
+            collect_values = utils._get_collect_values_fn(exclude_mask_fns)
+
+            def get_occupied_mask(state):
+                occupied_mask = (state.board == state.current_player)
+                exclude_mask = collect_values(state).any(axis=0).astype(jnp.int16)
+                return occupied_mask & ~exclude_mask
+            
+        else:
+            def get_occupied_mask(state):
+                return (state.board == state.current_player).astype(jnp.int16)
+
+
         if optional_args[OptionalArgs.EXACT] and n < max(self.game_info.board_dims):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_occupied_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 num_lines = line_matches.sum()
                 num_overshoot_lines = jax.lax.cond(num_lines, lambda: 0, lambda: (occupied_mask[overshoot_line_indices] == 1).all(axis=1).sum())
@@ -1251,13 +1485,13 @@ class GameRuleParser(Transformer):
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
 
             def function_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_occupied_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 return line_matches.sum()
             
             num_lines = line_indices.shape[0]
             def lookahead_mask_fn(state):
-                occupied_mask = (state.board == state.current_player)
+                occupied_mask = get_occupied_mask(state)
 
                 line_mask = (occupied_mask[line_indices] == 1)
                 almost_line_mask = (line_mask.sum(axis=1) == n-1)

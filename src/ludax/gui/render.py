@@ -250,10 +250,14 @@ class InteractiveBoardHandler():
 
         return points
     
-    def render(self, state, add_button=True, show_legal_actions=True):
+    def render(self, state, add_button=True, legal_actions=None, show_legal_actions=True):
 
         board = state.game_state.board
-        legal_actions = state.legal_action_mask
+        
+        # We include the option to manually override the legal actions shown, which is important
+        # for games with piece movement since the legal action mask is much larger than the board
+        if legal_actions is None:
+            legal_actions = state.legal_action_mask
 
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
@@ -266,10 +270,6 @@ class InteractiveBoardHandler():
             # Draw the cell
             drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
-            # Draw the legal action mask
-            if legal_actions[i] and show_legal_actions:
-                drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
-
             # Draw the piece (if present)
             if occupant == P1:
                 fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
@@ -277,6 +277,10 @@ class InteractiveBoardHandler():
             elif occupant == P2:
                 fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
                 drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+
+            # Draw the legal action mask
+            if legal_actions[i] and show_legal_actions:
+                drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
 
         # Add an invisible rectangle to capture the user's clicks
         if add_button:
