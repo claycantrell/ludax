@@ -131,14 +131,14 @@ def evaluate_game(game_str):
     """Evaluate the game string to check if it is valid."""
     try:
         env = LudaxEnvironment(game_str=game_str)
-        state_b, step_b, key = initialize(env, batch_size=10, seed=42)
+        state_b, step_b, key = initialize(env, batch_size=50, seed=42)
     except Exception as e:
         return -3
 
     r_policy = random_policy()
     # g_policy = simple_mctx_policy(step_b, num_simulations=100)
     # g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
-    g_policy = uct_mcts_policy(env, num_simulations=20, max_depth=25)
+    g_policy = uct_mcts_policy(env, num_simulations=50, max_depth=25)
 
     try:
         (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
@@ -165,9 +165,11 @@ def evaluate_game(game_str):
               f"Agency: {agency}, Coverage: {coverage}, Strategic Depth: {strategic_depth}")
 
         # Harmonic mean
-        return 6 / (
+        mean = 6 / (
             1 / balance + 1 / decisiveness + 1 / completion + 1 / agency + 1 / coverage + 1 / strategic_depth
         )
+
+        return mean, (balance, decisiveness, completion, agency, coverage, strategic_depth)
 
     except Exception as e:
         print("Unexpected error during second evaluation:", e)
