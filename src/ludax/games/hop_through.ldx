@@ -1,0 +1,27 @@
+(game "HopThrough" 
+    (players 2)
+    (equipment 
+        (board (square 8))
+    ) 
+    
+    (rules
+        (start
+            (place P1 ((row 0) (row 1)))
+            (place P2 ((row 6) (row 7)))
+        )
+        (play
+            (repeat (P1 P2)
+                (move
+                    (hop direction:any)
+                    (source (occupied mover)) 
+                    (destination empty)
+                )
+            )
+        )
+        
+        (end 
+            (if (and (exists (and (occupied mover) (row 7))) (mover_is P1)) (mover win))
+            (if (and (exists (and (occupied mover) (row 0))) (mover_is P2)) (mover win))
+        )
+    )
+)
