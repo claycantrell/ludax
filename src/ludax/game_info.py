@@ -35,7 +35,7 @@ class GameInfoExtractor(Visitor):
             "current_player",
             "phase_idx",
             "phase_step_count",
-            "previous_actions"
+            "previous_actions"  # the action position of the previous action (i.e. destination for piece movement)
         ]
 
         self.defaults = []

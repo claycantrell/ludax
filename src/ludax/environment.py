@@ -133,10 +133,6 @@ class LudaxEnvironment():
         # components
         game_state = self._update_info(game_state, action)
 
-        # Record the action
-        previous_actions = game_state.previous_actions.at[game_state.current_player].set(action)
-        game_state = game_state._replace(previous_actions=previous_actions)
-
         # Compute the new phase index
         new_phase_idx, phase_step_count = self._get_phase_idx(game_state)
         game_state = game_state._replace(phase_idx=new_phase_idx, phase_step_count=phase_step_count)
