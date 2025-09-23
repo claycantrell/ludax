@@ -329,8 +329,8 @@ class GameRuleParser(Transformer):
         collect_values = utils._get_collect_values_fn(base_constraint_fns)
 
         # If a game allows multiple move types, then any of them can be used at each turn
-        def base_constraint_fn(state, start):
-            base_values = collect_values(state, start)
+        def base_constraint_fn(state):
+            base_values = collect_values(state)
             return base_values.any(axis=0).astype(jnp.int16)
 
         def move_piece_fn(state, action):
@@ -368,7 +368,8 @@ class GameRuleParser(Transformer):
 
         def legal_action_mask_fn(state):
             # Construct the meta mask of all legal slides starting at any board position
-            base_mask = jax.vmap(base_constraint_fn, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+            # base_mask = jax.vmap(base_constraint_fn, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+            base_mask = base_constraint_fn(state)
 
             # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape)
             source_mask = source_constraint_fn(state)
@@ -452,25 +453,49 @@ class GameRuleParser(Transformer):
         # We use same logic as in mask_custodial since that's what hopping looks like
         inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
 
-        def legal_hop_mask_fn(state, start):
+        left_indices = outer_indices[:, 0]
+        right_indices = outer_indices[:, 1]
+        def legal_hop_mask_fn(state):
+
             occupied_mask = (state.board != EMPTY).astype(jnp.int16)
 
-            # We're looking for occupied cells with exactly one piece in the outer indices, and
-            # we filter to only include arrangements that actually contain the start position
-            contains_start = (outer_indices == start).any(axis=1)[:, jnp.newaxis]
-            outer_match = ((occupied_mask[outer_indices] == 1).sum(axis=1) == 1)[:, jnp.newaxis]
-            inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)[:, jnp.newaxis]
-            full_match = contains_start & outer_match & inner_match
+            inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)
+            left_match = (occupied_mask[left_indices] == 1) & (occupied_mask[right_indices] == 0) & inner_match
+            right_match = (occupied_mask[right_indices]  == 1) & (occupied_mask[left_indices] == 0) & inner_match
 
-            # Ensure invalid indices are set to one larger than the board size so that they're not indexed
-            matched_indices = jnp.where(full_match, outer_indices, self.game_info.board_size+1).flatten()
-            mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
-            mask = mask.at[matched_indices].set(1)
+            left_match_starts = jnp.where(left_match, left_indices, self.game_info.board_size+1)
+            left_match_dests = jnp.where(left_match, right_indices, self.game_info.board_size+1)
 
-            # Make sure the start position is not included in the mask
-            mask = mask.at[start].set(0)
+            right_match_starts = jnp.where(right_match, right_indices, self.game_info.board_size+1)
+            right_match_dests = jnp.where(right_match, left_indices, self.game_info.board_size+1)
+
+            # mask[i] should contain the legal destinations for a hop starting at position i
+            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
+            mask = mask.at[left_match_starts, left_match_dests].set(1)
+            mask = mask.at[right_match_starts, right_match_dests].set(1)
 
             return mask
+
+
+        # def legal_hop_mask_fn(state, start):
+        #     occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+
+        #     # We're looking for occupied cells with exactly one piece in the outer indices, and
+        #     # we filter to only include arrangements that actually contain the start position
+        #     contains_start = (outer_indices == start).any(axis=1)[:, jnp.newaxis]
+        #     outer_match = ((occupied_mask[outer_indices] == 1).sum(axis=1) == 1)[:, jnp.newaxis]
+        #     inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)[:, jnp.newaxis]
+        #     full_match = contains_start & outer_match & inner_match
+
+        #     # Ensure invalid indices are set to one larger than the board size so that they're not indexed
+        #     matched_indices = jnp.where(full_match, outer_indices, self.game_info.board_size+1).flatten()
+        #     mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
+        #     mask = mask.at[matched_indices].set(1)
+
+        #     # Make sure the start position is not included in the mask
+        #     mask = mask.at[start].set(0)
+
+        #     return mask
         
         return legal_hop_mask_fn
 
@@ -491,7 +516,7 @@ class GameRuleParser(Transformer):
         slide_lookup = utils._get_slide_lookup(self.game_info)
         direction_indices = utils._get_direction_indices(self.game_info, direction)
 
-        def legal_slide_mask_fn(state, start):
+        def legal_slide_mask_fn_single(state, start):
             # Temporarily remove the piece at the start position
             occupied_mask = (state.board != EMPTY).astype(jnp.int16)
             occupied_mask = occupied_mask.at[start].set(0)
@@ -518,6 +543,10 @@ class GameRuleParser(Transformer):
             mask = mask.at[start].set(0)
 
             return mask
+        
+        def legal_slide_mask_fn(state):
+            mask = jax.vmap(legal_slide_mask_fn_single, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+            return mask.astype(jnp.int16)
         
         return legal_slide_mask_fn
 
