@@ -121,9 +121,9 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
     state_b, key = jax.lax.while_loop(cond_fn, body_fn, (state_b, key))
 
     # Count the results
-    wins = jnp.sum(state_b.winners == 0)
-    draws = jnp.sum(state_b.winners == -1)
-    losses = jnp.sum(state_b.winners == 1)
+    wins = jnp.sum(state_b.winners == 1, axis=0)[0]
+    losses = jnp.sum(state_b.winners == 0, axis=0)[0]
+    draws = jnp.sum(state_b.winners == -1, axis=0)[0]
     return (wins, draws, losses), key
 
 
@@ -131,23 +131,23 @@ def evaluate_game(game_str):
     """Evaluate the game string to check if it is valid."""
     try:
         env = LudaxEnvironment(game_str=game_str)
-        state_b, step_b, key = initialize(env, batch_size=50, seed=42)
+        state_b, step_b, key = initialize(env, batch_size=20, seed=42)
     except Exception as e:
-        return -3
+        return -3, None
 
     r_policy = random_policy()
     # g_policy = simple_mctx_policy(step_b, num_simulations=100)
     # g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
-    g_policy = uct_mcts_policy(env, num_simulations=50, max_depth=25)
+    g_policy = uct_mcts_policy(env, num_simulations=60, max_depth=25)
 
     try:
         (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
     except Exception as e:
         print("Error during first evaluation:", e)
-        return -2
+        return -2, None
 
     if r_balance < 0.5 or r_agency < 0.5 or wins + losses + draws + truncated < total:
-        return -1
+        return -1, None
 
     print("Passed random policy sanity check.")
 
@@ -165,6 +165,9 @@ def evaluate_game(game_str):
               f"Agency: {agency}, Coverage: {coverage}, Strategic Depth: {strategic_depth}")
 
         # Harmonic mean
+        if balance == 0 or decisiveness == 0 or completion == 0 or agency == 0 or coverage == 0 or strategic_depth == 0:
+            return 0, (balance, decisiveness, completion, agency, coverage, strategic_depth)
+
         mean = 6 / (
             1 / balance + 1 / decisiveness + 1 / completion + 1 / agency + 1 / coverage + 1 / strategic_depth
         )
@@ -173,8 +176,21 @@ def evaluate_game(game_str):
 
     except Exception as e:
         print("Unexpected error during second evaluation:", e)
-        return -2
+        return -2, None
 
 
 if __name__ == "__main__":
-    print(evaluate_game(hex))
+
+    games = [
+        '( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 5 ) ) ) ( rules ( start ( place P1 ( 11 ) ) ( place P2 ( 2 ) ) ( place P2 ( 2 ) ) ( place P1 ( 11 8 ) ) ( place P1 ( 5 10 2 11 1 ) ) ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 0 ( draw ) ) ( if 10 ( draw ) ) ( if 6 ( draw ) ) ( if 1 ( opponent lose ) ) ) ) ( rendering ( color P2 black ) ) )',
+        '( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ( place P1 ( 1 ) ) ( place P2 ( 3 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination corners ) ( effects ( capture corners ) ) ) ) ) ( end ( if 2 ( draw ) ) ( if 8 ( draw ) ) ( if 2 ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P1 white ) ( color P1 white ) ) )',
+        '( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( start ( place P1 ( 2 11 ) ) ) ( play ( repeat ( P2 P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if 3 ( draw ) ) ) ) ( rendering ( color P2 black ) ) )',
+        '( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 10 ) ) ) ( rules ( play ( repeat ( P2 P1 P2 ) ( place ( destination empty ) ( effects ( flip empty ) ) ) ( force_pass ) ) ) ( end ( if 8 ( draw ) ) ( if ( not ( not 9 ) ) ( mover win ) ) ) ) )'
+        '( game "RandomGame" ( players 2 ) ( equipment ( board ( square 9 ) ) ) ( rules ( start ( place P1 ( 4 4 ) ) ) ( play ( once_through ( P1 P1 P1 P2 ) ( place mover ( destination empty ) ( result 7 ) ) ) ) ( end ( if 7 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 white ) ( color P2 black ) ( color P2 black ) ) )'
+    ]
+
+    for game in games:
+        print("\n\n" + "=" * 100)
+        print("Evaluating game:\n", game)
+        score, breakdown = evaluate_game(game)
+        print(f"Final score: {score}, breakdown: {breakdown}")

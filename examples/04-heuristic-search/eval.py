@@ -100,9 +100,9 @@ def main():
 
     env = LudaxEnvironment(
         # game_str=complexity_demo,
-        game_str=hex,
+        # game_str=hex,
         # game_str=tri_hex,
-        # game_str=connect_four,
+        game_str=connect_four,
         # game_str=reversi,
         # game_str=tic_tac_toe,
     )
@@ -121,7 +121,7 @@ def main():
     # AGENT1 = negamax_policy(step_b, depth=3)
     # AGENT1 = gumbel_policy(step_b, logit_fn=legal_logits, num_simulations=50)
     # AGENT1 = simple_mctx_policy(step_b, num_simulations=200)
-    AGENT1 = uct_mcts_policy(env, num_simulations=50, max_depth=9)
+    # AGENT1 = uct_mcts_policy(env, num_simulations=50, max_depth=9)
 
 
 

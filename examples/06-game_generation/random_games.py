@@ -7,9 +7,9 @@ from lark import Lark, Token
 
 from ludax import LudaxEnvironment
 from ludax.games import tic_tac_toe
-from ludax.policies import random_policy, gumbel_policy
+from ludax.policies import random_policy
 
-from gavel_eval import gavel_metrics, initialize
+from gavel_eval import gavel_metrics, initialize, evaluate_game
 
 from incremental_parser import tree_to_source, print_partial_tree
 
@@ -111,21 +111,20 @@ def simple_eval(game_str):
 
     return "Playable"
 
-if __name__ == "__main__":
-    print(simple_eval(tic_tac_toe))
 
+def simple():
     total = 100
     fitness = []
     for _ in range(total):
         # try:
-            game_str, seed = generate_random_game(max_depth=3)
-            print("\n\n", game_str)
-            fitness.append(simple_eval(game_str))
-            print(fitness[-1])
-        # except Exception as e:
-        #     print(f"Error generating game: {e}")
-        #
-        #     fitness.append(-4)
+        game_str, seed = generate_random_game(max_depth=3)
+        print("\n\n", game_str)
+        fitness.append(simple_eval(game_str))
+        print(fitness[-1])
+    # except Exception as e:
+    #     print(f"Error generating game: {e}")
+    #
+    #     fitness.append(-4)
 
     print(f"Generated {total} games with the following fitness scores:")
     print(f"Uninitializable: {fitness.count('Uninitializable')}")
@@ -133,6 +132,42 @@ if __name__ == "__main__":
     print(f"Contradictory: {fitness.count('Contradictory')}")
     print(f"Uninteresting: {fitness.count('Uninteresting')}")
     print(f"Playable: {fitness.count('Playable')}")
+
+
+def complete():
+    total = 100
+    gavel_scores = []
+    compilable = 0
+    for _ in range(total):
+        game_str, seed = generate_random_game(max_depth=5)
+        print("\n\n", game_str)
+
+        try:
+            mean, metrics = evaluate_game(game_str)
+            assert metrics is not None
+        except Exception as e:
+            print(f"Error generating or evaluating game: {e}")
+            continue
+
+        print(f"Gavel score: {mean}, metrics: {metrics}")
+        gavel_scores.append((mean, *metrics))
+        compilable += 1
+
+    print(f"Generated {total} games with:")
+    print(f"Compilable: {compilable}/{total}")
+    if compilable > 0:
+        gavel_scores = jnp.array(gavel_scores)
+        print(f"Average Gavel score: {jnp.nanmean(gavel_scores[:,0])} ± {jnp.nanstd(gavel_scores[:,0])}")
+        print(f"Average Balance: {jnp.nanmean(gavel_scores[:,1])} ± {jnp.nanstd(gavel_scores[:,1])}")
+        print(f"Average Decisiveness: {jnp.nanmean(gavel_scores[:,2])} ± {jnp.nanstd(gavel_scores[:,2])}")
+        print(f"Average Completion: {jnp.nanmean(gavel_scores[:,3])} ± {jnp.nanstd(gavel_scores[:,3])}")
+        print(f"Average Agency: {jnp.nanmean(gavel_scores[:,4])} ± {jnp.nanstd(gavel_scores[:,4])}")
+        print(f"Average Coverage: {jnp.nanmean(gavel_scores[:,5])} ± {jnp.nanstd(gavel_scores[:,5])}")
+        print(f"Average Strategic Depth: {jnp.nanmean(gavel_scores[:,6])} ± {jnp.nanstd(gavel_scores[:,6])}")
+
+if __name__ == "__main__":
+    complete()
+
 
 
 

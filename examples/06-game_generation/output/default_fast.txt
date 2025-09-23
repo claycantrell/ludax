@@ -1,0 +1,81 @@
+
+
+Evaluating game: connect_four
+wins: 13, draws: 0, losses: 7, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 10, draws: 0, losses: 10, truncated: 0, total_games: 20
+Balance: 1.0, Decisiveness: 1.0, Completion: 1.0, Agency: 0.9975000619888306, Coverage: 0.47857141494750977, Strategic Depth: 0.5
+Gavel score: 0.7414677143096924, metrics: (Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.99750006, dtype=float32), Array(0.47857141, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: connect_six
+wins: 4, draws: 14, losses: 2, truncated: 14, total_games: 20
+Passed random policy sanity check.
+wins: 13, draws: 0, losses: 7, truncated: 0, total_games: 20
+Balance: 0.699999988079071, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.26523545384407043, Strategic Depth: 0.5
+Gavel score: 0.5883041024208069, metrics: (Array(0.7, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.26523545, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: hex
+wins: 7, draws: 0, losses: 13, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 15, draws: 0, losses: 5, truncated: 0, total_games: 20
+Balance: 0.5, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.8599173426628113, Strategic Depth: 0.5
+Gavel score: 0.7350326180458069, metrics: (Array(0.5, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.85991734, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: gomoku
+wins: 9, draws: 0, losses: 11, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 12, draws: 0, losses: 8, truncated: 0, total_games: 20
+Balance: 0.800000011920929, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.20622225105762482, Strategic Depth: 0.5
+Gavel score: 0.540582537651062, metrics: (Array(0.8, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.20622225, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: pente
+wins: 9, draws: 2, losses: 9, truncated: 2, total_games: 20
+Passed random policy sanity check.
+wins: 10, draws: 0, losses: 10, truncated: 0, total_games: 20
+Balance: 1.0, Decisiveness: 1.0, Completion: 1.0, Agency: 0.9829532504081726, Coverage: 0.17783933877944946, Strategic Depth: 0.5
+Gavel score: 0.5154463648796082, metrics: (Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.98295325, dtype=float32), Array(0.17783934, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: reversi
+wins: 8, draws: 1, losses: 11, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 13, draws: 1, losses: 6, truncated: 0, total_games: 20
+Balance: 0.6499999761581421, Decisiveness: 0.949999988079071, Completion: 1.0, Agency: 0.9172188639640808, Coverage: 0.984375, Strategic Depth: 0.5
+Gavel score: 0.7795023918151855, metrics: (Array(0.65, dtype=float32), Array(0.95, dtype=float32), Array(1., dtype=float32), Array(0.91721886, dtype=float32), Array(0.984375, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: tic_tac_toe
+wins: 11, draws: 0, losses: 9, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 12, draws: 2, losses: 6, truncated: 0, total_games: 20
+Balance: 0.699999988079071, Decisiveness: 0.9000000357627869, Completion: 1.0, Agency: 0.9888889193534851, Coverage: 0.6555556058883667, Strategic Depth: 0.5
+Gavel score: 0.742910623550415, metrics: (Array(0.7, dtype=float32), Array(0.90000004, dtype=float32), Array(1., dtype=float32), Array(0.9888889, dtype=float32), Array(0.6555556, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: yavalath
+wins: 6, draws: 0, losses: 14, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 8, draws: 0, losses: 12, truncated: 0, total_games: 20
+Balance: 0.800000011920929, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.187704935669899, Strategic Depth: 0.5
+Gavel score: 0.5182461142539978, metrics: (Array(0.8, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.18770494, dtype=float32), Array(0.5, dtype=float32))
+
+
+Evaluating game: yavalax
+wins: 10, draws: 1, losses: 9, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 7, draws: 0, losses: 13, truncated: 0, total_games: 20
+Balance: 0.699999988079071, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.4689348638057709, Strategic Depth: 0.5
+Gavel score: 0.7008475065231323, metrics: (Array(0.7, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.46893486, dtype=float32), Array(0.5, dtype=float32))
+Generated 9 games with:
+Compilable: 9/9
+Average Gavel score: 0.6513711214065552 ± 0.10263799130916595
+Average Balance: 0.7611110806465149 ± 0.1523478776216507
+Average Decisiveness: 0.9833333492279053 ± 0.033333323895931244
+Average Completion: 1.0 ± 0.0
+Average Agency: 0.9873955845832825 ± 0.025480259209871292
+Average Coverage: 0.4760396182537079 ± 0.28428271412849426
+Average Strategic Depth: 0.5 ± 0.0

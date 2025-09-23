@@ -1,0 +1,39 @@
+/Users/alex/PycharmProjects/ludax/.venv/bin/python /Users/alex/PycharmProjects/ludax/examples/06-game_generation/gavel_eval.py
+
+
+====================================================================================================
+Evaluating game:
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 5 ) ) ) ( rules ( start ( place P1 ( 11 ) ) ( place P2 ( 2 ) ) ( place P2 ( 2 ) ) ( place P1 ( 11 8 ) ) ( place P1 ( 5 10 2 11 1 ) ) ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 0 ( draw ) ) ( if 10 ( draw ) ) ( if 6 ( draw ) ) ( if 1 ( opponent lose ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.14000003039836884, Strategic Depth: 0
+Final score: 0, breakdown: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.14000003, dtype=float32), 0)
+
+
+====================================================================================================
+Evaluating game:
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ( place P1 ( 1 ) ) ( place P2 ( 3 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination corners ) ( effects ( capture corners ) ) ) ) ) ( end ( if 2 ( draw ) ) ( if 8 ( draw ) ) ( if 2 ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P1 white ) ( color P1 white ) ) )
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.0833333432674408, Strategic Depth: 0
+Final score: 0, breakdown: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.08333334, dtype=float32), 0)
+
+
+====================================================================================================
+Evaluating game:
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( start ( place P1 ( 2 11 ) ) ) ( play ( repeat ( P2 P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if 3 ( draw ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Passed random policy sanity check.
+wins: 0, draws: 20, losses: 0, truncated: 0, total_games: 20
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.021978022530674934, Strategic Depth: 0
+Final score: 0, breakdown: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.02197802, dtype=float32), 0)
+
+
+====================================================================================================
+Evaluating game:
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 10 ) ) ) ( rules ( play ( repeat ( P2 P1 P2 ) ( place ( destination empty ) ( effects ( flip empty ) ) ) ( force_pass ) ) ) ( end ( if 8 ( draw ) ) ( if ( not ( not 9 ) ) ( mover win ) ) ) ) )( game "RandomGame" ( players 2 ) ( equipment ( board ( square 9 ) ) ) ( rules ( start ( place P1 ( 4 4 ) ) ) ( play ( once_through ( P1 P1 P1 P2 ) ( place mover ( destination empty ) ( result 7 ) ) ) ) ( end ( if 7 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 white ) ( color P2 black ) ( color P2 black ) ) )
+Final score: -3, breakdown: None
+
+Process finished with exit code 0

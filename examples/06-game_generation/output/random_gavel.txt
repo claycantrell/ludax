@@ -1,0 +1,460 @@
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 3 ) ) ) ( rules ( start ( place P2 ( 7 ) ) ( place P2 ( 6 ) ) ) ( play ( once_through ( P1 ) ( place opponent ( destination occupied ) ) ) ) ( end ( if ( connected edges_no_corners mover ) ( mover lose ) ) ( if 0 ( opponent win ) ) ) ) ( rendering ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 2 ) ) ) ( rules ( play ( repeat ( P2 P1 P2 P1 P1 P2 P2 ) ( place ( destination corners ) ( effects ( flip occupied ) ) ) ( force_pass ) ) ) ( end ( if ( equal ( connected edges_no_corners ) ) ( mover win ) ) ( if 8 ( mover lose ) ) ( if 1 ( opponent win ) ) ) ) ( rendering ( color P2 white ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( play ( once_through ( P2 P2 ) ( place ( destination empty ) ) ) ( repeat ( P2 ) ( place mover ( destination occupied ) ) ) ( repeat ( P1 P1 ) ( place ( destination occupied ) ) ( force_pass ) ) ) ( end ( if ( add 9 ( multiply 1 3 4 ) ( count empty ) ( multiply 4 7 ) ( add 7 ) ) ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 white ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 11 ) ) ) ( rules ( start ( place P1 ( 8 10 5 ) ) ( place P2 ( 4 ) ) ) ( play ( repeat ( P2 P1 P2 ) ( place ( destination center ) ) ( force_pass ) ) ) ( end ( if 3 ( mover lose ) ) ( if 5 ( mover win ) ) ( if ( mover_is P1 ) ( draw ) ) ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 2 2 ) ) ) ( rules ( play ( repeat ( P2 P1 ) ( place opponent ( destination center ) ) ( force_pass ) ) ( once_through ( P2 ) ( place mover ( destination empty ) ) ) ) ( end ( if ( passed opponent ) ( draw ) ) ) ) ( rendering ( color P2 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 6 ) ) ) ( rules ( start ( place P1 ( 6 7 ) ) ( place P2 ( 10 1 10 ) ) ( place P2 ( 6 ) ) ( place P1 ( 8 4 ) ) ( place P2 ( 11 ) ) ) ( play ( once_through ( P2 P1 P1 P1 P2 P1 P2 P2 P1 P1 ) ( place ( destination occupied ) ( effects ( capture empty opponent ) ) ) ) ( once_through ( P2 P2 P1 ) ( place mover ( destination corners ) ) ) ( once_through ( P2 P1 P2 ) ( place ( destination corners ) ( effects ( flip center opponent ) ) ) ( force_pass ) ) ( once_through ( P2 P1 P1 ) ( place opponent ( destination center ) ( effects ( capture empty ) ) ) ) ( repeat ( P1 P1 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if ( add 1 ) ( draw ) ) ( if 4 ( opponent win ) ) ( if ( equal ( subtract 5 5 ) 8 ) ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 5 5 ) ) ) ( rules ( start ( place P1 ( 6 9 5 2 5 ) ) ) ( play ( once_through ( P2 P1 P2 P2 ) ( place mover ( destination center ) ( result 9 ) ( effects ( flip occupied ) ) ) ( force_pass ) ) ( repeat ( P1 P2 P1 P2 P2 ) ( place opponent ( destination center ) ( result 7 ) ( effects ( capture center ) ) ) ) ( repeat ( P1 P1 ) ( place mover ( destination center ) ( effects ( capture occupied opponent ) ) ) ( force_pass ) ) ) ( end ( if ( le ( subtract 6 2 ) ( count center ) ) ( draw ) ) ( if ( count center ) ( mover lose ) ) ( if 1 ( opponent lose ) ) ( if ( not 5 ) ( mover lose ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 1 ) ) ) ( rules ( play ( repeat ( P2 ) ( place mover ( destination occupied ) ) ) ( repeat ( P1 ) ( place mover ( destination center ) ) ( force_pass ) ) ( once_through ( P2 P2 P1 P1 P2 ) ( place ( destination empty ) ( effects ( flip occupied opponent ) ) ) ) ) ( end ( if 9 ( opponent lose ) ) ) ) ( rendering ( color P1 black ) ( color P1 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 4 8 ) ) ) ( rules ( start ( place P2 ( 11 5 10 3 9 11 ) ) ( place P1 ( 7 ) ) ( place P1 ( 8 1 11 9 6 ) ) ( place P2 ( 4 2 4 ) ) ( place P2 ( 4 ) ) ( place P2 ( 1 3 ) ) ) ( play ( repeat ( P1 P2 P1 P1 P2 ) ( place mover ( destination empty ) ) ) ) ( end ( if ( add 5 ) ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 1 6 ) ) ) ( rules ( start ( place P2 ( 2 ) ) ) ( play ( repeat ( P2 P2 P2 ) ( place mover ( destination corners ) ( result 0 ) ( effects ( capture occupied ) ) ) ( force_pass ) ) ) ( end ( if 9 ( mover win ) ) ( if 10 ( opponent lose ) ) ( if 4 ( draw ) ) ( if ( multiply 2 ) ( draw ) ) ( if 3 ( mover win ) ) ) ) ( rendering ( color P1 black ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 5 ) ) ) ( rules ( start ( place P1 ( 11 ) ) ( place P2 ( 2 ) ) ( place P2 ( 2 ) ) ( place P1 ( 11 8 ) ) ( place P1 ( 5 10 2 11 1 ) ) ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 0 ( draw ) ) ( if 10 ( draw ) ) ( if 6 ( draw ) ) ( if 1 ( opponent lose ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Passed random policy sanity check.
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.14000003039836884, Strategic Depth: 0
+Gavel score: 0, metrics: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.14000003, dtype=float32), 0)
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 9 ) ) ) ( rules ( start ( place P2 ( 9 3 ) ) ) ( play ( once_through ( P1 ) ( place ( destination center ) ) ( force_pass ) ) ) ( end ( if ( or 6 ( line 3 orientation_lbl vertical ) ) ( mover lose ) ) ) ) ( rendering ( color P1 black ) ( color P2 black ) ( color P1 black ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 6 7 ) ) ) ( rules ( start ( place P1 ( 4 4 6 ) ) ) ( play ( repeat ( P2 P2 P1 P1 P1 ) ( place opponent ( destination center ) ) ) ) ( end ( if 8 ( opponent win ) ) ) ) ( rendering ( color P1 black ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 7 ) ) ) ( rules ( start ( place P2 ( 9 9 7 8 4 ) ) ( place P2 ( 6 ) ) ) ( play ( repeat ( P2 P2 ) ( place opponent ( destination corners ) ( result 9 ) ( effects ( capture center ) ) ) ( force_pass ) ) ) ( end ( if ( and ( ge 2 5 ) ( le 2 5 ) ( multiply 10 8 5 0 ) ( not 3 ) ( ge 0 7 ) 5 ) ( draw ) ) ( if 3 ( draw ) ) ( if 2 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 8 2 ) ) ) ( rules ( play ( repeat ( P1 P2 P2 P1 P1 P1 P1 P1 ) ( place ( destination corners ) ( result 3 ) ( effects ( flip center opponent ) ) ) ) ( once_through ( P2 P2 P1 P2 P1 P2 ) ( place ( destination empty ) ( result 6 ) ( effects ( flip empty ) ) ) ) ( once_through ( P1 P1 P1 P1 P2 P2 P2 P2 ) ( place mover ( destination corners ) ( result 2 ) ) ) ) ( end ( if ( line 6 exact_lbl true ) ( opponent win ) ) ) ) ( rendering ( color P2 black ) ( color P1 black ) ( color P2 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( play ( repeat ( P2 P2 P2 P2 P2 ) ( place opponent ( destination center ) ) ( force_pass ) ) ) ( end ( if 7 ( opponent lose ) ) ( if 6 ( mover win ) ) ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 7 7 ) ) ) ( rules ( start ( place P2 ( 9 1 6 2 3 2 ) ) ( place P2 ( 9 5 ) ) ( place P1 ( 7 5 ) ) ) ( play ( repeat ( P1 P1 ) ( place ( destination center ) ) ) ( once_through ( P1 ) ( place mover ( destination center ) ) ) ( repeat ( P2 P2 ) ( place opponent ( destination empty ) ) ) ) ( end ( if 0 ( draw ) ) ) ) ( rendering ( color P1 white ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 50, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 10 ) ) ) ( rules ( play ( once_through ( P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ( once_through ( P1 P2 ) ( place mover ( destination occupied ) ) ) ( once_through ( P2 ) ( place ( destination empty ) ( effects ( capture occupied opponent ) ) ) ) ( repeat ( P1 ) ( place ( destination empty ) ( result 9 ) ( effects ( flip corners mover ) ) ) ( force_pass ) ) ( repeat ( P1 P1 P1 P1 P1 P1 P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if ( or ( full_board ) ( or 9 ) 3 2 2 ) ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 8 9 ) ) ) ( rules ( play ( repeat ( P1 ) ( place mover ( destination corners ) ) ) ) ( end ( if 3 ( opponent win ) ) ( if 8 ( opponent win ) ) ( if ( mover_is P1 ) ( mover win ) ) ( if 2 ( mover lose ) ) ( if 7 ( mover win ) ) ( if 7 ( mover win ) ) ) ) ( rendering ( color P2 white ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ( place P1 ( 1 ) ) ( place P2 ( 3 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination corners ) ( effects ( capture corners ) ) ) ) ) ( end ( if 2 ( draw ) ) ( if 8 ( draw ) ) ( if 2 ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P1 white ) ( color P1 white ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Passed random policy sanity check.
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.0833333358168602, Strategic Depth: 0
+Gavel score: 0, metrics: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.08333334, dtype=float32), 0)
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 2 9 ) ) ) ( rules ( start ( place P1 ( 1 1 ) ) ) ( play ( once_through ( P1 P1 P2 P2 P1 P1 P2 P1 P2 ) ( place ( destination center ) ) ) ( repeat ( P2 P2 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if ( connected ( center center empty occupied empty ) direction_lbl down ) ( draw ) ) ( if ( le 7 ( line 9 exact_lbl true ) ) ( mover lose ) ) ( if 5 ( opponent win ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 11 ) ) ) ( rules ( start ( place P1 ( 6 ) ) ) ( play ( repeat ( P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if ( connected ( corners occupied empty occupied occupied center ) mover ) ( mover lose ) ) ) ) ( rendering ( color P2 black ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 4 3 ) ) ) ( rules ( play ( once_through ( P2 ) ( place ( destination center ) ( effects ( flip empty ) ) ) ) ) ( end ( if ( equal 0 ) ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 10 10 ) ) ) ( rules ( start ( place P2 ( 5 11 9 ) ) ( place P2 ( 2 9 9 4 4 3 4 ) ) ) ( play ( repeat ( P2 P1 P1 P1 ) ( place opponent ( destination empty ) ( result 9 ) ( effects ( capture corners ) ) ) ) ( repeat ( P1 ) ( place opponent ( destination empty ) ( effects ( flip corners mover ) ) ) ( force_pass ) ) ) ( end ( if 2 ( opponent win ) ) ( if ( passed opponent ) ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 4 ) ) ) ( rules ( start ( place P1 ( 8 ) ) ( place P2 ( 4 ) ) ( place P2 ( 1 6 ) ) ) ( play ( repeat ( P1 P1 P2 P1 P2 P2 P1 ) ( place opponent ( destination empty ) ( effects ( capture occupied opponent ) ) ) ) ) ( end ( if ( le ( subtract 1 10 ) 5 ) ( opponent lose ) ) ( if 1 ( opponent win ) ) ( if ( equal 5 ) ( draw ) ) ) ) ( rendering ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 2 10 ) ) ) ( rules ( start ( place P1 ( 1 10 8 2 9 ) ) ( place P1 ( 3 1 ) ) ( place P2 ( 8 6 8 ) ) ) ( play ( once_through ( P2 ) ( place ( destination center ) ) ) ( once_through ( P1 ) ( place ( destination empty ) ) ) ( once_through ( P1 P1 ) ( place mover ( destination center ) ) ) ( repeat ( P1 P1 ) ( place ( destination occupied ) ) ) ) ( end ( if ( subtract ( add 3 ) ( connected edges_no_corners opponent direction_lbl horizontal ) ) ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 7 3 ) ) ) ( rules ( start ( place P2 ( 5 ) ) ( place P2 ( 10 ) ) ( place P1 ( 7 7 ) ) ) ( play ( once_through ( P2 P1 P2 P1 P2 ) ( place mover ( destination occupied ) ( result 6 ) ( effects ( capture empty opponent ) ) ) ( force_pass ) ) ( once_through ( P1 P2 P2 P1 ) ( place ( destination occupied ) ) ( force_pass ) ) ( repeat ( P2 P2 P2 P1 ) ( place opponent ( destination occupied ) ) ) ) ( end ( if 10 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 8 9 ) ) ) ( rules ( start ( place P1 ( 4 ) ) ) ( play ( repeat ( P1 P1 ) ( place ( destination center ) ( effects ( capture empty ) ) ) ) ( once_through ( P2 P1 P2 P2 P2 P1 P1 ) ( place ( destination corners ) ) ( force_pass ) ) ) ( end ( if 2 ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( play ( repeat ( P1 ) ( place opponent ( destination empty ) ( effects ( flip corners opponent ) ) ) ( force_pass ) ) ) ( end ( if ( connected corners mover ) ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 8 11 ) ) ) ( rules ( start ( place P1 ( 10 ) ) ( place P1 ( 6 ) ) ( place P1 ( 10 ) ) ) ( play ( once_through ( P2 P1 P1 ) ( place mover ( destination center ) ) ( force_pass ) ) ) ( end ( if ( line 8 exact_lbl true ) ( mover lose ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 1 ) ) ) ( rules ( start ( place P1 ( 8 8 1 ) ) ) ( play ( repeat ( P2 P1 P1 P1 ) ( place ( destination occupied ) ) ) ( once_through ( P2 ) ( place mover ( destination center ) ( effects ( flip empty opponent ) ) ) ) ( once_through ( P2 ) ( place ( destination center ) ) ) ) ( end ( if 4 ( draw ) ) ( if ( connected edges_no_corners opponent ) ( mover lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 10 1 ) ) ) ( rules ( play ( repeat ( P1 ) ( place opponent ( destination occupied ) ( effects ( capture corners opponent ) ) ) ) ) ( end ( if ( equal 8 3 7 ) ( draw ) ) ( if ( not ( passed both ) ) ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 1 2 ) ) ) ( rules ( start ( place P2 ( 6 ) ) ( place P1 ( 11 7 ) ) ( place P2 ( 3 7 11 9 8 5 5 1 ) ) ) ( play ( once_through ( P2 P1 P1 ) ( place mover ( destination corners ) ) ( force_pass ) ) ( once_through ( P1 ) ( place ( destination corners ) ) ) ) ( end ( if ( add ( connected edges_no_corners ) ( multiply 3 ) ) ( draw ) ) ( if 8 ( opponent lose ) ) ( if ( subtract 4 ( count occupied ) ) ( mover lose ) ) ( if 6 ( draw ) ) ( if ( ge 3 3 ) ( mover win ) ) ( if 6 ( mover lose ) ) ) ) ( rendering ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 7 2 ) ) ) ( rules ( play ( repeat ( P2 ) ( place ( destination occupied ) ) ) ( once_through ( P2 ) ( place ( destination center ) ) ( force_pass ) ) ) ( end ( if 7 ( mover win ) ) ( if ( le 5 ( count corners ) ) ( draw ) ) ( if 7 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 5 ) ) ) ( rules ( start ( place P2 ( 5 ) ) ) ( play ( once_through ( P2 P1 P1 P1 P1 P1 ) ( place ( destination occupied ) ( result 10 ) ( effects ( capture occupied mover ) ) ) ( force_pass ) ) ) ( end ( if 7 ( mover win ) ) ( if 10 ( draw ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 3 3 ) ) ) ( rules ( start ( place P1 ( 8 ) ) ( place P2 ( 3 5 5 ) ) ( place P1 ( 7 ) ) ( place P1 ( 4 ) ) ) ( play ( once_through ( P2 ) ( place mover ( destination center ) ) ( force_pass ) ) ) ( end ( if 5 ( mover win ) ) ( if 9 ( opponent lose ) ) ) ) ( rendering ( color P1 white ) ( color P2 white ) ( color P2 white ) ( color P1 white ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 1 ) ) ) ( rules ( play ( once_through ( P1 ) ( place opponent ( destination center ) ) ) ) ( end ( if ( not 4 ) ( draw ) ) ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 2 11 ) ) ) ( rules ( start ( place P1 ( 3 3 2 4 ) ) ) ( play ( repeat ( P2 P1 ) ( place mover ( destination center ) ) ( force_pass ) ) ) ( end ( if ( connected ( occupied empty ) opponent ) ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 5 ) ) ) ( rules ( play ( repeat ( P2 P2 P1 P2 ) ( place ( destination corners ) ) ( force_pass ) ) ( repeat ( P2 P1 ) ( place ( destination empty ) ( effects ( flip center ) ) ) ) ) ( end ( if ( connected edges mover direction_lbl vertical ) ( mover lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 4 3 ) ) ) ( rules ( start ( place P1 ( 1 ) ) ) ( play ( once_through ( P1 ) ( place mover ( destination occupied ) ) ( force_pass ) ) ) ( end ( if 4 ( mover lose ) ) ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 8 4 ) ) ) ( rules ( start ( place P2 ( 5 7 3 10 7 ) ) ( place P2 ( 5 ) ) ) ( play ( once_through ( P1 ) ( place opponent ( destination center ) ) ( force_pass ) ) ) ( end ( if 5 ( mover win ) ) ( if 7 ( opponent lose ) ) ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 10 ) ) ) ( rules ( play ( repeat ( P2 P1 ) ( place mover ( destination occupied ) ) ) ) ( end ( if 0 ( opponent win ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P2 white ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 6 2 ) ) ) ( rules ( play ( repeat ( P1 P1 P2 ) ( place mover ( destination corners ) ) ) ( once_through ( P2 P2 P2 P2 P1 P2 P2 ) ( place opponent ( destination center ) ( result 9 ) ) ) ) ( end ( if 4 ( mover lose ) ) ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( start ( place P1 ( 2 11 ) ) ) ( play ( repeat ( P2 P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if 3 ( draw ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Passed random policy sanity check.
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.021978022530674934, Strategic Depth: 0
+Gavel score: 0, metrics: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.02197802, dtype=float32), 0)
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 2 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ) ( play ( once_through ( P1 P2 ) ( place ( destination empty ) ) ( force_pass ) ) ( repeat ( P1 ) ( place ( destination occupied ) ) ( force_pass ) ) ( once_through ( P2 ) ( place ( destination occupied ) ) ( force_pass ) ) ) ( end ( if 2 ( opponent win ) ) ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 9 7 ) ) ) ( rules ( play ( repeat ( P1 P2 P1 P1 P1 ) ( place mover ( destination occupied ) ( effects ( flip corners ) ) ) ) ( once_through ( P2 ) ( place opponent ( destination occupied ) ( effects ( capture occupied ) ) ) ) ) ( end ( if 4 ( mover win ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P2 black ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 2 7 ) ) ) ( rules ( start ( place P1 ( 5 ) ) ) ( play ( repeat ( P2 P2 P1 ) ( place mover ( destination center ) ) ) ( repeat ( P2 P2 P1 P2 P2 P2 ) ( place opponent ( destination center ) ( effects ( capture center ) ) ) ) ( once_through ( P2 P1 P2 ) ( place mover ( destination occupied ) ( result 0 ) ( effects ( capture occupied mover ) ) ) ) ( once_through ( P1 P2 P2 ) ( place mover ( destination center ) ) ( force_pass ) ) ) ( end ( if 0 ( opponent lose ) ) ) ) ( rendering ( color P2 white ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 1 ) ) ) ( rules ( play ( repeat ( P1 ) ( place ( destination center ) ( effects ( flip occupied ) ) ) ) ( repeat ( P1 ) ( place opponent ( destination corners ) ) ) ( once_through ( P1 P2 P2 P2 P1 ) ( place ( destination empty ) ( effects ( capture empty ) ) ) ) ) ( end ( if 4 ( mover win ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P2 black ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 2 2 ) ) ) ( rules ( start ( place P2 ( 7 ) ) ( place P2 ( 5 ) ) ) ( play ( repeat ( P1 ) ( place ( destination center ) ) ( force_pass ) ) ) ( end ( if ( add 4 ( line 9 orientation_lbl forward_diagonal ) ) ( mover win ) ) ( if 0 ( opponent lose ) ) ( if 0 ( mover win ) ) ) ) ( rendering ( color P1 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 7 11 ) ) ) ( rules ( play ( once_through ( P1 ) ( place opponent ( destination corners ) ( result 3 ) ) ( force_pass ) ) ) ( end ( if 5 ( opponent lose ) ) ( if ( equal ( line 6 ) 9 ) ( mover lose ) ) ( if ( subtract ( add 0 ) ( add 10 3 ) ) ( opponent lose ) ) ) ) ( rendering ( color P2 white ) ( color P2 white ) ( color P2 white ) ( color P2 white ) ( color P2 white ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 11 4 ) ) ) ( rules ( start ( place P1 ( 2 ) ) ) ( play ( once_through ( P1 ) ( place opponent ( destination corners ) ( effects ( flip center mover ) ) ) ( force_pass ) ) ( repeat ( P2 ) ( place mover ( destination occupied ) ) ) ) ( end ( if ( or 0 ( add 1 2 7 3 ) ( add 10 ) 8 ( passed opponent ) ( or 0 ) ( mover_is P1 ) ( connected edges_no_corners mover ) ( le 1 10 ) ( mover_is P2 ) ( or 6 ) ( count empty ) ) ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 2 1 ) ) ) ( rules ( start ( place P1 ( 3 ) ) ( place P2 ( 10 3 5 ) ) ( place P1 ( 5 5 7 3 4 ) ) ( place P2 ( 5 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination center ) ) ( force_pass ) ) ( repeat ( P2 ) ( place ( destination corners ) ) ) ) ( end ( if ( full_board ) ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( start ( place P1 ( 8 2 5 10 ) ) ) ( play ( repeat ( P2 P1 ) ( place opponent ( destination corners ) ( effects ( capture center ) ) ) ( force_pass ) ) ( repeat ( P2 P1 P1 ) ( place ( destination center ) ) ( force_pass ) ) ( repeat ( P2 ) ( place mover ( destination center ) ( result 6 ) ( effects ( capture occupied mover ) ) ) ) ) ( end ( if ( mover_is P2 ) ( mover win ) ) ( if 5 ( opponent lose ) ) ( if 1 ( mover win ) ) ( if 7 ( draw ) ) ( if ( full_board ) ( draw ) ) ( if ( exists corners ) ( draw ) ) ( if 6 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( play ( repeat ( P2 ) ( place mover ( destination empty ) ) ) ) ( end ( if 8 ( draw ) ) ( if ( ge ( connected edges direction_lbl down ) 4 ) ( mover lose ) ) ) ) ( rendering ( color P1 white ) ( color P2 white ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 1 ) ) ) ( rules ( start ( place P2 ( 6 2 ) ) ( place P1 ( 8 ) ) ) ( play ( once_through ( P2 ) ( place opponent ( destination center ) ( result 6 ) ) ) ( repeat ( P1 ) ( place ( destination corners ) ( result 0 ) ) ( force_pass ) ) ) ( end ( if 6 ( opponent lose ) ) ( if 4 ( mover win ) ) ( if ( full_board ) ( mover lose ) ) ( if ( line 1 exact_lbl true ) ( mover win ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( play ( once_through ( P2 P2 P1 P2 P2 P2 P2 ) ( place mover ( destination corners ) ) ) ( repeat ( P1 P2 ) ( place mover ( destination empty ) ) ) ( once_through ( P1 P1 ) ( place mover ( destination center ) ) ( force_pass ) ) ) ( end ( if 1 ( opponent win ) ) ) ) ( rendering ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 2 ) ) ) ( rules ( start ( place P2 ( 3 9 11 ) ) ( place P1 ( 10 ) ) ) ( play ( once_through ( P1 P1 P2 ) ( place ( destination corners ) ( effects ( flip empty ) ) ) ) ( once_through ( P2 P2 ) ( place mover ( destination corners ) ) ( force_pass ) ) ) ( end ( if ( exists ( adjacent center direction_lbl up_left ) ) ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 5 ) ) ) ( rules ( play ( repeat ( P1 ) ( place opponent ( destination empty ) ( result 6 ) ( effects ( flip corners ) ) ) ( force_pass ) ) ) ( end ( if 1 ( opponent win ) ) ) ) ( rendering ( color P1 white ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 8 ) ) ) ( rules ( start ( place P1 ( 5 ) ) ) ( play ( repeat ( P1 P1 P1 P1 P1 P2 ) ( place ( destination occupied ) ) ) ( repeat ( P1 P2 P1 ) ( place opponent ( destination empty ) ) ( force_pass ) ) ( repeat ( P1 ) ( place ( destination corners ) ( effects ( capture empty mover ) ) ) ) ( repeat ( P1 P2 P2 ) ( place mover ( destination empty ) ) ) ) ( end ( if 6 ( opponent lose ) ) ( if ( mover_is P1 ) ( mover lose ) ) ) ) ( rendering ( color P1 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 7 ) ) ) ( rules ( play ( once_through ( P1 ) ( place opponent ( destination empty ) ( result 6 ) ) ) ) ( end ( if 8 ( mover lose ) ) ( if 8 ( opponent lose ) ) ) ) ( rendering ( color P2 white ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 2 2 ) ) ) ( rules ( start ( place P1 ( 4 9 7 ) ) ) ( play ( once_through ( P1 ) ( place opponent ( destination corners ) ( result 3 ) ( effects ( flip empty mover ) ) ) ( force_pass ) ) ) ( end ( if ( count ( occupied mover ) ) ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 4 10 ) ) ) ( rules ( play ( once_through ( P1 ) ( place ( destination empty ) ( result 1 ) ( effects ( flip occupied mover ) ) ) ) ( repeat ( P2 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if ( ge ( connected corners mover direction_lbl up_left ) ( multiply 0 ) ) ( mover win ) ) ( if 6 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P1 ( 7 ) ) ( place P2 ( 4 ) ) ( place P1 ( 8 9 11 ) ) ( place P1 ( 2 ) ) ( place P2 ( 10 4 8 ) ) ) ( play ( once_through ( P2 ) ( place mover ( destination center ) ( effects ( capture occupied opponent ) ) ) ( force_pass ) ) ( repeat ( P1 P1 P2 P2 ) ( place ( destination empty ) ( result 9 ) ) ( force_pass ) ) ) ( end ( if ( not ( and 8 2 8 9 ) ) ( mover lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 9 11 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ( place P2 ( 2 ) ) ) ( play ( repeat ( P1 P2 P1 P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if ( exists center ) ( mover win ) ) ( if 1 ( opponent lose ) ) ( if 0 ( opponent lose ) ) ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 8 1 ) ) ) ( rules ( play ( once_through ( P1 P1 ) ( place opponent ( destination empty ) ) ) ( repeat ( P2 P2 P2 P2 P2 P2 ) ( place ( destination occupied ) ( result 10 ) ) ( force_pass ) ) ) ( end ( if 10 ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 1 10 ) ) ) ( rules ( play ( repeat ( P2 P1 ) ( place ( destination center ) ) ( force_pass ) ) ( once_through ( P2 P2 P2 ) ( place ( destination center ) ( effects ( capture center ) ) ) ( force_pass ) ) ( repeat ( P1 ) ( place opponent ( destination center ) ) ( force_pass ) ) ( repeat ( P1 P2 P1 P2 P1 ) ( place ( destination occupied ) ( result 9 ) ) ( force_pass ) ) ( once_through ( P1 ) ( place mover ( destination corners ) ( effects ( capture corners ) ) ) ) ) ( end ( if ( multiply ( line 2 exact_lbl false ) ( count center ) ) ( draw ) ) ( if ( add ( multiply 0 ) ) ( mover win ) ) ( if 10 ( mover win ) ) ( if 10 ( mover lose ) ) ( if ( multiply 0 0 ( line 6 exact_lbl true ) ) ( draw ) ) ( if 9 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P2 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 5 6 ) ) ) ( rules ( start ( place P1 ( 3 ) ) ) ( play ( once_through ( P2 P2 P2 ) ( place ( destination corners ) ) ) ) ( end ( if 3 ( draw ) ) ( if ( and ( or 9 ) ( or 0 ) ( add 4 9 9 ) ( connected edges_no_corners direction_lbl up_left ) ( not 1 ) ) ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 7 1 ) ) ) ( rules ( play ( once_through ( P2 P1 ) ( place ( destination center ) ( effects ( capture occupied mover ) ) ) ( force_pass ) ) ) ( end ( if ( count empty ) ( opponent win ) ) ( if 3 ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( play ( repeat ( P2 P2 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if ( passed opponent ) ( opponent lose ) ) ( if 4 ( mover lose ) ) ( if ( passed both ) ( draw ) ) ( if ( subtract 9 ( connected corners direction_lbl forward_diagonal ) ) ( mover win ) ) ( if 6 ( draw ) ) ( if 7 ( mover win ) ) ) ) ( rendering ( color P2 white ) ( color P2 white ) ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 2 ) ) ) ( rules ( start ( place P1 ( 7 6 ) ) ( place P2 ( 4 ) ) ( place P1 ( 4 ) ) ( place P2 ( 1 ) ) ) ( play ( once_through ( P2 ) ( place ( destination center ) ) ) ( once_through ( P1 ) ( place opponent ( destination center ) ) ) ( repeat ( P1 ) ( place ( destination center ) ( result 6 ) ) ( force_pass ) ) ( once_through ( P2 P1 P2 P2 P1 P1 P2 P1 ) ( place mover ( destination center ) ( effects ( capture occupied opponent ) ) ) ) ( repeat ( P2 P2 P2 P1 P2 ) ( place mover ( destination empty ) ( result 7 ) ) ( force_pass ) ) ( repeat ( P1 ) ( place opponent ( destination center ) ( effects ( flip occupied opponent ) ) ) ) ) ( end ( if ( full_board ) ( opponent lose ) ) ( if 9 ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 9 6 ) ) ) ( rules ( play ( once_through ( P2 P1 P1 ) ( place mover ( destination occupied ) ( result 0 ) ) ( force_pass ) ) ( once_through ( P1 P1 P1 P1 ) ( place mover ( destination corners ) ) ( force_pass ) ) ( repeat ( P1 P2 ) ( place mover ( destination corners ) ( result 8 ) ) ( force_pass ) ) ) ( end ( if 1 ( draw ) ) ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 4 ) ) ) ( rules ( start ( place P2 ( 6 ) ) ) ( play ( once_through ( P1 P1 P2 P1 P1 P1 ) ( place ( destination occupied ) ) ) ) ( end ( if ( count ( custodial any orientation_lbl any ) ) ( mover win ) ) ( if 3 ( mover lose ) ) ( if ( not 0 ) ( opponent lose ) ) ( if 1 ( draw ) ) ( if 4 ( opponent win ) ) ( if 5 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 11 10 ) ) ) ( rules ( play ( repeat ( P1 P2 ) ( place ( destination corners ) ) ( force_pass ) ) ( once_through ( P2 ) ( place mover ( destination occupied ) ( result 4 ) ) ) ) ( end ( if 10 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 7 8 ) ) ) ( rules ( play ( once_through ( P2 ) ( place opponent ( destination occupied ) ) ) ( once_through ( P1 P2 ) ( place ( destination corners ) ) ( force_pass ) ) ( once_through ( P1 P1 P2 P1 P1 P2 ) ( place mover ( destination corners ) ( effects ( flip occupied mover ) ) ) ( force_pass ) ) ( once_through ( P2 P1 P1 ) ( place opponent ( destination occupied ) ( result 4 ) ) ( force_pass ) ) ) ( end ( if 10 ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 11 9 ) ) ) ( rules ( play ( repeat ( P1 P2 P1 P2 P1 P2 P2 ) ( place opponent ( destination center ) ( effects ( capture center mover ) ) ) ( force_pass ) ) ) ( end ( if ( le 3 ( add 5 6 ) ) ( mover win ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P2 ( 2 5 4 ) ) ( place P1 ( 2 2 4 ) ) ( place P2 ( 10 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination occupied ) ( result 10 ) ) ( force_pass ) ) ) ( end ( if 2 ( opponent win ) ) ( if 10 ( draw ) ) ( if 1 ( mover win ) ) ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 6 10 ) ) ) ( rules ( start ( place P2 ( 5 ) ) ) ( play ( repeat ( P1 ) ( place ( destination occupied ) ( result 8 ) ( effects ( capture occupied opponent ) ) ) ) ) ( end ( if ( equal 3 ( subtract 4 7 ) ) ( draw ) ) ) ) ( rendering ( color P2 white ) ( color P1 black ) ( color P2 white ) ( color P2 black ) ( color P1 white ) ( color P1 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 8 ) ) ) ( rules ( start ( place P1 ( 6 2 6 ) ) ) ( play ( once_through ( P2 P1 P1 ) ( place mover ( destination center ) ( result 0 ) ( effects ( flip occupied mover ) ) ) ( force_pass ) ) ( once_through ( P2 ) ( place ( destination occupied ) ( effects ( flip occupied opponent ) ) ) ) ( repeat ( P2 P2 P1 P1 ) ( place opponent ( destination center ) ( result 1 ) ) ( force_pass ) ) ( repeat ( P1 P2 P2 ) ( place opponent ( destination occupied ) ) ) ) ( end ( if 0 ( opponent lose ) ) ) ) ( rendering ( color P2 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 4 9 ) ) ) ( rules ( play ( repeat ( P1 P2 P1 P1 P1 ) ( place opponent ( destination center ) ) ( force_pass ) ) ) ( end ( if 8 ( opponent win ) ) ( if 0 ( mover win ) ) ( if 5 ( mover win ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 10 ) ) ) ( rules ( play ( repeat ( P2 P1 P2 ) ( place ( destination empty ) ( effects ( flip empty ) ) ) ( force_pass ) ) ) ( end ( if 8 ( draw ) ) ( if ( not ( not 9 ) ) ( mover win ) ) ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Passed random policy sanity check.
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.0, Strategic Depth: 0
+Gavel score: 0, metrics: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0., dtype=float32), 0)
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 5 ) ) ) ( rules ( play ( repeat ( P1 P1 P2 P1 P2 P1 P2 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 8 ( mover lose ) ) ( if ( multiply ( count occupied ) ) ( mover lose ) ) ) ) ( rendering ( color P2 black ) ) )
+wins: 0, draws: 0, losses: 50, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 9 ) ) ) ( rules ( start ( place P1 ( 4 11 ) ) ) ( play ( repeat ( P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ( once_through ( P1 ) ( place mover ( destination empty ) ) ) ) ( end ( if ( subtract ( subtract 4 8 ) 10 ) ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 8 ) ) ) ( rules ( start ( place P1 ( 8 9 10 ) ) ) ( play ( repeat ( P2 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if 8 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 1 8 ) ) ) ( rules ( play ( once_through ( P1 ) ( place opponent ( destination corners ) ) ) ) ( end ( if 7 ( opponent lose ) ) ( if ( full_board ) ( opponent win ) ) ) ) )
+wins: 50, draws: 0, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 8 1 ) ) ) ( rules ( play ( repeat ( P1 P1 P2 P1 P2 P2 ) ( place ( destination center ) ) ) ( once_through ( P1 P2 P1 ) ( place opponent ( destination empty ) ) ( force_pass ) ) ( once_through ( P2 P1 ) ( place ( destination corners ) ) ( force_pass ) ) ( repeat ( P1 P1 P1 P1 ) ( place ( destination occupied ) ) ) ) ( end ( if ( le ( line 0 ) 2 ) ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 7 ) ) ) ( rules ( start ( place P2 ( 9 ) ) ) ( play ( once_through ( P2 P1 P2 P1 P1 P2 P2 ) ( place mover ( destination corners ) ) ( force_pass ) ) ( once_through ( P2 P1 P1 ) ( place mover ( destination corners ) ( effects ( flip empty ) ) ) ) ) ( end ( if ( count corners ) ( draw ) ) ) ) ( rendering ( color P2 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 9 ) ) ) ( rules ( start ( place P1 ( 4 4 ) ) ) ( play ( once_through ( P1 P1 P1 P2 ) ( place mover ( destination empty ) ( result 7 ) ) ) ) ( end ( if 7 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 white ) ( color P2 black ) ( color P2 black ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Passed random policy sanity check.
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Balance: 1.0, Decisiveness: 0.0, Completion: 1.0, Agency: 1.0, Coverage: 0.012345675379037857, Strategic Depth: 0
+Gavel score: 0, metrics: (Array(1., dtype=float32), Array(0., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.01234568, dtype=float32), 0)
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 1 ) ) ) ( rules ( play ( repeat ( P2 P2 P1 P2 ) ( place opponent ( destination occupied ) ) ) ) ( end ( if ( or 3 2 ) ( draw ) ) ( if 9 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P2 white ) ( color P2 black ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 2 4 ) ) ) ( rules ( start ( place P2 ( 3 ) ) ( place P2 ( 6 ) ) ( place P2 ( 8 1 ) ) ) ( play ( repeat ( P2 P2 P1 ) ( place ( destination occupied ) ( effects ( flip center ) ) ) ( force_pass ) ) ( once_through ( P1 ) ( place ( destination empty ) ( result 3 ) ) ) ) ( end ( if ( ge ( multiply 9 3 7 ) ( multiply 9 1 ) ) ( mover lose ) ) ( if 2 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 7 10 ) ) ) ( rules ( start ( place P1 ( 2 9 ) ) ) ( play ( repeat ( P2 P2 P2 P2 ) ( place mover ( destination corners ) ( effects ( capture occupied opponent ) ) ) ( force_pass ) ) ) ( end ( if 9 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 6 11 ) ) ) ( rules ( start ( place P2 ( 2 ) ) ) ( play ( once_through ( P1 P2 P2 ) ( place opponent ( destination occupied ) ) ) ) ( end ( if 5 ( opponent lose ) ) ( if ( connected edges_no_corners direction_lbl diagonal ) ( draw ) ) ( if 1 ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 2 ) ) ) ( rules ( play ( once_through ( P1 P1 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if 8 ( mover win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 4 9 ) ) ) ( rules ( start ( place P2 ( 10 ) ) ( place P2 ( 6 ) ) ( place P1 ( 3 7 1 ) ) ( place P2 ( 6 ) ) ( place P1 ( 7 ) ) ( place P2 ( 1 ) ) ( place P2 ( 10 10 4 3 7 ) ) ( place P1 ( 6 10 ) ) ( place P2 ( 10 1 ) ) ) ( play ( once_through ( P2 P1 P1 P2 ) ( place mover ( destination empty ) ( effects ( flip corners mover ) ) ) ) ( once_through ( P1 P1 ) ( place mover ( destination corners ) ( result 9 ) ( effects ( flip empty opponent ) ) ) ) ( repeat ( P2 P1 P1 ) ( place ( destination corners ) ) ) ( repeat ( P1 ) ( place mover ( destination corners ) ( result 7 ) ) ( force_pass ) ) ) ( end ( if ( mover_is P2 ) ( mover win ) ) ( if 4 ( mover lose ) ) ( if 3 ( opponent win ) ) ) ) ( rendering ( color P2 black ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 5 ) ) ) ( rules ( play ( repeat ( P2 ) ( place ( destination empty ) ( result 3 ) ( effects ( capture occupied mover ) ) ) ( force_pass ) ) ( repeat ( P2 P1 ) ( place opponent ( destination occupied ) ) ( force_pass ) ) ) ( end ( if ( equal 10 0 ( add 5 ) ( connected edges ) ) ( opponent win ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 11 ) ) ) ( rules ( start ( place P2 ( 3 2 ) ) ) ( play ( repeat ( P1 P2 P2 P1 P2 P1 P2 P2 P2 P1 P1 ) ( place ( destination corners ) ) ( force_pass ) ) ) ( end ( if 9 ( draw ) ) ( if ( passed opponent ) ( mover win ) ) ) ) )
+Error during first evaluation: cannot access free variable 'idx' where it is not associated with a value in enclosing scope
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 4 1 ) ) ) ( rules ( play ( repeat ( P1 P1 P1 P2 ) ( place opponent ( destination empty ) ( result 0 ) ( effects ( capture empty opponent ) ) ) ) ( once_through ( P1 P2 P1 P2 ) ( place opponent ( destination occupied ) ) ) ( once_through ( P1 ) ( place opponent ( destination occupied ) ) ) ( repeat ( P2 ) ( place ( destination occupied ) ( effects ( capture corners opponent ) ) ) ) ( repeat ( P2 P1 ) ( place opponent ( destination center ) ) ) ( once_through ( P2 ) ( place ( destination empty ) ) ) ( repeat ( P2 P1 ) ( place opponent ( destination corners ) ) ) ( once_through ( P1 ) ( place ( destination corners ) ( effects ( capture corners mover ) ) ) ) ( repeat ( P1 ) ( place ( destination occupied ) ) ) ) ( end ( if ( mover_is P2 ) ( mover win ) ) ) ) ( rendering ( color P2 black ) ( color P2 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( square 8 ) ) ) ( rules ( play ( once_through ( P2 ) ( place ( destination center ) ( result 10 ) ) ( force_pass ) ) ) ( end ( if ( and 9 ) ( draw ) ) ) ) ( rendering ( color P2 white ) ( color P2 white ) ( color P1 white ) ( color P2 black ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 0, total_games: 50
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 7 ) ) ) ( rules ( play ( once_through ( P1 P1 P1 ) ( place opponent ( destination center ) ( effects ( flip corners mover ) ) ) ) ) ( end ( if ( not 8 ) ( draw ) ) ( if ( subtract 6 3 ) ( draw ) ) ) ) ( rendering ( color P1 white ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 7 ) ) ) ( rules ( start ( place P2 ( 11 1 ) ) ( place P2 ( 2 ) ) ) ( play ( repeat ( P2 P2 P1 P1 P1 ) ( place ( destination corners ) ) ) ( repeat ( P2 P2 P2 P1 P1 P2 P1 ) ( place opponent ( destination center ) ) ( force_pass ) ) ( once_through ( P1 ) ( place ( destination corners ) ( result 5 ) ( effects ( flip empty ) ) ) ( force_pass ) ) ) ( end ( if 6 ( opponent lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 8 7 ) ) ) ( rules ( start ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination corners ) ) ) ( once_through ( P2 P1 P2 P1 P1 ) ( place opponent ( destination center ) ( result 2 ) ) ) ( once_through ( P2 P2 P2 P2 P1 P2 P1 P1 ) ( place mover ( destination empty ) ( result 3 ) ( effects ( flip center opponent ) ) ) ) ) ( end ( if ( and ( not 5 ) 9 ) ( mover lose ) ) ( if 4 ( opponent win ) ) ( if 2 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 7 ) ) ) ( rules ( start ( place P1 ( 3 10 ) ) ) ( play ( once_through ( P2 P2 ) ( place ( destination occupied ) ( effects ( flip empty opponent ) ) ) ) ) ( end ( if ( not ( passed opponent ) ) ( opponent lose ) ) ( if ( or 2 ( exists empty ) ( full_board ) ) ( mover lose ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 7 3 ) ) ) ( rules ( start ( place P1 ( 7 3 7 ) ) ( place P2 ( 3 2 3 ) ) ( place P1 ( 7 ) ) ) ( play ( repeat ( P1 P2 P1 P2 P2 P2 P2 ) ( place opponent ( destination empty ) ) ) ) ( end ( if ( line 10 orientation_lbl orthogonal ) ( opponent win ) ) ( if 0 ( mover win ) ) ( if 10 ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 9 3 ) ) ) ( rules ( start ( place P2 ( 2 ) ) ( place P2 ( 4 ) ) ( place P1 ( 8 9 11 11 10 ) ) ( place P2 ( 4 ) ) ) ( play ( repeat ( P1 P2 P1 P1 P1 P2 P1 ) ( place mover ( destination corners ) ( effects ( capture center opponent ) ) ) ( force_pass ) ) ( once_through ( P2 P2 ) ( place ( destination corners ) ) ) ) ( end ( if 8 ( opponent win ) ) ( if ( exists center ) ( opponent win ) ) ( if ( and ( and 0 1 10 5 6 2 ) ( subtract 7 1 ) ( exists occupied ) ) ( draw ) ) ) ) )
+Error generating or evaluating game:
+
+
+ ( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 5 ) ) ) ( rules ( start ( place P2 ( 9 7 7 ) ) ( place P2 ( 11 9 9 ) ) ( place P1 ( 1 ) ) ) ( play ( repeat ( P1 P1 P2 P2 P1 ) ( place mover ( destination occupied ) ) ) ) ( end ( if ( subtract 4 7 ) ( draw ) ) ) ) ( rendering ( color P2 white ) ) )
+wins: 0, draws: 50, losses: 0, truncated: 50, total_games: 50
+Passed random policy sanity check.
