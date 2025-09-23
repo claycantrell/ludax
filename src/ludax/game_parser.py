@@ -867,6 +867,58 @@ class GameRuleParser(Transformer):
         
         return mask_fn, {}
     
+    def mask_corner_custodial(self, children):
+        '''
+        A special case of the custodial mask (below) that tracks whether an opponent's
+        piece in the corner is flanked by the mover's pieces along both edges
+        '''
+
+        if len(children) == 0:
+            mover_ref = PlayerAndMoverRefs.MOVER
+        else:
+            mover_ref = children[0]
+
+        if mover_ref == PlayerAndMoverRefs.MOVER:
+            offset = 0
+        elif mover_ref == PlayerAndMoverRefs.OPPONENT:
+            offset = 1
+
+        corner_indices = utils._get_corner_indices(self.game_info)
+        direction_indices = utils._get_direction_indices(self.game_info, Directions.ORTHOGONAL)
+
+        local_lookup = self.adjacency_lookup[direction_indices].any(axis=0)
+        outer_indices = []
+        for corner in corner_indices:
+            outer_indices.append(jnp.argwhere(local_lookup[corner] == 1).flatten())
+        
+        outer_indices = jnp.array(outer_indices)
+        inner_indices = corner_indices[:, jnp.newaxis]
+        full_indices = jnp.concatenate([outer_indices[:, 0:1], inner_indices, outer_indices[:, 1:]], axis=1)
+        full_match_width = 3
+
+        def mask_fn(state):
+            outer_player = (state.current_player + offset) % 2
+            inner_player = (outer_player + 1) % 2
+            outer_mask = (state.board == outer_player)
+            inner_mask = (state.board == inner_player)
+
+            # Only keep the custodial arrangements which include the last move
+            # among the outer indices. TODO: make this an argument?
+            last_move = state.previous_actions[outer_player]
+            valid_outer = (outer_indices == last_move).any(axis=1)[:, jnp.newaxis]
+
+            outer_match = (outer_mask[outer_indices] == 1).all(axis=1)[:, jnp.newaxis]
+            inner_match = (inner_mask[inner_indices] == 1).all(axis=1)[:, jnp.newaxis]
+            full_match = jnp.tile(outer_match & inner_match & valid_outer, full_match_width)
+
+            # Ensure invalid indices are set to one larger than the board size so that they're not indexed
+            matched_indices = jnp.where(full_match, full_indices, self.game_info.board_size+1).flatten()
+            mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[matched_indices].set(1)
+
+            return mask
+
+        return mask_fn, {}
+
     def mask_custodial(self, children):
         '''
         Returns a mask of all of the board positions which are part of a 'custodial'

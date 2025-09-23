@@ -16,7 +16,7 @@
                     (source (occupied mover)) 
                     (destination empty)
                     (effects 
-                        (capture (custodial 1 orientation:orthogonal))
+                        (capture (or (custodial 1 orientation:orthogonal) corner_custodial))
                     )
                 )
             )

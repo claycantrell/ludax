@@ -101,6 +101,7 @@ mask: mask_adjacent
     | mask_center
     | mask_column
     | mask_corners
+    | mask_corner_custodial
     | mask_custodial
     | mask_edge
     | mask_empty
@@ -113,6 +114,7 @@ mask_adjacent: "(adjacent" super_mask direction_arg? ")"
 mask_center: "center"
 mask_column: "(column" positive_int ")"
 mask_corners: "corners"
+mask_corner_custodial: "corner_custodial" | "(corner_custodial" mover_reference ")"
 mask_custodial: "(custodial" custodial_length_arg mover_reference? orientation_arg? ")"
 mask_edge: "(edge" edge ")"
 mask_empty: "empty"
