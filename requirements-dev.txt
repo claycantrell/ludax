@@ -1,4 +1,5 @@
 # Ludax in development mode
+-U pip setuptools wheel
 -e .[gui]
 
 # Graphs
