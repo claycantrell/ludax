@@ -36,11 +36,6 @@ def eval_ludax_games():
         print_stats(gavel_scores)
 
 
-
-
-
-
-
 def from_file(filename):
     with open(filename, "r") as f:
         data = json.load(f)
@@ -61,10 +56,6 @@ def from_file(filename):
                 assert len(metrics) == 6
 
                 print(f"Gavel score: {mean}, metrics: {metrics}")
-
-                # # Correct Strategic Depth and mean calculation
-                # metrics[5] = 2 * metrics[5] - 1 # Convert from [0.5, 1] to [0, 1]
-                # mean = 6 / sum(1 / m if m > 0 else jnp.inf for m in metrics)
 
                 if best_scores is None or mean > best_scores[0]:
                     best_scores = (mean, *metrics)
