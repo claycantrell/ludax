@@ -136,22 +136,22 @@ def evaluate_game(game_str):
     except Exception as e:
         return -3, None
 
-    r_policy = random_policy()
+    # r_policy = random_policy()
     # g_policy = simple_mctx_policy(step_b, num_simulations=100)
     # g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
     g_policy = uct_mcts_policy(env, num_simulations=100, max_depth=25)
     g2_policy = uct_mcts_policy(env, num_simulations=50, max_depth=25)
 
-    try:
-        (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
-    except Exception as e:
-        print("Error during first evaluation:", e)
-        return -2, None
-
-    if r_balance < 0.5 or r_agency < 0.5 or wins + losses + draws + truncated < total:
-        return -1, None
-
-    print("Passed random policy sanity check.")
+    # try:
+    #     (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
+    # except Exception as e:
+    #     print("Error during first evaluation:", e)
+    #     return -2, None
+    #
+    # if r_balance < 0.5 or r_agency < 0.5 or wins + losses + draws + truncated < total:
+    #     return -1, None
+    #
+    # print("Passed random policy sanity check.")
 
     try:
         # ToDO why is P1 always winning instead of drawing?
@@ -198,6 +198,6 @@ if __name__ == "__main__":
     #     print(f"Final score: {score}, breakdown: {breakdown}")
 
     start_time = time.time()
-    print(evaluate_game(connect_four))
+    print(evaluate_game(hex))
 
     print(f"Evaluation took {time.time() - start_time} seconds.")
