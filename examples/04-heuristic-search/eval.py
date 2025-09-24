@@ -51,7 +51,6 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
         state, key = args
         key, k1, k2 = jax.random.split(key, 3)
 
-        # ToDo: Find a more efficient way. Right now, we're calling both policies every step.
         # Get the action from the policy of the current player
         action1 = policy_p1(state, k1)
         action2 = policy_p2(state, k2)

@@ -1,6 +1,3 @@
-/Users/alex/PycharmProjects/ludax/.venv/bin/python /Users/alex/PycharmProjects/ludax/examples/06-game_generation/gavel_eval.py
-
-
 ====================================================================================================
 Evaluating game:
  ( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 5 ) ) ) ( rules ( start ( place P1 ( 11 ) ) ( place P2 ( 2 ) ) ( place P2 ( 2 ) ) ( place P1 ( 11 8 ) ) ( place P1 ( 5 10 2 11 1 ) ) ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 0 ( draw ) ) ( if 10 ( draw ) ) ( if 6 ( draw ) ) ( if 1 ( opponent lose ) ) ) ) ( rendering ( color P2 black ) ) )

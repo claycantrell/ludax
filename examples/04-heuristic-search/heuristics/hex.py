@@ -9,7 +9,6 @@ def connectivity_heuristic(state_b):
         player = state.game_state.current_player
 
         # Keep labels only on the current player's stones; 0 elsewhere.
-        # ToDo why !=
         flat = jnp.where(board != player, labels, 0).ravel().astype(jnp.int32)
 
         # Count presence of each label. Use a static length: #cells + 1 (for label 0).

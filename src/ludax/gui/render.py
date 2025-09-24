@@ -131,9 +131,6 @@ class InteractiveBoardHandler():
     def _hex_to_pixel(self, hex_point):
         '''
         Converts hexagonal coordinates to pixel coordinates
-
-        TODO: had to fix the x, y ordering in grid_to_pixel and pixel_to_grid, so will
-              probably need to fix this as well
         '''
 
         q, r, s = hex_point

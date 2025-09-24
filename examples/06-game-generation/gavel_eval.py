@@ -111,7 +111,6 @@ def evaluate_policy(policy_p1, policy_p2, state_b, step_b, key) -> tuple:
         state, key = args
         key, k1, k2 = jax.random.split(key, 3)
 
-        # ToDo: Find a more efficient way. Right now, we're calling both policies every step.
         # Get the action from the policy of the current player
         action1 = policy_p1(state, k1)
         action2 = policy_p2(state, k2)
@@ -136,25 +135,10 @@ def evaluate_game(game_str):
     except Exception as e:
         return -3, None
 
-    # r_policy = random_policy()
-    # g_policy = simple_mctx_policy(step_b, num_simulations=100)
-    # g_policy = lookahead_mctx_policy(step_b, num_simulations=10)
     g_policy = uct_mcts_policy(env, num_simulations=100, max_depth=25)
     g2_policy = uct_mcts_policy(env, num_simulations=50, max_depth=25)
 
-    # try:
-    #     (r_balance, _, _, r_agency, _, (wins, draws, losses, truncated, total)), key = gavel_metrics(r_policy, state_b, step_b, key)
-    # except Exception as e:
-    #     print("Error during first evaluation:", e)
-    #     return -2, None
-    #
-    # if r_balance < 0.5 or r_agency < 0.5 or wins + losses + draws + truncated < total:
-    #     return -1, None
-    #
-    # print("Passed random policy sanity check.")
-
     try:
-        # ToDO why is P1 always winning instead of drawing?
         (balance, decisiveness, completion, agency, coverage, _), key = gavel_metrics(g_policy, state_b, step_b, key)
 
         # Evaluate strategic depth
@@ -182,20 +166,6 @@ def evaluate_game(game_str):
 
 
 if __name__ == "__main__":
-
-    # games = [
-    #     '( game "RandomGame" ( players 2 ) ( equipment ( board ( rectangle 10 5 ) ) ) ( rules ( start ( place P1 ( 11 ) ) ( place P2 ( 2 ) ) ( place P2 ( 2 ) ) ( place P1 ( 11 8 ) ) ( place P1 ( 5 10 2 11 1 ) ) ( place P1 ( 3 ) ) ) ( play ( once_through ( P1 P1 ) ( place mover ( destination empty ) ) ( force_pass ) ) ) ( end ( if 0 ( draw ) ) ( if 10 ( draw ) ) ( if 6 ( draw ) ) ( if 1 ( opponent lose ) ) ) ) ( rendering ( color P2 black ) ) )',
-    #     '( game "RandomGame" ( players 2 ) ( equipment ( board ( square 6 ) ) ) ( rules ( start ( place P1 ( 9 ) ) ( place P1 ( 1 ) ) ( place P2 ( 3 ) ) ) ( play ( repeat ( P2 ) ( place mover ( destination corners ) ( effects ( capture corners ) ) ) ) ) ( end ( if 2 ( draw ) ) ( if 8 ( draw ) ) ( if 2 ( draw ) ) ) ) ( rendering ( color P1 black ) ( color P1 black ) ( color P1 white ) ( color P1 white ) ) )',
-    #     '( game "RandomGame" ( players 2 ) ( equipment ( board ( hexagon 11 ) ) ) ( rules ( start ( place P1 ( 2 11 ) ) ) ( play ( repeat ( P2 P1 ) ( place ( destination empty ) ) ( force_pass ) ) ) ( end ( if 3 ( draw ) ) ) ) ( rendering ( color P2 black ) ) )',
-    #     '( game "RandomGame" ( players 2 ) ( equipment ( board ( hex_rectangle 11 10 ) ) ) ( rules ( play ( repeat ( P2 P1 P2 ) ( place ( destination empty ) ( effects ( flip empty ) ) ) ( force_pass ) ) ) ( end ( if 8 ( draw ) ) ( if ( not ( not 9 ) ) ( mover win ) ) ) ) )'
-    #     '( game "RandomGame" ( players 2 ) ( equipment ( board ( square 9 ) ) ) ( rules ( start ( place P1 ( 4 4 ) ) ) ( play ( once_through ( P1 P1 P1 P2 ) ( place mover ( destination empty ) ( result 7 ) ) ) ) ( end ( if 7 ( draw ) ) ) ) ( rendering ( color P2 black ) ( color P1 white ) ( color P2 black ) ( color P2 black ) ) )'
-    # ]
-    #
-    # for game in games:
-    #     print("\n\n" + "=" * 100)
-    #     print("Evaluating game:\n", game)
-    #     score, breakdown = evaluate_game(game)
-    #     print(f"Final score: {score}, breakdown: {breakdown}")
 
     start_time = time.time()
     print(evaluate_game(hex))

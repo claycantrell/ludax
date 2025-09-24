@@ -441,8 +441,6 @@ class GameRuleParser(Transformer):
         Move a piece from one position to another by jumping over a piece
 
         TODO: add a 'hopped' field to the state so that hopped pieces can be captured later
-
-        TODO: sort out the distinction between directions and orientations
         '''
 
         if len(children) == 0:
@@ -475,27 +473,6 @@ class GameRuleParser(Transformer):
             mask = mask.at[right_match_starts, right_match_dests].set(1)
 
             return mask
-
-
-        # def legal_hop_mask_fn(state, start):
-        #     occupied_mask = (state.board != EMPTY).astype(jnp.int16)
-
-        #     # We're looking for occupied cells with exactly one piece in the outer indices, and
-        #     # we filter to only include arrangements that actually contain the start position
-        #     contains_start = (outer_indices == start).any(axis=1)[:, jnp.newaxis]
-        #     outer_match = ((occupied_mask[outer_indices] == 1).sum(axis=1) == 1)[:, jnp.newaxis]
-        #     inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)[:, jnp.newaxis]
-        #     full_match = contains_start & outer_match & inner_match
-
-        #     # Ensure invalid indices are set to one larger than the board size so that they're not indexed
-        #     matched_indices = jnp.where(full_match, outer_indices, self.game_info.board_size+1).flatten()
-        #     mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
-        #     mask = mask.at[matched_indices].set(1)
-
-        #     # Make sure the start position is not included in the mask
-        #     mask = mask.at[start].set(0)
-
-        #     return mask
         
         return legal_hop_mask_fn
 
@@ -505,8 +482,6 @@ class GameRuleParser(Transformer):
         limited by the board boundaries and the non-empty cell encountered
 
         TODO: add limited number of spaces that can be moved
-
-        TODO: do this as one big matrix operation instead of taking 'start' as an argument
         '''
         if len(children) == 0:
             direction = Directions.ANY
