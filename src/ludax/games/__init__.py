@@ -17,6 +17,7 @@ reversi = _read_game('reversi')
 tic_tac_toe = _read_game('tic_tac_toe')
 yavalath = _read_game('yavalath')
 yavalax = _read_game('yavalax')
+test = _read_game('test')
 
 # List of all games available in the package
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "reversi",
     "tic_tac_toe",
     "yavalath",
-    "yavalax"
+    "yavalax",
+    "test",
 ]

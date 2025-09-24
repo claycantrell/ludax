@@ -1,0 +1,62 @@
+
+Evaluating game: connect_four
+wins: 26, draws: 2, losses: 22, truncated: 0, total_games: 50
+Balance: 0.9200000166893005, Decisiveness: 0.9599999785423279, Completion: 1.0, Agency: 0.9950915575027466, Coverage: 0.49047619104385376, Strategic Depth: 0.7448979616165161
+Gavel score: 0.798418402671814, metrics: (Array(0.92, dtype=float32), Array(0.96, dtype=float32), Array(1., dtype=float32), Array(0.99509156, dtype=float32), Array(0.4904762, dtype=float32), Array(0.74489796, dtype=float32))
+
+
+Evaluating game: connect_six
+wins: 24, draws: 0, losses: 26, truncated: 0, total_games: 50
+Balance: 0.9599999785423279, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.25983378291130066, Strategic Depth: 0.4399999976158142
+Gavel score: 0.5903763771057129, metrics: (Array(0.96, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.25983378, dtype=float32), Array(0.44, dtype=float32))
+
+
+Evaluating game: hex
+wins: 23, draws: 0, losses: 27, truncated: 0, total_games: 50
+Balance: 0.9200000166893005, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.7948759198188782, Strategic Depth: 0.85999995470047
+Gavel score: 0.9219698309898376, metrics: (Array(0.92, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.7948759, dtype=float32), Array(0.85999995, dtype=float32))
+
+
+Evaluating game: gomoku
+wins: 27, draws: 0, losses: 23, truncated: 0, total_games: 50
+Balance: 0.9200000166893005, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.24346667528152466, Strategic Depth: 0.5899999737739563
+Gavel score: 0.6067218780517578, metrics: (Array(0.92, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.24346668, dtype=float32), Array(0.59, dtype=float32))
+
+
+Evaluating game: pente
+wins: 28, draws: 0, losses: 22, truncated: 0, total_games: 50
+Balance: 0.8799999952316284, Decisiveness: 1.0, Completion: 1.0, Agency: 0.9683715105056763, Coverage: 0.10155124217271805, Strategic Depth: 0.6499999761581421
+Gavel score: 0.3857346773147583, metrics: (Array(0.88, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.9683715, dtype=float32), Array(0.10155124, dtype=float32), Array(0.65, dtype=float32))
+
+
+Evaluating game: reversi
+wins: 20, draws: 3, losses: 27, truncated: 0, total_games: 50
+Balance: 0.8600000143051147, Decisiveness: 0.9399999976158142, Completion: 1.0, Agency: 0.92618328332901, Coverage: 0.9993749856948853, Strategic Depth: 0.5567010641098022
+Gavel score: 0.8446847200393677, metrics: (Array(0.86, dtype=float32), Array(0.94, dtype=float32), Array(1., dtype=float32), Array(0.9261833, dtype=float32), Array(0.999375, dtype=float32), Array(0.55670106, dtype=float32))
+
+
+Evaluating game: tic_tac_toe
+wins: 15, draws: 33, losses: 2, truncated: 0, total_games: 50
+Balance: 0.7400000095367432, Decisiveness: 0.3400000035762787, Completion: 1.0, Agency: 0.9266666173934937, Coverage: 0.7999999523162842, Strategic Depth: 0.7948718070983887
+Gavel score: 0.6756962537765503, metrics: (Array(0.74, dtype=float32), Array(0.34, dtype=float32), Array(1., dtype=float32), Array(0.9266666, dtype=float32), Array(0.79999995, dtype=float32), Array(0.7948718, dtype=float32))
+
+
+Evaluating game: yavalath
+wins: 24, draws: 0, losses: 26, truncated: 0, total_games: 50
+Balance: 0.9599999785423279, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.30098357796669006, Strategic Depth: 0.8499999642372131
+Gavel score: 0.7025285959243774, metrics: (Array(0.96, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.30098358, dtype=float32), Array(0.84999996, dtype=float32))
+
+
+Evaluating game: yavalax
+wins: 22, draws: 0, losses: 28, truncated: 0, total_games: 50
+Balance: 0.8799999952316284, Decisiveness: 1.0, Completion: 1.0, Agency: 1.0, Coverage: 0.3719526529312134, Strategic Depth: 0.4699999988079071
+Gavel score: 0.6702010631561279, metrics: (Array(0.88, dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(1., dtype=float32), Array(0.37195265, dtype=float32), Array(0.47, dtype=float32))
+Generated 9 games with:
+Compilable: 9/9
+Average Gavel score: 0.688481330871582 ± 0.14894525706768036
+Average Balance: 0.8933333158493042 ± 0.06324554979801178
+Average Decisiveness: 0.9155555367469788 ± 0.20456518232822418
+Average Completion: 1.0 ± 0.0
+Average Agency: 0.9795902967453003 ± 0.030003990978002548
+Average Coverage: 0.48472389578819275 ± 0.29108452796936035
+Average Strategic Depth: 0.6618300676345825 ± 0.14968061447143555
