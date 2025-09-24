@@ -18,22 +18,36 @@ rules: "(" "rules" start_rules? play_rules end_rules ")"
 // ---Start rules---
 start_rules: "(" "start" start_rule+ ")"
 start_rule: start_place
-start_place: "(" "place" player_reference pattern_arg ")"
+start_place: "(" "place" player_reference (pattern_arg | multi_mask_arg) ")"
 
 // ---Play rules---
 play_rules: "(" "play" play_phase+ ")"
 play_phase: phase_once_through | phase_repeat
-phase_once_through: "(" "once_through" play_mover_order play_mechanic ")"
-phase_repeat: "(" "repeat" play_mover_order play_mechanic ")"
+phase_once_through: "(" "once_through" play_mover_order play_super_mechanic ")"
+phase_repeat: "(" "repeat" play_mover_order play_super_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
-play_mechanic: play_place force_pass? 
-play_place: "(" "place" mover_reference? place_destination_constraint place_result_constraint? play_effects?")"
+play_super_mechanic: play_mechanic force_pass?
+play_mechanic: play_place | play_move
 force_pass: "(" "force_pass" ")"
 
-// ---Constraints---
+// ---Place rules---
+play_place: "(" "place" mover_reference? place_destination_constraint place_result_constraint? play_effects? ")"
 place_destination_constraint: "(" "destination" super_mask ")"
 place_result_constraint: "(" "result" super_predicate ")"
+
+// ---Move rules---
+play_move: "(" "move" move_types move_source_constraint move_destination_constraint move_result_constraint? play_effects? ")"
+move_types: move_type | "(" move_type+ ")"
+move_type: move_hop
+         | move_slide
+
+move_hop: "hop" | "(" "hop" direction_arg ")"
+move_slide: "slide" | "(" "slide" direction_arg ")"
+
+move_source_constraint: "(" "source" super_mask ")"
+move_destination_constraint: "(" "destination" super_mask ")"
+move_result_constraint: "(" "result" super_predicate ")"
 
 // ---Effects---
 play_effects: "(" "effects" play_effect+ ")"
@@ -85,23 +99,29 @@ super_mask_not: "(" "not" super_mask ")"
 
 mask: mask_adjacent
     | mask_center
+    | mask_column
     | mask_corners
+    | mask_corner_custodial
     | mask_custodial
     | mask_edge
     | mask_empty
     | mask_occupied
     | mask_pattern
     | mask_prev_move
+    | mask_row
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
 mask_center: "center"
+mask_column: "(" "column" positive_int ")"
 mask_corners: "corners"
+mask_corner_custodial: "corner_custodial" | "(" "corner_custodial" mover_reference ")"
 mask_custodial: "(" "custodial" custodial_length_arg mover_reference? orientation_arg? ")"
 mask_edge: "(" "edge" edge ")"
 mask_empty: "empty"
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")"
 mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
+mask_row: "(" "row" positive_int ")"
 
 // "Multi-masks" are special keywords that are manually split into multiple
 // sub-masks at compile time. This is mostly useful for the "connected" function,
@@ -143,8 +163,9 @@ custodial_length_arg: ANY | positive_int
 dimensions_arg: "(" positive_int positive_int ")"
 direction_arg: "direction:" direction
 exact_arg: "exact:" boolean
+exclude_arg: "exclude:" multi_mask_arg
 increment_score_arg: "increment_score:" boolean
-multi_mask_arg: multi_mask | "(" super_mask+ ")"
+multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
 pattern_arg: "(" positive_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)

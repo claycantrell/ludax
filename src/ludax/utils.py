@@ -156,13 +156,11 @@ def _get_adjacency_lookup(game_info: GameInfo):
 
     return adjacency_array
 
-def _get_adjacency_direction_indices(game_info: GameInfo, optional_args: dict):
+def _get_direction_indices(game_info: GameInfo, direction: Directions):
     '''
     Returns the indices corresponding to the channels in the adjacency lookup for the given (meta)direction
     '''
     all_directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
-
-    direction = optional_args[OptionalArgs.DIRECTION]
     query_directions = META_DIRECTION_MAPPING.get(direction, [direction])
 
     direction_indices = []
@@ -173,7 +171,59 @@ def _get_adjacency_direction_indices(game_info: GameInfo, optional_args: dict):
     direction_indices = jnp.array(list(sorted(direction_indices)), dtype=jnp.int16)
 
     return direction_indices
-    
+
+def _get_slide_lookup(game_info: GameInfo):
+    '''
+    Returns an array that can be used to get the board indices that are in a line with
+    a given position on the board in a given direction. The resulting array will be of
+    shape [C, M, N] where C is the number of channels (8 for rectangular boards, 6 for
+    hexagonal boards), M is the number of positions on the board, and N is the maximum
+    number of positions in a line in that direction.
+
+    TODO: work for hexagonal boards
+    '''
+    directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
+    num_board_positions = game_info.board_size
+    n_rows, n_cols = game_info.board_dims
+    num_line_positions = max(game_info.board_dims) if game_info.board_shape != BoardShapes.HEXAGON else game_info.hex_diameter
+
+    slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=jnp.int16)
+
+    for channel_idx, direction in enumerate(directions):
+        for i in range(num_board_positions):
+            row, col = jnp.unravel_index(i, game_info.board_dims)
+
+            if direction == Directions.UP_LEFT:
+                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, -1, -1))]
+
+            elif direction == Directions.UP:
+                indices = [jnp.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, -1, -1)]
+
+            elif direction == Directions.UP_RIGHT:
+                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, n_cols))]
+
+            elif direction == Directions.LEFT:
+                indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, -1, -1)]
+
+            elif direction == Directions.RIGHT:
+                indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, n_cols)]
+
+            elif direction == Directions.DOWN_LEFT:
+                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, -1, -1))]
+
+            elif direction == Directions.DOWN:
+                indices = [jnp.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, n_rows)]
+
+            elif direction == Directions.DOWN_RIGHT:
+                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, n_cols))]
+
+            # Pad the indices with num_board_positions+1 to ensure that the resulting array has the correct shape
+            indices = jnp.array(indices + [num_board_positions + 1] * (num_line_positions - len(indices)), dtype=jnp.int16)
+
+            slide_lookup = slide_lookup.at[channel_idx, i].set(indices)
+
+    return slide_lookup
+
 def _get_mask_board_conversion_fns(game_info: GameInfo):
     '''
     Return functions for the current game that can be used to convert between a flattened
@@ -225,18 +275,38 @@ def _get_mask_board_conversion_fns(game_info: GameInfo):
         base_board = jnp.ones_like(base, dtype=jnp.int16) * INVALID
 
         def mask_to_board(mask):
-            return base_board.at[tuple(valid_hex_indices)].set(mask)
+            return base_board.at[*valid_hex_indices].set(mask)
         
         def mask_idx_to_board_pos(idx):
             return valid_hex_indices.T[idx]
         
         def board_to_mask(board):
-            return board[tuple(valid_hex_indices)].flatten()
+            return board[*valid_hex_indices].flatten()
         
         return mask_to_board, mask_idx_to_board_pos, board_to_mask
 
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
+
+def _get_column_indices(game_info: GameInfo, column_idx: int):
+    '''
+    Return the mask indices corresponding to the given column on the current game's board. Recall that
+    in the canonical orientation of hexagonal boards, there are no columns
+    '''
+    if game_info.board_shape == BoardShapes.SQUARE or game_info.board_shape == BoardShapes.RECTANGLE:
+        height, width = game_info.board_dims
+        indices = jnp.arange(column_idx, height * width, width)
+
+    elif game_info.board_shape == BoardShapes.HEXAGON:
+        indices = jnp.array([])
+
+    elif game_info.board_shape == BoardShapes.HEX_RECTANGLE:
+        indices = jnp.array([])
+
+    else:
+        raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
+
+    return indices.astype(jnp.int16)
 
 def _get_corner_indices(game_info: GameInfo):
     '''
@@ -358,6 +428,30 @@ def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
+    return indices.astype(jnp.int16)
+
+def _get_row_indices(game_info: GameInfo, row_idx: int):
+    '''
+    Return the mask indices corresponding to the given row on the current game's board
+    '''
+    if game_info.board_shape == BoardShapes.SQUARE or game_info.board_shape == BoardShapes.RECTANGLE:
+        height, width = game_info.board_dims
+        indices = jnp.arange(row_idx * width, (row_idx + 1) * width)
+
+    elif game_info.board_shape == BoardShapes.HEXAGON:
+        diameter = game_info.hex_diameter
+        row_widths = [diameter - x for x in range(diameter // 2, -1, -1)] + [diameter - x for x in range(1, diameter // 2 + 1)]
+        row_starts = [0] + np.cumsum(row_widths)[:-1].tolist()
+
+        indices = jnp.arange(row_starts[row_idx], row_starts[row_idx] + row_widths[row_idx])
+
+    elif game_info.board_shape == BoardShapes.HEX_RECTANGLE:
+        height, width = game_info.board_dims
+        indices = jnp.arange(row_idx * width, (row_idx + 1) * width)
+
+    else:
+        raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
+    
     return indices.astype(jnp.int16)
 
 def _get_valid_edge_types(game_info: GameInfo):

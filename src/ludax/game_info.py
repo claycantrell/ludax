@@ -17,6 +17,7 @@ class GameInfo:
     hex_diameter: int = None
     game_state_class: type = None
     game_state_attributes: list = None
+    move_type: str = None
 
     def __repr__(self):
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
@@ -34,7 +35,7 @@ class GameInfoExtractor(Visitor):
             "current_player",
             "phase_idx",
             "phase_step_count",
-            "previous_actions"
+            "previous_actions"  # the action position of the previous action (i.e. destination for piece movement)
         ]
 
         self.defaults = []
@@ -117,7 +118,16 @@ class GameInfoExtractor(Visitor):
             self.game_state_attributes.append("scores")
             self.defaults.append(jnp.zeros(2, dtype=jnp.float32))
 
-
+    def play_mechanic(self, tree):
+        child = tree.children[0]
+        
+        if child.data == "play_place":
+            self.game_info.move_type = "place"
+        elif child.data == "play_move":
+            self.game_info.move_type = "move"
+        else:
+            raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
+        
     '''
     Rendering and graphics related functions
     '''

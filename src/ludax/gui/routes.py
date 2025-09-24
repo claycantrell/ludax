@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 from flask import render_template, request, jsonify
 from markupsafe import Markup
+import numpy as np
 
 from .. import environment
 from ..config import BoardShapes, RENDER_CONFIG
@@ -13,6 +14,10 @@ from . import app
 from .render import InteractiveBoardHandler
 
 ENV, HANDLER, STATE = None, None, None
+MOVE_INFO = {
+    "stage": "selecting_piece",
+    "select_idx": None
+}
 
 from ludax import games
 
@@ -96,14 +101,22 @@ def render_game(id):
     global ENV
     global HANDLER
     global STATE
+    global MOVE_INFO
 
     print(f"Loading the following game:\n{getattr(games, id)}")
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
 
     STATE = ENV.init(jax.random.PRNGKey(42))
+
+    # breakpoint()
     
-    HANDLER.render(STATE)
+    if HANDLER.game_info.move_type == "place":
+        HANDLER.render(STATE)
+    elif HANDLER.game_info.move_type == "move":
+        legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
+        HANDLER.render(STATE, legal_actions=legal_selections)
+        
     time.sleep(0.1)
 
     return render_template('game.html', game_svg=Markup(HANDLER.rendered_svg))
@@ -113,6 +126,8 @@ def step():
     global ENV
     global HANDLER
     global STATE
+    global MOVE_INFO
+
     if ENV is None:
         return "No game loaded"
     
@@ -124,7 +139,13 @@ def step():
     action_idx = HANDLER.pixel_to_action((x, y))
 
     # Check if the action is legal
-    legal_action_mask = STATE.legal_action_mask
+    if HANDLER.game_info.move_type == "place":
+        legal_action_mask = STATE.legal_action_mask
+    elif HANDLER.game_info.move_type == "move":
+        if MOVE_INFO['stage'] == "selecting_piece":
+            legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
+        elif MOVE_INFO['stage'] == "selecting_destination":
+            legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[MOVE_INFO["select_idx"]]
 
     # Temporary workaround: if there is only one legal action, then
     # we always take it
@@ -153,11 +174,31 @@ def step():
                 "error": "Illegal move! Please select a valid action."
             })
 
-        action = HANDLER.action_indices[action_idx]
 
-    STATE = ENV.step(STATE, action_idx)
+    # Perform the action, based on the move type and (in the case of movement games) whether the player
+    # is selecting a piece or a destination
+    if HANDLER.game_info.move_type == "place":
+        STATE = ENV.step(STATE, action_idx)
+        HANDLER.render(STATE)
 
-    HANDLER.render(STATE)
+    elif HANDLER.game_info.move_type == "move":
+        if MOVE_INFO['stage'] == "selecting_piece":
+            MOVE_INFO["select_idx"] = action_idx
+            legal_moves = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[action_idx]
+            HANDLER.render(STATE, legal_actions=legal_moves)
+            MOVE_INFO['stage'] = "selecting_destination"
+
+        elif MOVE_INFO['stage'] == "selecting_destination":
+            final_action_idx = np.ravel_multi_index((MOVE_INFO["select_idx"], action_idx), (ENV.board_size, ENV.board_size))
+            STATE = ENV.step(STATE, final_action_idx)
+            legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
+            HANDLER.render(STATE, legal_actions=legal_selections)
+            MOVE_INFO['stage'] = "selecting_piece"
+
+    else:
+        raise ValueError(f"Unknown move type: {HANDLER.game_info.move_type}")
+
+
     time.sleep(0.1)
 
     terminated = bool(STATE.terminated)
@@ -181,11 +222,24 @@ def reset():
     global ENV
     global HANDLER
     global STATE
+    global MOVE_INFO
+
     if ENV is None:
         return "No game loaded"
     
     STATE = ENV.init(jax.random.PRNGKey(42))
-    HANDLER.render(STATE)
+
+    if HANDLER.game_info.move_type == "place":
+        HANDLER.render(STATE)
+    elif HANDLER.game_info.move_type == "move":
+        legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
+        HANDLER.render(STATE, legal_actions=legal_selections)
+
+    MOVE_INFO = {
+        "stage": "selecting_piece",
+        "select_idx": None
+    }
+
     time.sleep(0.1)
 
     return {"svg": HANDLER.rendered_svg}

@@ -23,6 +23,8 @@ EMPTY = jnp.int16(-1)
 P1 = jnp.int16(0)
 P2 = jnp.int16(1)
 
+MAX_STEP_COUNT = 200
+
 @dataclass
 class State():
     '''
@@ -137,20 +139,23 @@ class Predicates(StrEnum):
 class OptionalArgs(StrEnum):
     DIRECTION = 'direction_arg'
     EXACT = 'exact_arg'
-    INCREMENT_SCORE_ARG = 'increment_score_arg'
+    EXCLUDE = 'exclude_arg'
+    INCREMENT_SCORE = 'increment_score_arg'
     ORIENTATION = 'orientation_arg'
     MOVER = 'mover_arg'
+    MULTI_MASK = 'multi_mask_arg'
+    PATTERN = 'pattern_arg'
     PLAYER = 'player_arg'
     ROTATE = 'rotate_arg'
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover'},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CUSTODIAL: {OptionalArgs.MOVER: 'mover', OptionalArgs.ORIENTATION: 'any'},
     Masks.LOOP: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
-    PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE_ARG: False},
+    PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
 }
 

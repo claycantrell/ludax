@@ -14,6 +14,7 @@ from thefuzz import process
 from tqdm import tqdm
 
 from ludax import LudaxEnvironment
+from ludax import games
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -113,7 +114,7 @@ def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_s
 
 def cached_eval(args):
     cache_file = (
-        f"examples/figures/data/benchmarks/connect6/{args.game}/cache-"
+        f"./data/benchmarks/{args.game}/cache-"
         f"{args.game}-{args.num_games}-{args.num_warmup_games}-"
         f"{args.batch_size_step}-{args.num_batch_sizes}.npz"
     )
@@ -140,7 +141,7 @@ def cached_eval(args):
 
         print(f"=========================EVALUATING LUDII-JAX on '{args.game}'=========================")
         try:
-            ldx_env = LudaxEnvironment(f"games/{args.game}.ldx")
+            ldx_env = LudaxEnvironment(game_str=getattr(games, args.game))
             ldx_times, ldx_warmup_times, ldx_total_steps = evaluate(ldx_env, *eval_args)
         except Exception as e:
             print(f"Ludii-JAX evaluation failed: {e}")
