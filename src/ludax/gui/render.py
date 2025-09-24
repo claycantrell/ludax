@@ -249,10 +249,11 @@ class InteractiveBoardHandler():
             ]
 
         return points
-    
-    def render(self, state, add_button=True, show_legal_actions=True):
+
+    def render(self, state, add_button=True, show_legal_actions=True, legal_actions=None):
         board = state.game_state.board
-        legal_actions = state.legal_action_mask if show_legal_actions else None
+        if legal_actions is None and show_legal_actions:
+            legal_actions = state.legal_action_mask
         self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button)
 
 
