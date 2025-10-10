@@ -124,10 +124,17 @@ class Functions(StrEnum):
 
 class Masks(StrEnum):
     ADJACENT = 'mask_adjacent'
+    CORNER_CUSTODIAL = 'mask_corner_custodial'
     CUSTODIAL = 'mask_custodial'
     EMPTY = 'mask_empty'
     LOOP = 'mask_loop'
+    OCCUPIED = 'mask_occupied'
     PATTERN = 'mask_pattern'
+
+class MoveTypes(StrEnum):
+    HOP = 'move_hop'
+    SLIDE = 'move_slide'
+    PLACE = 'move_place'
 
 class PlayEffects(StrEnum):
     CAPTURE = 'effect_capture'
@@ -138,6 +145,7 @@ class Predicates(StrEnum):
 
 class OptionalArgs(StrEnum):
     DIRECTION = 'direction_arg'
+    DISTANCE = 'distance_arg'
     EXACT = 'exact_arg'
     EXCLUDE = 'exclude_arg'
     INCREMENT_SCORE = 'increment_score_arg'
@@ -151,10 +159,17 @@ class OptionalArgs(StrEnum):
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
     Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
+
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
+    Masks.CORNER_CUSTODIAL: {OptionalArgs.MOVER: 'mover'},
     Masks.CUSTODIAL: {OptionalArgs.MOVER: 'mover', OptionalArgs.ORIENTATION: 'any'},
     Masks.LOOP: {OptionalArgs.MOVER: 'mover'},
+    Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
+
+    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any'},
+    MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None},
+
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
 }

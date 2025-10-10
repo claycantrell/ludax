@@ -42,8 +42,8 @@ move_types: move_type | "(" move_type+ ")"
 move_type: move_hop
          | move_slide
 
-move_hop: "hop" | "(" "hop" direction_arg ")"
-move_slide: "slide" | "(" "slide" direction_arg ")"
+move_hop: "(" "hop" direction_arg? ")"
+move_slide: "(" "slide" direction_arg? distance_arg? ")"
 
 move_source_constraint: "(" "source" super_mask ")"
 move_destination_constraint: "(" "destination" super_mask ")"
@@ -112,16 +112,16 @@ mask: mask_adjacent
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
 mask_center: "center"
-mask_column: "(" "column" positive_int ")"
+mask_column: "(" "column" nonnegative_int ")"
 mask_corners: "corners"
-mask_corner_custodial: "corner_custodial" | "(" "corner_custodial" mover_reference ")"
+mask_corner_custodial: "(" "corner_custodial" mover_reference? ")"
 mask_custodial: "(" "custodial" custodial_length_arg mover_reference? orientation_arg? ")"
 mask_edge: "(" "edge" edge ")"
 mask_empty: "empty"
-mask_occupied: "occupied" | "(" "occupied" mover_reference ")"
+mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
 mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
-mask_row: "(" "row" positive_int ")"
+mask_row: "(" "row" nonnegative_int ")"
 
 // "Multi-masks" are special keywords that are manually split into multiple
 // sub-masks at compile time. This is mostly useful for the "connected" function,
@@ -162,6 +162,7 @@ predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 custodial_length_arg: ANY | positive_int
 dimensions_arg: "(" positive_int positive_int ")"
 direction_arg: "direction:" direction
+distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
 exclude_arg: "exclude:" multi_mask_arg
 increment_score_arg: "increment_score:" boolean
@@ -179,7 +180,8 @@ color_assignment: "(" "color" player_reference color ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
-?positive_int: /[0-9]+/
+?nonnegative_int: /[0-9]+/
+?positive_int: /[1-9]+/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY

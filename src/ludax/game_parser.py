@@ -443,10 +443,8 @@ class GameRuleParser(Transformer):
         TODO: add a 'hopped' field to the state so that hopped pieces can be captured later
         '''
 
-        if len(children) == 0:
-            direction = Directions.ANY
-        else:
-            direction = children[0][1]
+        optional_args = self._parse_optional_args(children)
+        direction = optional_args[OptionalArgs.DIRECTION]
         
         # We use same logic as in mask_custodial since that's what hopping looks like
         inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
@@ -483,13 +481,18 @@ class GameRuleParser(Transformer):
 
         TODO: add limited number of spaces that can be moved
         '''
-        if len(children) == 0:
-            direction = Directions.ANY
-        else:
-            direction = children[0][1]
 
-        slide_lookup = utils._get_slide_lookup(self.game_info)
+        optional_args = self._parse_optional_args(children)
+
+        distance = optional_args[OptionalArgs.DISTANCE]
+        if distance is None:
+            distance = max(self.game_info.observation_shape[:2])
+
+        direction = optional_args[OptionalArgs.DIRECTION]
         direction_indices = utils._get_direction_indices(self.game_info, direction)
+        
+        slide_lookup = utils._get_slide_lookup(self.game_info)
+        slide_lookup = slide_lookup[:, :, :distance+1]
 
         def legal_slide_mask_fn_single(state, start):
             # Temporarily remove the piece at the start position
@@ -903,11 +906,9 @@ class GameRuleParser(Transformer):
         piece in the corner is flanked by the mover's pieces along both edges
         '''
 
-        if len(children) == 0:
-            mover_ref = PlayerAndMoverRefs.MOVER
-        else:
-            mover_ref = children[0]
+        optional_args = self._parse_optional_args(children)
 
+        mover_ref = optional_args[OptionalArgs.MOVER]
         if mover_ref == PlayerAndMoverRefs.MOVER:
             offset = 0
         elif mover_ref == PlayerAndMoverRefs.OPPONENT:
@@ -1090,6 +1091,7 @@ class GameRuleParser(Transformer):
         by the specified player. If no player is specified,
         then the mask checks for either player
         '''
+
         if len(children) == 0:
             def mask_fn(state):
                 return (state.board != EMPTY).astype(jnp.int16)
