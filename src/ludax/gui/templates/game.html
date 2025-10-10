@@ -67,17 +67,17 @@
                 if (winners[0] == 1 && winners[1] == 0) {
                     alert('Player 1 wins!');
                 }
-                else if (winners == 1 && winners[0] == 0) {
+                else if (winners[1] == 1 && winners[0] == 0) {
                     alert('Player 2 wins!');
                 }
                 else if (winners[0] == 1 && winners[1] == 1) {
                     alert('Both players win!');
                 }
                 else if (winners[0] == 0 && winners[1] == 0) {
-                    alert('No one wins!');
+                    alert('Draw!');
                 }
                 else {
-                    alert('Draw!');
+                    alert('Unexpected ending result!');
                 }
 
                 // Reset the game
