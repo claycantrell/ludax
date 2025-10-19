@@ -49,7 +49,7 @@ def run_batch(state, step, key):
 
 def retrieve_ludii(args):
 
-    ludii_caches = [pd.read_csv(f"./data/{args.ludii_cache_prefix}_speeds_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
+    ludii_caches = [pd.read_csv(f"./examples/05-paper-figures/data/{args.ludii_cache_prefix}_speeds_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
     game_names = ludii_caches[0]['Name'].unique()
     closest_game = process.extractOne(args.game, game_names, scorer=process.fuzz.ratio)[0]
 
@@ -232,7 +232,7 @@ def plot_graphs(cmd_args, **kwargs):
 
 
     # ——— Create a new save directory ———
-    save_dir = os.path.join("./data/benchmarks", cmd_args.game)
+    save_dir = os.path.join("./examples/05-paper-figures/data/benchmarks", cmd_args.game)
     os.makedirs(save_dir, exist_ok=True)
 
     # ——— Plot #1: Mean Throughput (Playouts) ———
@@ -300,7 +300,7 @@ def plot_graphs(cmd_args, **kwargs):
     ax.set_title(f'Ludii‑JAX Warmup Times (bs={batch_sizes[batch_idx]})')
     fig.tight_layout()
     if cmd_args.save_graphs:
-        fig.savefig(f'./data/benchmarks/{cmd_args.game}-ldx_warmup_bs{batch_sizes[batch_idx]}.png')
+        fig.savefig(f'./examples/05-paper-figures/data/benchmarks/{cmd_args.game}-ldx_warmup_bs{batch_sizes[batch_idx]}.png')
     else:
         plt.show()
 
