@@ -478,8 +478,6 @@ class GameRuleParser(Transformer):
         '''
         Slide a piece in one of the specified directions (default to any) any number of spaces,
         limited by the board boundaries and the non-empty cell encountered
-
-        TODO: add limited number of spaces that can be moved
         '''
 
         optional_args = self._parse_optional_args(children)
@@ -491,41 +489,42 @@ class GameRuleParser(Transformer):
         direction = optional_args[OptionalArgs.DIRECTION]
         direction_indices = utils._get_direction_indices(self.game_info, direction)
         
+        # Restrict the slide lookup to only the specified distance
         slide_lookup = utils._get_slide_lookup(self.game_info)
         slide_lookup = slide_lookup[:, :, :distance+1]
 
-        def legal_slide_mask_fn_single(state, start):
-            # Temporarily remove the piece at the start position
+        # Precompute the static indices used in the sliding logic
+        actions = jnp.arange(self.game_info.board_size, dtype=jnp.int16)
+        slide_indices = slide_lookup[direction_indices, :, :]
+        general_indices = jnp.indices(slide_indices.shape, dtype=jnp.int16)[2]
+        ones_array = jnp.ones((len(direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
+
+        def legal_slide_mask_fn(state):
             occupied_mask = (state.board != EMPTY).astype(jnp.int16)
-            occupied_mask = occupied_mask.at[start].set(0)
-            slide_indices = slide_lookup[direction_indices, start]
 
             # Get the occupied mask at the slide indices and pad it with 'occupied' to
             # represent the edge of the board, then find the index of the first occupied cell
             occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
-            occupied_at_slide = jnp.concatenate([occupied_at_slide, jnp.ones((len(direction_indices), 1))], axis=1)
-            slide_until_idx = jnp.argmax(occupied_at_slide, axis=1)
+            occupied_at_slide = occupied_at_slide.at[:, actions, :].set(0)
+            
+            occupied_at_slide = jnp.concatenate([occupied_at_slide, ones_array], axis=2)
+            slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
 
             # Extract the board indices corresponding to legal slides, replacing the other
             # indices with a pad value that's larger than the board size
-            general_indices = jnp.indices(slide_indices.shape, dtype=jnp.int16)[1]
             final_indices = jnp.where(
-                general_indices < slide_until_idx[:, jnp.newaxis],
+                general_indices < slide_until_idx[:, :, jnp.newaxis],
                 slide_indices, self.game_info.board_size+1
-            ).flatten()
+            )
 
-            # Create the mask and finally zero out the original position. At this point, the
-            # illegal indices are set to the pad value and get ignored
-            mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16)
-            mask = mask.at[final_indices].set(1)
-            mask = mask.at[start].set(0)
+            final_indices = final_indices.transpose((1, 0, 2)).reshape(self.game_info.board_size, -1)
+
+            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
+            mask = mask.at[actions[:, jnp.newaxis], final_indices].set(1)
+            mask = mask.at[actions, actions].set(0)
 
             return mask
-        
-        def legal_slide_mask_fn(state):
-            mask = jax.vmap(legal_slide_mask_fn_single, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
-            return mask.astype(jnp.int16)
-        
+
         return legal_slide_mask_fn
 
 
@@ -1560,6 +1559,7 @@ class GameRuleParser(Transformer):
                 return (state.board == P2).astype(jnp.int16)
         else:
             raise ValueError(f"Invalid player reference: {player}")
+        
         if optional_args[OptionalArgs.EXCLUDE] is not None:
             _, exclude_mask_info = optional_args[OptionalArgs.EXCLUDE]
 
