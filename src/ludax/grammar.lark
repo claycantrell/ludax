@@ -50,7 +50,14 @@ move_destination_constraint: "(" "destination" super_mask ")"
 move_result_constraint: "(" "result" super_predicate ")"
 
 // ---Effects---
-play_effects: "(" "effects" play_effect+ ")"
+play_effects: "(" "effects" play_super_effect+ ")"
+play_super_effect: play_effect | play_conditional_effect
+
+// TODO: allow multiple effects within a single conditional?
+play_conditional_effect: play_if_effect | play_if_else_effect
+play_if_effect: "(" "if" super_predicate play_effect ")"
+play_if_else_effect: "(" "if" super_predicate play_effect "else" play_effect ")"
+
 play_effect: effect_capture 
            | effect_flip
            | effect_increment_score

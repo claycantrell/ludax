@@ -1,26 +1,21 @@
-(game "Skylink Bursts & Snares"
+(game "Conditional Test"
     (players 2)
     (equipment
-        (board (square 11))
+        (board (square 7))
     )
     (rules
         (play
-            (once_through (P1)
-                (place (destination center))
-            )
-            (repeat (P2 P2 P1 P1)
+            (repeat (P1 P2)
                 (place
                     (destination empty)
                     (effects
-                        (capture (custodial 2) increment_score:true)
+                        (if (line 2) (capture (custodial 2) increment_score:true))
                     )
                 )
             )
         )
         (end
-            (if (and (>= (connected ((edge top) (edge bottom))) 2) (mover_is P1)) (mover win))
-            (if (and (>= (connected ((edge left) (edge right))) 2) (mover_is P2)) (mover win))
-            (if (>= (score mover) 8) (mover win))
+            (if (line 4) (mover win))
             (if (full_board) (draw))
         )
     )

@@ -549,6 +549,45 @@ class GameRuleParser(Transformer):
         
         return apply_effects_fn
     
+    def play_if_effect(self, children):
+        '''
+        Apply an effect only if a given predicate is true
+        '''
+        (predicate_fn, _), effect_fn = children
+
+        def dummy_effect(state, original_player):
+            return state
+        
+        def apply_effects_fn(state, original_player):
+            pred_val = predicate_fn(state)
+            return jax.lax.cond(
+                pred_val,
+                effect_fn,
+                dummy_effect,
+                state,
+                original_player
+            )
+
+        return apply_effects_fn
+    
+    def play_if_else_effect(self, children):
+        '''
+        Apply one of two effects depending on the value of a given predicate
+        '''
+        (predicate_fn, _), effect_if_fn, effect_else_fn = children
+
+        def apply_effects_fn(state, original_player):
+            pred_val = predicate_fn(state)
+            return jax.lax.cond(
+                pred_val,
+                effect_if_fn,
+                effect_else_fn,
+                state,
+                original_player
+            )
+
+        return apply_effects_fn
+
     def effect_capture(self, children):
         '''
         Remove pieces from the board according to a mask
