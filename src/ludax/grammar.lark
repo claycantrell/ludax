@@ -99,7 +99,7 @@ result_draw: "(" "draw" ")"
 result_by_score: "(" "by_score" ")"
 
 // -- Mask definitions --
-super_mask: mask | super_mask_and | super_mask_or | super_mask_not
+super_mask: mask | mask_like_function | super_mask_and | super_mask_or | super_mask_not
 super_mask_and: "(" "and" super_mask+ ")"
 super_mask_or: "(" "or" super_mask+ ")"
 super_mask_not: "(" "not" super_mask ")"
@@ -130,6 +130,10 @@ mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_row: "(" "row" nonnegative_int ")"
 
+// "Mask-like" functions are special functions that also support returning a mask. Currently this is only
+// used for "line", but it might include other functions in the future
+mask_like_function: function_line
+
 // "Multi-masks" are special keywords that are manually split into multiple
 // sub-masks at compile time. This is mostly useful for the "connected" function,
 // which expects a list of masks to check for connections between
@@ -152,6 +156,7 @@ predicate: predicate_equals
          | predicate_full_board
          | predicate_function
          | predicate_greater_equals
+         | predicate_last_move_in
          | predicate_less_equals
          | predicate_mover_is
          | predicate_passed
@@ -161,6 +166,7 @@ predicate_exists: "(" "exists" super_mask ")" // technically equivalent to (>= (
 predicate_full_board: "(" "full_board" ")"
 predicate_function: function // special syntax which is equivalent to "(>= function 1)"
 predicate_greater_equals: "(" ">=" function function ")"
+predicate_last_move_in: "(" "last_move_in" super_mask ")" // equivalent to (exists (and (prev_move mover) mask)), but more readable
 predicate_less_equals: "(" "<=" function function ")"
 predicate_mover_is: "(" "mover_is" player_reference ")"
 predicate_passed: "(" "passed" (mover_reference | BOTH) ")"

@@ -260,6 +260,9 @@ class GameRuleParser(Transformer):
         else:
             return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
+    '''
+    Place rules
+    '''
     def play_place(self, children):
         '''
         The default behavior of games currently. Players put a piece onto one position
@@ -315,6 +318,45 @@ class GameRuleParser(Transformer):
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
     
+    def place_result_constraint(self, children):
+        '''
+        Result constraints refer to things that must be true about the board
+        immediately following an action. Each kind of action has its own
+        'result_constraint' function that knows how to apply that action
+        '''
+        (predicate_fn, predicate_fn_info) = children[0]
+
+        # The predicate function defines a condition that must be satisfied over the resulting board
+        # in order for a move to be legal. However, certain constraints (specifically, custodial and
+        # line constraints) at the current moment can be defined in terms of the *current* board state.
+        # The predicate_fn_info dictionary will contain as 'lookahead_mask_fn' if and only if the game's
+        # result constraints can be expressed in this way, in which case we use it to optimize the
+        # constraint checking. Otherwise, we map the predicate function over all possible resulting
+        # board states
+        if predicate_fn_info.get('lookahead_mask_fn') is None:
+            def apply_action(state, action):
+                pred_val = predicate_fn(state._replace(
+                    board=state.board.at[action].set(state.current_player),
+                    previous_actions=state.previous_actions.at[state.current_player].set(action)
+                ))
+                return pred_val
+            
+            apply = jax.jit(apply_action)
+
+            # TODO: maybe this logic should be moved to play_place and actually use
+            # the 'apply_action_fn' defined there instead of having a separate one
+            def result_constraint_fn(state):
+                resulting_mask = jax.vmap(apply, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+                return resulting_mask.astype(jnp.int16)
+
+        else:
+            result_constraint_fn = predicate_fn_info['lookahead_mask_fn']
+
+        return result_constraint_fn
+
+    '''
+    Move rules
+    '''
     def play_move(self, children):
         '''
         Players move a piece from one position on the board to another according to some
@@ -392,50 +434,7 @@ class GameRuleParser(Transformer):
             return legal_mask.astype(jnp.int16)
         
         return action_size, move_piece_fn, legal_action_mask_fn, apply_effects_fn
-
-
-    '''
-    Place rules
-    '''
-    def place_result_constraint(self, children):
-        '''
-        Result constraints refer to things that must be true about the board
-        immediately following an action. Each kind of action has its own
-        'result_constraint' function that knows how to apply that action
-        '''
-        (predicate_fn, predicate_fn_info) = children[0]
-
-        # The predicate function defines a condition that must be satisfied over the resulting board
-        # in order for a move to be legal. However, certain constraints (specifically, custodial and
-        # line constraints) at the current moment can be defined in terms of the *current* board state.
-        # The predicate_fn_info dictionary will contain as 'lookahead_mask_fn' if and only if the game's
-        # result constraints can be expressed in this way, in which case we use it to optimize the
-        # constraint checking. Otherwise, we map the predicate function over all possible resulting
-        # board states
-        if predicate_fn_info.get('lookahead_mask_fn') is None:
-            def apply_action(state, action):
-                pred_val = predicate_fn(state._replace(
-                    board=state.board.at[action].set(state.current_player),
-                    previous_actions=state.previous_actions.at[state.current_player].set(action)
-                ))
-                return pred_val
-            
-            apply = jax.jit(apply_action)
-
-            # TODO: maybe this logic should be moved to play_place and actually use
-            # the 'apply_action_fn' defined there instead of having a separate one
-            def result_constraint_fn(state):
-                resulting_mask = jax.vmap(apply, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
-                return resulting_mask.astype(jnp.int16)
-
-        else:
-            result_constraint_fn = predicate_fn_info['lookahead_mask_fn']
-
-        return result_constraint_fn
-
-    '''
-    Move rules
-    '''
+    
     def move_hop(self, children):
         '''
         Move a piece from one position to another by jumping over a piece
@@ -527,6 +526,8 @@ class GameRuleParser(Transformer):
 
         return legal_slide_mask_fn
 
+    def move_result_constraint(self, children):
+        raise NotImplementedError("Move result constraints not implemented yet!")
 
     '''
     Play effects
@@ -878,6 +879,15 @@ class GameRuleParser(Transformer):
         info = {}
 
         return mask_fn, info
+    
+    def mask_like_function(self, children):
+        '''
+        Returns a mask defined by a special kind of function (currently only "line")
+        which defines a mask_fn
+        '''
+        _, child_info = children[0]
+        return child_info['mask_fn'], {}
+
     
     def mask_adjacent(self, children):
         '''
@@ -1430,6 +1440,21 @@ class GameRuleParser(Transformer):
 
         return predicate_fn, info
     
+    def predicate_last_move_in(self, children):
+        '''
+        Returns whether the current player's last move was in the specified mask
+        '''
+        child_mask_fn, child_info = children[0]
+
+        def predicate_fn(state):
+            last_move = state.previous_actions[state.current_player]
+            mask = child_mask_fn(state)
+            return jax.lax.select(last_move != -1, mask[last_move] == 1, FALSE)
+        
+        info = {}
+
+        return predicate_fn, info
+
     def predicate_less_equals(self, children):
         '''
         Returns whether the first child function vlaue is less than or equal to the second
@@ -1576,6 +1601,11 @@ class GameRuleParser(Transformer):
 
         NOTE: 'line' is one of a few functions / masks which returns a "lookahead_mask_fn"
         that can be used to optimize certain games with "result constraints"
+
+        NOTE: 'line' is also the only "mask-like" function, which means it also returns a
+        "mask_fn" in its info dict. This is mostly useful for game rules that refer to an
+        action that forms a line (e.g. "go again if you form a line of 4"), since that can't
+        be read from only the function value
         '''
         n, *optional_args = children
 
@@ -1637,7 +1667,20 @@ class GameRuleParser(Transformer):
 
                 return num_lines - 2 * num_overshoot_lines
             
-            info = {}
+            def mask_fn(state):
+                occupied_mask = get_occupied_mask(state)
+                line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
+                overshoot_line_matches = (occupied_mask[overshoot_line_indices] == 1).all(axis=1)
+
+                matched_indices = jnp.where(line_matches[:, jnp.newaxis], line_indices, self.game_info.board_size+1).flatten()
+                overshoot_matched_indices = jnp.where(overshoot_line_matches[:, jnp.newaxis], overshoot_line_indices, self.game_info.board_size+1).flatten()
+                
+                mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[matched_indices].set(1)
+                mask = mask.at[overshoot_matched_indices].set(0)
+
+                return mask
+
+            info = {"mask_fn": mask_fn}
 
         else:
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
@@ -1650,6 +1693,15 @@ class GameRuleParser(Transformer):
                 occupied_mask = get_occupied_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
                 return line_matches.sum()
+            
+            def mask_fn(state):
+                occupied_mask = get_occupied_mask(state)
+                line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
+
+                matched_indices = jnp.where(line_matches[:, jnp.newaxis], line_indices, self.game_info.board_size+1).flatten()
+                mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[matched_indices].set(1)
+
+                return mask
             
             num_lines = line_indices.shape[0]
             def lookahead_mask_fn(state):
@@ -1671,7 +1723,7 @@ class GameRuleParser(Transformer):
 
                 return mask
 
-            info = {"lookahead_mask_fn": lookahead_mask_fn}
+            info = {"mask_fn": mask_fn, "lookahead_mask_fn": lookahead_mask_fn}
         
         return function_fn, info
 
