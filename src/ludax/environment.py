@@ -136,11 +136,11 @@ class LudaxEnvironment():
         new_phase_idx, phase_step_count = self._get_phase_idx(game_state)
         game_state = game_state._replace(phase_idx=new_phase_idx, phase_step_count=phase_step_count)
 
-        # Use the new phase and the global player offset to determine the next player but don't apply it yet
-        next_player = self._get_next_player(game_state)
-
         # Apply any effects that occur at the end of the turn
         game_state = self._apply_effects(game_state, original_player)
+
+        # Use the new phase and the global player offset to determine the next player but don't apply it yet
+        next_player = self._get_next_player(game_state)
 
         # Compute the legal action mask for the upcoming player (which is used in some scoring conditions)
         new_legal_action_mask = self._get_legal_action_mask(game_state._replace(current_player=next_player)).astype(

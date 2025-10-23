@@ -9,8 +9,8 @@
                 (place
                     (destination empty)
                     (effects
-                        (if (last_move_in (line 3))
-                            (increment_score mover 5)
+                        (if (last_move_in (line 3 exact:true))
+                            (go_again)
                         )
                     )
                 )

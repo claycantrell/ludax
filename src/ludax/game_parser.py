@@ -620,9 +620,22 @@ class GameRuleParser(Transformer):
         
         return apply_effects_fn
     
+    def effect_go_again(self, children):
+        '''
+        Allow the current player to take another turn immediately by decrementing
+        the phase step count manually (doesn't effect the global step count)
+
+        We can't just set the current player again since when the extra turn ends,
+        it will advance to the same player again (in a standard P1-P2 alternation)
+        '''
+        def apply_effects_fn(state, original_player):
+            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=original_player)
+
+        return apply_effects_fn
+
     def effect_flip(self, children):
         '''
-        Flip pieceson the board belonging to an opponent according to a mask
+        Flip pieces on the board belonging to an opponent according to a mask
         '''
         (child_mask_fn, _), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
