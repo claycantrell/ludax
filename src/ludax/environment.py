@@ -136,34 +136,32 @@ class LudaxEnvironment():
         new_phase_idx, phase_step_count = self._get_phase_idx(game_state)
         game_state = game_state._replace(phase_idx=new_phase_idx, phase_step_count=phase_step_count)
 
-        # Apply any effects that occur at the end of the turn
+        # Use the new phase and the global player offset to determine the next player
+        next_player = self._get_next_player(game_state)
+        game_state = game_state._replace(current_player=next_player)
+
+        # Apply any effects that occur at the end of the turn. The effects functions take in the
+        # original player so they can correctly handle "extra turns" given to the mover / opponent
         game_state = self._apply_effects(game_state, original_player)
 
-        # Use the new phase and the global player offset to determine the next player but don't apply it yet
-        next_player = self._get_next_player(game_state)
-
-        # Compute the legal action mask for the upcoming player (which is used in some scoring conditions)
-        new_legal_action_mask = self._get_legal_action_mask(game_state._replace(current_player=next_player)).astype(
-            jnp.bool_)
+        # Compute the legal action mask for the upcoming player (which is used in some end conditions)
+        new_legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
         state = state.replace(legal_action_mask=new_legal_action_mask)
 
-        # Use the new board to compute the winner, terminal, and rewards
-        winners, terminated = self._get_winner(game_state)
+        # Use the new board to compute the winner, terminal, and rewards -- but consider the
+        # current player to be the "original" player so they get credit for winning on their turn
+        winners, terminated = self._get_winner(game_state._replace(current_player=original_player))
         rewards = jnp.where(winners == EMPTY, 0, jnp.where(winners, 1, -1)).astype(jnp.float32)
 
-        # rewards = jax.lax.select(
-        #     winner != EMPTY,
-        #     jnp.float32([-1, -1]).at[winner].set(1),
-        #     jnp.zeros(2, jnp.float32)
-        # )
-        mover_reward = rewards[game_state.current_player]
+        mover_reward = rewards[original_player]
         state = state.replace(winners=winners, rewards=rewards, terminated=terminated, mover_reward=mover_reward)
 
-        # If the game hasn't ended, then update the current player
+        # If the terminated, then reset the current player back to the original player so that
+        # "mover reward" refers to the correct player
         game_state = jax.lax.cond(
             terminated,
-            lambda: game_state,
-            lambda: game_state._replace(current_player=next_player)
+            lambda: game_state._replace(current_player=original_player),
+            lambda: game_state
         )
 
         # Update the game state in the state

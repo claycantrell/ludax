@@ -560,7 +560,8 @@ class GameRuleParser(Transformer):
             return state
         
         def apply_effects_fn(state, original_player):
-            pred_val = predicate_fn(state)
+            updated_state = state._replace(current_player=original_player)
+            pred_val = predicate_fn(updated_state)
             return jax.lax.cond(
                 pred_val,
                 effect_fn,
@@ -578,7 +579,8 @@ class GameRuleParser(Transformer):
         (predicate_fn, _), effect_if_fn, effect_else_fn = children
 
         def apply_effects_fn(state, original_player):
-            pred_val = predicate_fn(state)
+            updated_state = state._replace(current_player=original_player)
+            pred_val = predicate_fn(updated_state)
             return jax.lax.cond(
                 pred_val,
                 effect_if_fn,
@@ -620,17 +622,25 @@ class GameRuleParser(Transformer):
         
         return apply_effects_fn
     
-    def effect_go_again(self, children):
+    def effect_extra_turn(self, children):
         '''
-        Allow the current player to take another turn immediately by decrementing
-        the phase step count manually (doesn't effect the global step count)
+        Cause the specified player to take an extra turn immediately by decrementing
+        the phase step count before returning to the normal turn exchange
 
-        We can't just set the current player again since when the extra turn ends,
-        it will advance to the same player again (in a standard P1-P2 alternation)
+        NOTE: if two players both trigger an extra turn effect for their opponent in
+        succession, it will seem like neither is getting an extra turn, since the bonus
+        turns happen **immediately**
         '''
+        mover_ref = children[0]
+
+        if mover_ref == PlayerAndMoverRefs.MOVER:
+            offset = 0
+        else:
+            offset = 1
+
         def apply_effects_fn(state, original_player):
-            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=original_player)
-
+            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % 2)
+        
         return apply_effects_fn
 
     def effect_flip(self, children):
