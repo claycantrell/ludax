@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .config import EMPTY, INVALID, BoardShapes, Directions, EdgeTypes, Orientations, OptionalArgs
+from .config import EMPTY, INVALID, BoardShapes, Directions, EdgeTypes, Orientations, OptionalArgs, PieceRefs, PlayerAndMoverRefs, P1, P2
 from .game_info import GameInfo
 
 BOARD_SHAPE_TO_DIRECTIONS = {
@@ -712,3 +712,46 @@ def _get_collect_values_fn(outer_children, vmap=False):
 
         
     return partial(collect_values, outer_children)
+
+def _get_occupied_mask_fn(piece, player_or_mover):
+    '''
+    Returns a function that can be used to get a mask of the positions occupied
+    by the given player/mover and piece. Lots of other functions and masks first
+    extract the occupied positions before doing further processing, so this
+    function helps to reduce code duplication.
+    '''
+
+    # Non-empty squares have a value of 0 or 1 and by construction there can't be
+    # more than one kind of piece in a square, so we can safely take the max over
+    # the "piece" axis to collapse it
+    if piece == PieceRefs.ANY:
+        def collapse_board(board):
+            return jnp.max(board, axis=0)
+        
+    else:
+        def collapse_board(board):
+            return board[piece]
+
+    if player_or_mover == PlayerAndMoverRefs.MOVER:
+        def get_mask(state):
+            board = collapse_board(state.board)
+            return (board == state.current_player).astype(jnp.int16)
+    
+    elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
+        def get_mask(state):
+            board = collapse_board(state.board)
+            return (board == (state.current_player + 1) % 2).astype(jnp.int16)
+    
+    elif player_or_mover == PlayerAndMoverRefs.P1:
+        def get_mask(state):
+            board = collapse_board(state.board)
+            return (board == P1).astype(jnp.int16)
+    
+    elif player_or_mover == PlayerAndMoverRefs.P2:
+        def get_mask(state):
+            board = collapse_board(state.board)
+            return (board == P2).astype(jnp.int16)
+    else:
+        raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
+    
+    return get_mask

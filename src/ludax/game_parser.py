@@ -261,6 +261,21 @@ class GameRuleParser(Transformer):
             return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
     '''
+    Pieces
+    '''
+    def piece_reference(self, children):
+        '''
+        Throwing a syntax error here makes the language not context-free, but it's necessary
+        to ensure the game is actually playable
+        '''
+        piece_ref = children[0]
+
+        if piece_ref not in self.game_info.piece_names:
+            raise SyntaxError(f"Piece '{piece_ref}' not defined in game pieces: {self.game_info.piece_names}")
+        
+        return self.game_info.piece_names.index(piece_ref)
+
+    '''
     Place rules
     '''
     def play_place(self, children):
@@ -275,8 +290,8 @@ class GameRuleParser(Transformer):
         '''
 
         # Case 1: the 'mover' argument is specified
-        if isinstance(children[0], str):
-            mover_ref, (destination_constraint_fn, _), *optional_args = children
+        if isinstance(children[1], str):
+            piece_id, mover_ref, (destination_constraint_fn, _), *optional_args = children
             if mover_ref == PlayerAndMoverRefs.MOVER:
                 offset = 0
             elif mover_ref == PlayerAndMoverRefs.OPPONENT:
@@ -284,7 +299,7 @@ class GameRuleParser(Transformer):
 
         # Case 2 (default): the mover is the current player 
         else:
-            (destination_constraint_fn, _), *optional_args = children
+            piece_id, (destination_constraint_fn, _), *optional_args = children
             offset = 0
 
         # Case 1: no optional arguments -- legal actions determined by the destination constraint
@@ -312,7 +327,7 @@ class GameRuleParser(Transformer):
 
         action_size = self.game_info.board_size
         def apply_action_fn(state, action):
-            board = state.board.at[action].set((state.current_player + offset) % 2)
+            board = state.board.at[piece_id, action].set((state.current_player + offset) % 2)
             previous_actions = state.previous_actions.at[state.current_player].set(action)
             return state._replace(board=board, previous_actions=previous_actions)
 
@@ -1149,10 +1164,10 @@ class GameRuleParser(Transformer):
 
     def mask_empty(self, children):
         '''
-        Return all the positions on the board which are empty
+        Return all the positions on the board which are empty of all piece types
         '''
         def mask_fn(state):
-            return (state.board == EMPTY).astype(jnp.int16)
+            return (state.board == EMPTY).all(axis=0).astype(jnp.int16)
         
         return mask_fn, {}
 
@@ -1635,22 +1650,12 @@ class GameRuleParser(Transformer):
         n = int(n)
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
-
+        piece = optional_args[OptionalArgs.PIECE]
         player = optional_args[OptionalArgs.PLAYER]
-        if player == PlayerAndMoverRefs.MOVER:
-            def get_mask(state):
-                return (state.board == state.current_player).astype(jnp.int16)
-        elif player == PlayerAndMoverRefs.OPPONENT:
-            def get_mask(state):
-                return (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
-        elif player == PlayerAndMoverRefs.P1:
-            def get_mask(state):
-                return (state.board == P1).astype(jnp.int16)
-        elif player == PlayerAndMoverRefs.P2:
-            def get_mask(state):
-                return (state.board == P2).astype(jnp.int16)
-        else:
-            raise ValueError(f"Invalid player reference: {player}")
+
+        # Get the basic "occupied" mask function for the specified piece / player, which might
+        # be composed with an "exclude" mask to remove certain positions from consideration
+        base_mask_fn = utils._get_occupied_mask_fn(piece, player)
         
         if optional_args[OptionalArgs.EXCLUDE] is not None:
             _, exclude_mask_info = optional_args[OptionalArgs.EXCLUDE]
@@ -1664,13 +1669,13 @@ class GameRuleParser(Transformer):
             collect_values = utils._get_collect_values_fn(exclude_mask_fns)
 
             def get_occupied_mask(state):
-                occupied_mask = get_mask(state)
+                occupied_mask = base_mask_fn(state)
                 exclude_mask = collect_values(state).any(axis=0).astype(jnp.int16)
                 return occupied_mask & ~exclude_mask
             
         else:
             def get_occupied_mask(state):
-                return get_mask(state)
+                return base_mask_fn(state)
 
 
         if optional_args[OptionalArgs.EXACT] and n < max(self.game_info.board_dims):

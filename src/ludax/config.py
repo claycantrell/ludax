@@ -136,6 +136,10 @@ class MoveTypes(StrEnum):
     SLIDE = 'move_slide'
     PLACE = 'move_place'
 
+# A bit odd, but pieces are either "any" or are defined by name elsewhere
+class PieceRefs(StrEnum):
+    ANY = 'any'
+
 class PlayEffects(StrEnum):
     CAPTURE = 'effect_capture'
     FLIP = 'effect_flip'
@@ -153,12 +157,13 @@ class OptionalArgs(StrEnum):
     MOVER = 'mover_arg'
     MULTI_MASK = 'multi_mask_arg'
     PATTERN = 'pattern_arg'
+    PIECE = 'piece_arg'
     PLAYER = 'player_arg'
     ROTATE = 'rotate_arg'
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
 
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CORNER_CUSTODIAL: {OptionalArgs.MOVER: 'mover'},

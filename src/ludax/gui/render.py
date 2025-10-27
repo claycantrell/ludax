@@ -259,24 +259,27 @@ class InteractiveBoardHandler():
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
         drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), stroke='black', stroke_width=1, fill='none'))
 
-        for i, occupant in enumerate(board):
-            position = self.action_to_pixel(i)
-            vertices = self.get_cell_vertices(position)
+        # Iterate over the different kinds of pieces
+        for piece_id, sub_board in enumerate(board):
+            for i, occupant in enumerate(sub_board):
+                position = self.action_to_pixel(i)
+                vertices = self.get_cell_vertices(position)
 
-            # Draw the cell
-            drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
+                # Draw the cell only in the first sub-board (to avoid overdrawing)
+                if piece_id == 0:
+                    drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
-            # Draw the piece (if present)
-            if occupant == P1:
-                fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
-            elif occupant == P2:
-                fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                # Draw the piece (if present)
+                if occupant == P1:
+                    fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
+                    drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                elif occupant == P2:
+                    fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
+                    drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
 
-            # Draw the legal action mask
-            if legal_actions is not None and legal_actions[i]:
-                drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
+                # Draw the legal action mask
+                if legal_actions is not None and legal_actions[i]:
+                    drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
 
         # Add an invisible rectangle to capture the user's clicks
         if add_button:

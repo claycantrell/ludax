@@ -1,8 +1,9 @@
-from dataclasses import dataclass
 from collections import namedtuple
+from dataclasses import dataclass
+import typing
 
 import jax.numpy as jnp
-from lark import Lark
+from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
 from .config import BoardShapes
@@ -18,6 +19,9 @@ class GameInfo:
     game_state_class: type = None
     game_state_attributes: list = None
     move_type: str = None
+
+    piece_names: list[str] = None
+    piece_owners: list[str] = None
 
     def __repr__(self):
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
@@ -57,6 +61,18 @@ class GameInfoExtractor(Visitor):
 
         return self.game_info, self.rendering_info
 
+    def _nav(self, tree: Tree, children_indices: typing.Union[int, list[int]]):
+        if isinstance(children_indices, int):
+            children_indices = [children_indices]
+
+        while len(children_indices) > 0:
+            tree = tree.children[children_indices.pop(0)]
+
+        if isinstance(tree, Token):
+            return tree.value
+        
+        return tree
+
     def board(self, tree):
 
         shape_tree = tree.children[0]
@@ -95,6 +111,13 @@ class GameInfoExtractor(Visitor):
 
         else:
             raise NotImplementedError(f"Board shape {board_shape} not implemented yet!")
+        
+    def pieces(self, tree):
+        piece_infos = list(map(lambda x: (self._nav(x, 0), self._nav(x, 1)), tree.children))
+        piece_names, piece_owners = zip(*piece_infos)
+        
+        self.game_info.piece_names = list(piece_names)
+        self.game_info.piece_owners = list(piece_owners)
     
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:

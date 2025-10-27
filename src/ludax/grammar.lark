@@ -5,12 +5,17 @@ game: "(" "game" name players equipment rules rendering? ")"
 players: "(" "players" positive_int ")"
 
 // ---Equipment---
-equipment: "(" "equipment" board ")"
+equipment: "(" "equipment" board pieces? ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
 board_square: "(" "square" number ")"
 board_rectangle: "(" "rectangle" number number ")"
 board_hexagon: "(" "hexagon"  number ")"
 board_hex_rectangle: "(" "hex_rectangle" number number ")"
+
+// ---Pieces---
+pieces: "(" "pieces" piece_definition+ ")"
+piece_definition: "(" name (player_reference | BOTH) ")"
+piece_reference: name
 
 // ---Rules---
 rules: "(" "rules" start_rules? play_rules end_rules ")"
@@ -32,7 +37,7 @@ play_mechanic: play_place | play_move
 force_pass: "(" "force_pass" ")"
 
 // ---Place rules---
-play_place: "(" "place" mover_reference? place_destination_constraint place_result_constraint? play_effects? ")"
+play_place: "(" "place" piece_reference mover_reference? place_destination_constraint place_result_constraint? play_effects? ")"
 place_destination_constraint: "(" "destination" super_mask ")"
 place_result_constraint: "(" "result" super_predicate ")"
 
@@ -84,7 +89,7 @@ function_add: "(" "add" function+ ")"
 function_connected: "(" "connected" multi_mask_arg mover_reference? direction_arg? ")"
 function_constant: positive_int
 function_count: "(" "count" super_mask ")"
-function_line: "(" "line" positive_int orientation_arg? exact_arg? player_arg? exclude_arg? ")"
+function_line: "(" "line" positive_int orientation_arg? piece_arg? exact_arg? player_arg? exclude_arg? ")"
 function_multiply: "(" "multiply" function+ ")"
 function_score: "(" "score" mover_reference ")"
 function_subtract: "(" "subtract" function function ")"
@@ -127,6 +132,8 @@ mask_corner_custodial: "(" "corner_custodial" mover_reference? ")"
 mask_custodial: "(" "custodial" custodial_length_arg mover_reference? orientation_arg? ")"
 mask_edge: "(" "edge" edge ")"
 mask_empty: "empty"
+
+// TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
 mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
@@ -185,6 +192,7 @@ multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
 pattern_arg: "(" positive_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
+piece_arg: "piece:" piece_reference
 rotate_arg: "rotate:" boolean
 
 // Optional rendering details
@@ -206,7 +214,7 @@ color_assignment: "(" "color" player_reference color ")"
 
 ?player_reference: P1 | P2
 ?mover_reference: MOVER | OPPONENT
-name: STRING
+?name: STRING
 variable_name: /\?[a-z][a-z0-9]*/
 id: /[a-zA-Z0-9_]+/
 
