@@ -107,7 +107,7 @@ class GameRuleParser(Transformer):
         Begin the game by placing one or more pieces belong to a specific
         player at specified locations on the board
         '''
-        player_ref, (place_arg_type, place_arg_info) = children
+        piece, player_ref, (place_arg_type, place_arg_info) = children
 
         if player_ref == PlayerAndMoverRefs.P1:
             player = P1
@@ -118,7 +118,7 @@ class GameRuleParser(Transformer):
             pattern = jnp.array(place_arg_info, dtype=jnp.int16)
 
             def start_fn(state):
-                board = state.board.at[pattern].set(player)
+                board = state.board.at[piece, pattern].set(player)
                 return state._replace(board=board)
             
         elif place_arg_type == OptionalArgs.MULTI_MASK:
@@ -134,7 +134,8 @@ class GameRuleParser(Transformer):
             def start_fn(state):
                 all_masks = collect_values(state)
                 result = all_masks.any(axis=0).astype(jnp.int16)
-                board = jnp.where(result, player, state.board)
+                sub_board = jnp.where(result, player, state.board[piece])
+                board = state.board.at[piece].set(sub_board)
                 return state._replace(board=board)
 
         else:
@@ -1047,7 +1048,7 @@ class GameRuleParser(Transformer):
         NOTE: mask_custodial is one of the few masks / functions that has a
         lookahead_mask_fn defined
         '''
-        (_, n), *optional_args = children
+        piece, (_, n), *optional_args = children
 
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
@@ -1102,8 +1103,8 @@ class GameRuleParser(Transformer):
         def mask_fn(state):
             outer_player = (state.current_player + offset) % 2
             inner_player = (outer_player + 1) % 2
-            outer_mask = (state.board == outer_player)
-            inner_mask = (state.board == inner_player)
+            outer_mask = (state.board[piece] == outer_player)
+            inner_mask = (state.board[piece] == inner_player)
 
             # Only keep the custodial arrangements which include the last move
             # among the outer indices. TODO: make this an argument?
@@ -1130,8 +1131,8 @@ class GameRuleParser(Transformer):
             outer_player = (state.current_player + offset) % 2
             inner_player = (outer_player + 1) % 2
 
-            outer_mask = (state.board == outer_player)
-            inner_mask = (state.board == inner_player)
+            outer_mask = (state.board[piece] == outer_player)
+            inner_mask = (state.board[piece] == inner_player)
             
             inner_match = (inner_mask[inner_indices] == 1).all(axis=1)
             left_match = (outer_mask[left_indices] == 1) & (outer_mask[right_indices] == 0) & inner_match
@@ -1603,14 +1604,11 @@ class GameRuleParser(Transformer):
         target_mask_fns, _ = zip(*target_masks_infos)
         num_targets = len(target_mask_fns)
 
+        piece = optional_args[OptionalArgs.PIECE]
         if optional_args[OptionalArgs.MOVER] == PlayerAndMoverRefs.MOVER:
             offset = 0
         else:
             offset = 1
-
-        piece = optional_args[OptionalArgs.PIECE]
-        if piece == PieceRefs.ANY:
-            raise ValueError("function_connected does not support piece=any -- please specify a particular piece type")
 
         def function_fn(state):
             mover = (state.current_player + offset) % 2
@@ -1649,12 +1647,11 @@ class GameRuleParser(Transformer):
         action that forms a line (e.g. "go again if you form a line of 4"), since that can't
         be read from only the function value
         '''
-        n, *optional_args = children
+        piece, n, *optional_args = children
 
         n = int(n)
         optional_args = self._parse_optional_args(optional_args)
         orientation = optional_args[OptionalArgs.ORIENTATION]
-        piece = optional_args[OptionalArgs.PIECE]
         player = optional_args[OptionalArgs.PLAYER]
 
         # Get the basic "occupied" mask function for the specified piece / player, which might

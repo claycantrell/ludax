@@ -728,36 +728,21 @@ def _get_occupied_mask_fn(piece, player_or_mover):
     function helps to reduce code duplication.
     '''
 
-    # Non-empty squares have a value of 0 or 1 and by construction there can't be
-    # more than one kind of piece in a square, so we can safely take the max over
-    # the "piece" axis to collapse it
-    if piece == PieceRefs.ANY:
-        def collapse_board(board):
-            return jnp.max(board, axis=0)
-        
-    else:
-        def collapse_board(board):
-            return board[piece]
-
     if player_or_mover == PlayerAndMoverRefs.MOVER:
         def get_mask(state):
-            board = collapse_board(state.board)
-            return (board == state.current_player).astype(jnp.int16)
+            return (state.board[piece] == state.current_player).astype(jnp.int16)
     
     elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
         def get_mask(state):
-            board = collapse_board(state.board)
-            return (board == (state.current_player + 1) % 2).astype(jnp.int16)
+            return (state.board[piece] == (state.current_player + 1) % 2).astype(jnp.int16)
     
     elif player_or_mover == PlayerAndMoverRefs.P1:
         def get_mask(state):
-            board = collapse_board(state.board)
-            return (board == P1).astype(jnp.int16)
+            return (state.board[piece] == P1).astype(jnp.int16)
     
     elif player_or_mover == PlayerAndMoverRefs.P2:
         def get_mask(state):
-            board = collapse_board(state.board)
-            return (board == P2).astype(jnp.int16)
+            return (state.board[piece] == P2).astype(jnp.int16)
     else:
         raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
     

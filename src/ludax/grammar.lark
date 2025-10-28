@@ -23,7 +23,7 @@ rules: "(" "rules" start_rules? play_rules end_rules ")"
 // ---Start rules---
 start_rules: "(" "start" start_rule+ ")"
 start_rule: start_place
-start_place: "(" "place" player_reference (pattern_arg | multi_mask_arg) ")"
+start_place: "(" "place" piece_reference player_reference (pattern_arg | multi_mask_arg) ")"
 
 // ---Play rules---
 play_rules: "(" "play" play_phase+ ")"
@@ -86,10 +86,10 @@ function: function_add
         | function_subtract
 
 function_add: "(" "add" function+ ")"
-function_connected: "(" "connected" multi_mask_arg piece_arg mover_reference? direction_arg? ")"
+function_connected: "(" "connected" piece_reference multi_mask_arg mover_reference? direction_arg? ")"
 function_constant: positive_int
 function_count: "(" "count" super_mask ")"
-function_line: "(" "line" positive_int orientation_arg? piece_arg? exact_arg? player_arg? exclude_arg? ")"
+function_line: "(" "line" piece_reference positive_int orientation_arg? exact_arg? player_arg? exclude_arg? ")"
 function_multiply: "(" "multiply" function+ ")"
 function_score: "(" "score" mover_reference ")"
 function_subtract: "(" "subtract" function function ")"
@@ -129,7 +129,7 @@ mask_center: "center"
 mask_column: "(" "column" nonnegative_int ")"
 mask_corners: "corners"
 mask_corner_custodial: "(" "corner_custodial" mover_reference? ")"
-mask_custodial: "(" "custodial" custodial_length_arg mover_reference? orientation_arg? ")"
+mask_custodial: "(" "custodial" piece_reference custodial_length_arg mover_reference? orientation_arg? ")"
 mask_edge: "(" "edge" edge ")"
 mask_empty: "empty"
 
