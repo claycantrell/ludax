@@ -95,6 +95,13 @@ class Orientations(StrEnum):
     ORTHOGONAL = 'orthogonal'
     VERTICAL = 'vertical'
 
+class PieceShapes(StrEnum):
+    CIRCLE = 'circle'
+    SQUARE = 'square'
+    TRIANGLE = 'triangle'
+    STAR = 'star'
+    DIAMOND = 'diamond'
+
 class PlayPhases(StrEnum):
     SPECIFIC_PLAYER = 'phase_specific_player'
     ALTERNATE = 'phase_alternate'

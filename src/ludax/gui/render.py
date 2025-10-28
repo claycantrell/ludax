@@ -3,7 +3,7 @@ import math
 import svgwrite
 from svgwrite import cm, mm
 
-from ..config import BoardShapes, P1, P2, RENDER_CONFIG
+from ..config import BoardShapes, PieceShapes, P1, P2, RENDER_CONFIG
 
 
 class InteractiveBoardHandler():
@@ -94,6 +94,14 @@ class InteractiveBoardHandler():
         # Add padding to the total width and height
         self.total_width += self.padding
         self.total_height += self.padding
+
+        self.draw_fns = {
+            PieceShapes.CIRCLE: self._draw_circle,
+            PieceShapes.SQUARE: self._draw_square,
+            PieceShapes.TRIANGLE: self._draw_triangle,
+            PieceShapes.STAR: self._draw_star,
+            PieceShapes.DIAMOND: self._draw_diamond,
+        }
     
 
     def _grid_to_pixel(self, grid_point):
@@ -247,6 +255,48 @@ class InteractiveBoardHandler():
 
         return points
 
+    def _draw_circle(self, drawing, center, size, fill, stroke, stroke_width):
+        drawing.add(drawing.circle(center=center, r=size, fill=fill, stroke=stroke, stroke_width=stroke_width))
+
+    def _draw_square(self, drawing, center, size, fill, stroke, stroke_width):
+        top_left = (center[0] - size, center[1] - size)
+        drawing.add(drawing.rect(insert=top_left, size=(2 * size, 2 * size), fill=fill, stroke=stroke, stroke_width=stroke_width))
+
+    def _draw_triangle(self, drawing, center, size, fill, stroke, stroke_width):
+        points = []
+        angle_step = 2 * math.pi / 3
+
+        for i in range(3):
+            angle = i * angle_step - math.pi / 2 
+            x = center[0] + size * math.cos(angle)
+            y = center[1] + size * math.sin(angle)
+            points.append((x, y))
+
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+
+    def _draw_star(self, drawing, center, size, fill, stroke, stroke_width, num_points=5):
+        points = []
+        angle_step = 2 * math.pi / (2 * num_points)
+
+        for i in range(2 * num_points):
+            radius = size if i % 2 == 0 else (size / 2)
+            angle = i * angle_step - math.pi / 2 
+            x = center[0] + radius * math.cos(angle)
+            y = center[1] + radius * math.sin(angle)
+            points.append((x, y))
+
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+
+    def _draw_diamond(self, drawing, center, size, fill, stroke, stroke_width):
+        points = [
+            (center[0], center[1] - size),
+            (center[0] + size, center[1]),
+            (center[0], center[1] + size),
+            (center[0] - size, center[1])
+        ]
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+
+
     def render(self, state, add_button=True, show_legal_actions=True, legal_actions=None):
         board = state.game_state.board
         if legal_actions is None and show_legal_actions:
@@ -261,6 +311,8 @@ class InteractiveBoardHandler():
 
         # Iterate over the different kinds of pieces
         for piece_id, sub_board in enumerate(board):
+            piece_name = self.game_info.piece_names[piece_id]
+
             for i, occupant in enumerate(sub_board):
                 position = self.action_to_pixel(i)
                 vertices = self.get_cell_vertices(position)
@@ -270,12 +322,17 @@ class InteractiveBoardHandler():
                     drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
                 # Draw the piece (if present)
+                draw_fn = self.draw_fns[self.rendering_info.piece_shape_mapping[piece_name]]
                 if occupant == P1:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
-                    drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1)
+                    # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
                 elif occupant == P2:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
-                    drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1)
+                    # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+
+
 
                 # Draw the legal action mask
                 if legal_actions is not None and legal_actions[i]:

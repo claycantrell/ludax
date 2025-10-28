@@ -4,10 +4,20 @@
         (board (square 7))
         (pieces
             ("token" both)
-            ("special" P1)
+            ("special" both)
+            ("unk" both)
+            ("dummy" both)
+            ("blorbo" both)
         )
     )
     (rules
+        (start
+            (place "token" P2 (4))
+            (place "special" P1 (8 12 16))
+            (place "unk" P2 (40))
+            (place "dummy" P1 (6))
+            (place "blorbo" P2 (7))
+        )
         (play
             (repeat (P1 P2)
                 (place "token"

@@ -5,7 +5,7 @@ game: "(" "game" name players equipment rules rendering? ")"
 players: "(" "players" positive_int ")"
 
 // ---Equipment---
-equipment: "(" "equipment" board pieces? ")"
+equipment: "(" "equipment" board pieces ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
 board_square: "(" "square" number ")"
 board_rectangle: "(" "rectangle" number number ")"
@@ -198,18 +198,21 @@ rotate_arg: "rotate:" boolean
 // Optional rendering details
 rendering: "(" "rendering" rendering_detail+ ")"
 rendering_detail: color_assignment
+                | piece_shape_assignment
 
 color_assignment: "(" "color" player_reference color ")"
+piece_shape_assignment: "(" "shape" piece_reference shape ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
-?nonnegative_int: /[0-9]+/
-?positive_int: /[1-9]+/
+?nonnegative_int: /(0|[1-9]\d*)/
+?positive_int: /[1-9]\d*/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?color: WHITE | BLACK
+?shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
 // ----------------------------
 
 ?player_reference: P1 | P2
@@ -247,8 +250,14 @@ OPPONENT: "opponent"
 P1: "P1"
 P2: "P2"
 BOTH: "both"
+
 WHITE: "white"
 BLACK: "black"
+CIRCLE: "circle"
+SQUARE: "square"
+TRIANGLE: "triangle"
+STAR: "star"
+DIAMOND: "diamond"
 
 // Lark imports
 %import common.ESCAPED_STRING -> STRING

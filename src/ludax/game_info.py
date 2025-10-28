@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import BoardShapes
+from .config import BoardShapes, PieceShapes
 
 @dataclass
 class GameInfo:
@@ -28,7 +28,8 @@ class GameInfo:
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
 
 class RenderingInfo:
-    color_mapping: dict = None
+    color_mapping: dict = {"P1": "white", "P2": "black"}
+    piece_shape_mapping: dict = {}
 
 class GameInfoExtractor(Visitor):
     def __init__(self):
@@ -46,10 +47,6 @@ class GameInfoExtractor(Visitor):
         self.defaults = []
 
         self.rendering_info = RenderingInfo()
-        self.rendering_info.color_mapping = {
-            "P1": "white",
-            "P2": "black"
-        }
     
     def __call__(self, tree):
         self.visit_topdown(tree)
@@ -59,6 +56,14 @@ class GameInfoExtractor(Visitor):
         game_state_class = namedtuple("GameState", self.game_state_attributes, defaults=defaults)
         self.game_info.game_state_class = game_state_class
         self.game_info.game_state_attributes = self.game_state_attributes
+
+        # Check to see if any pieces don't have an assigned shape and assign them the first unused shape
+        assigned_shapes = set(self.rendering_info.piece_shape_mapping.values())
+        unused_shapes = [shape for shape in PieceShapes if shape not in assigned_shapes]
+
+        for piece_name in self.game_info.piece_names:
+            if piece_name not in self.rendering_info.piece_shape_mapping:
+                self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
 
         return self.game_info, self.rendering_info
 
@@ -119,6 +124,9 @@ class GameInfoExtractor(Visitor):
 
         if len(set(piece_names)) != len(piece_names):
             raise SyntaxError(f"Piece names must be unique: {piece_names}")
+
+        if len(piece_names) > len(PieceShapes):
+            raise ValueError(f"Number of piece types exceeds available shapes: {len(piece_names)} > {len(PieceShapes)}")
         
         self.game_info.num_piece_types = len(piece_names)
         self.game_info.piece_names = tuple(piece_names)
@@ -162,6 +170,10 @@ class GameInfoExtractor(Visitor):
     def color_assignment(self, tree):
         player, color = map(str, tree.children)
         self.rendering_info.color_mapping[player] = color
+
+    def piece_shape_assignment(self, tree):
+        piece, shape = map(str, tree.children)
+        self.rendering_info.piece_shape_mapping[piece] = shape
 
 if __name__ == '__main__':
     grammar = open('grammar.lark').read()
