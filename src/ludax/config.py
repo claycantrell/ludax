@@ -162,7 +162,7 @@ class OptionalArgs(StrEnum):
     ROTATE = 'rotate_arg'
 
 DEFAULT_ARGUMENTS = {
-    Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
+    Functions.CONNECTED: {OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
     Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
 
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},

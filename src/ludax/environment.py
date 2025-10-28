@@ -33,7 +33,7 @@ class LudaxEnvironment():
 
         self.obs_shape = self.game_info.observation_shape
         self.board_size = self.game_info.board_size
-        self.num_piece_types = len(self.game_info.piece_names)
+        self.num_piece_types = self.game_info.num_piece_types
 
         self.num_actions = game_rules['action_size']
         self._initialize_board = game_rules['start_rules']

@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, Directions, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, Directions, PieceRefs, PlayerAndMoverRefs, OptionalArgs
 from .game_info import GameInfo
 from . import utils
 
@@ -1156,7 +1156,7 @@ class GameRuleParser(Transformer):
         indices = utils._get_edge_indices(self.game_info, edge_type)
 
         def mask_fn(state):
-            mask = jnp.zeros_like(state.board).astype(jnp.bool_)
+            mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_)
             mask = mask.at[indices].set(True)
             return mask.astype(jnp.int16)
         
@@ -1249,7 +1249,7 @@ class GameRuleParser(Transformer):
         
         # This mapping over a build function appears necessary to stop the
         # local variable 'idx' from being retroactively bound to the last
-        #  value for every mask function
+        # value for every mask function
         def build(idx):
             mask = self._get_static_mask(idx)
             return lambda state: mask
@@ -1608,13 +1608,17 @@ class GameRuleParser(Transformer):
         else:
             offset = 1
 
+        piece = optional_args[OptionalArgs.PIECE]
+        if piece == PieceRefs.ANY:
+            raise ValueError("function_connected does not support piece=any -- please specify a particular piece type")
+
         def function_fn(state):
             mover = (state.current_player + offset) % 2
             target_masks = jax.vmap(lambda i: jax.lax.switch(i, target_mask_fns, state))(jnp.arange(num_targets))
 
             # The connected components are necessarily computed in the update_additional_info call
             set_val = state.previous_actions[mover] + 1
-            fill_mask = (state.connected_components == set_val).astype(jnp.int16)
+            fill_mask = (state.connected_components[piece] == set_val).astype(jnp.int16)
             
             target_intersections = jnp.sum(target_masks & fill_mask, axis=1)
             return jnp.sum(target_intersections > 0)

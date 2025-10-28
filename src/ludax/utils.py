@@ -517,6 +517,7 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
 
     num_directions = adjacency_lookup.shape[0]
     num_actions = game_info.board_size
+    num_pieces = game_info.num_piece_types
 
     neighbor_indices = []
     for action_idx in range(num_actions):
@@ -530,18 +531,18 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
         neighbor_indices.append(jnp.array(sub, dtype=jnp.int16))
     neighbor_indices = jnp.array(neighbor_indices, dtype=jnp.int16)
 
-    def get_connected_components(state, action):
-        cur_components = state.connected_components
+    def get_connected_components_piece(state, action, piece_idx):
+        cur_components = state.connected_components[piece_idx]
         set_val = action + 1
 
-        board_occupant = state.board[action]
+        board_occupant = state.board[piece_idx, action]
         cur_components = cur_components.at[action].set(set_val)
 
         neighbor_positions = neighbor_indices[action]
 
         def merge(direction_index, components):
             adj_pos = neighbor_positions[direction_index]
-            condition = (adj_pos >= 0) & (state.board[adj_pos] == board_occupant)
+            condition = (adj_pos >= 0) & (state.board[piece_idx, adj_pos] == board_occupant)
 
             components = jax.lax.cond(condition, lambda: jnp.where(components == components[adj_pos], set_val, components), lambda: components)
 
@@ -549,6 +550,12 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
         
         cur_components = jax.lax.fori_loop(0, num_directions, merge, cur_components)
 
+        return cur_components
+    
+    # TODO: special case (no VMAP) for when there's only one piece type?
+    def get_connected_components(state, action):
+        piece_indices = jnp.arange(num_pieces, dtype=jnp.int16)
+        cur_components = jax.vmap(get_connected_components_piece, in_axes=(None, None, 0))(state, action, piece_indices)
         state = state._replace(connected_components=cur_components)
         return state
     

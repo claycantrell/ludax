@@ -20,8 +20,9 @@ class GameInfo:
     game_state_attributes: list = None
     move_type: str = None
 
-    piece_names: list[str] = None
-    piece_owners: list[str] = None
+    num_piece_types: int = None
+    piece_names: tuple[str] = ()
+    piece_owners: tuple[str] = ()
 
     def __repr__(self):
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
@@ -115,9 +116,13 @@ class GameInfoExtractor(Visitor):
     def pieces(self, tree):
         piece_infos = list(map(lambda x: (self._nav(x, 0), self._nav(x, 1)), tree.children))
         piece_names, piece_owners = zip(*piece_infos)
+
+        if len(set(piece_names)) != len(piece_names):
+            raise SyntaxError(f"Piece names must be unique: {piece_names}")
         
-        self.game_info.piece_names = list(piece_names)
-        self.game_info.piece_owners = list(piece_owners)
+        self.game_info.num_piece_types = len(piece_names)
+        self.game_info.piece_names = tuple(piece_names)
+        self.game_info.piece_owners = tuple(piece_owners)
     
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:
@@ -130,7 +135,7 @@ class GameInfoExtractor(Visitor):
         '''
         if "connected_components" not in self.game_state_attributes:
             self.game_state_attributes.append("connected_components")
-            self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.int16))
+            self.defaults.append(jnp.zeros((self.game_info.num_piece_types, self.game_info.board_size), dtype=jnp.int16))
 
     def play_effects(self, tree):
         '''
