@@ -151,7 +151,8 @@ class LudaxEnvironment():
         # Use the new board to compute the winner, terminal, and rewards -- but consider the
         # current player to be the "original" player so they get credit for winning on their turn
         winners, terminated = self._get_winner(game_state._replace(current_player=original_player))
-        rewards = jnp.where(winners == EMPTY, 0, jnp.where(winners, 1, -1)).astype(jnp.float32)
+        terminal_rewards = jnp.where((winners == EMPTY).all(), jnp.zeros_like(winners), jnp.where(winners, 1, -1)).astype(jnp.float32)
+        rewards = jax.lax.select(terminated, terminal_rewards, jnp.zeros_like(terminal_rewards))
 
         mover_reward = rewards[original_player]
         state = state.replace(winners=winners, rewards=rewards, terminated=terminated, mover_reward=mover_reward)
