@@ -201,7 +201,7 @@ def step():
     time.sleep(0.1)
 
     terminated = bool(STATE.terminated)
-    winners = list(map(int, STATE.winners))
+    rewards = list(map(int, STATE.rewards))
     if hasattr(STATE.game_state, "scores"):
         scores = list(map(float, STATE.game_state.scores))
     else:
@@ -211,9 +211,9 @@ def step():
     print(f"Current player: {STATE.game_state.current_player}")
     print(f"Scores: {scores}\n")
 
-    debug_state(STATE, ENV)
+    # debug_state(STATE, ENV)
 
-    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "winners": winners, "current_player": int(STATE.game_state.current_player),
+    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "rewards": rewards, "current_player": int(STATE.game_state.current_player),
             "scores": scores}
 
 @app.route('/reset', methods=['POST'])

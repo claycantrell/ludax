@@ -16,6 +16,12 @@ from tqdm import tqdm
 from ludax import LudaxEnvironment
 from ludax import games
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+games_dir = os.path.abspath(os.path.join(current_dir, "../../games"))
+
+print(current_dir)
+print(games_dir)
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--game', type=str, default='tic_tac_toe', help='Game name')
@@ -25,7 +31,6 @@ def parse_args():
     parser.add_argument('--num_batch_sizes', type=int, default=11, help='Number of batch sizes to evaluate')
     parser.add_argument('--ludii_cache_prefix', type=str, default='yaldabaoth')
     parser.add_argument('--ludii_thread_nums', type=int, nargs='+', default=[1, 16, 32], help='Number of threads to use for Ludii')
-    parser.add_argument('--save-graphs', type=bool, default=True, help='Save graphs instead of showing them')
     parser.add_argument('--cache', type=bool, default=False, help='Load cached results if available')
     return parser.parse_args()
 
@@ -49,8 +54,7 @@ def run_batch(state, step, key):
 
 
 def retrieve_ludii(args):
-
-    ludii_caches = [pd.read_csv(f"./data/{args.ludii_cache_prefix}_speeds_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
+    ludii_caches = [pd.read_csv(f"{current_dir}/data/{args.ludii_cache_prefix}_speeds_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
     game_names = ludii_caches[0]['Name'].unique()
     closest_game = process.extractOne(args.game, game_names, scorer=process.fuzz.ratio)[0]
 
@@ -114,7 +118,7 @@ def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_s
 
 def cached_eval(args):
     cache_file = (
-        f"./data/benchmarks/{args.game}/cache-"
+        f"{current_dir}/data/benchmarks/{args.game}/cache-"
         f"{args.game}-{args.num_games}-{args.num_warmup_games}-"
         f"{args.batch_size_step}-{args.num_batch_sizes}.npz"
     )
@@ -126,14 +130,17 @@ def cached_eval(args):
     if os.path.exists(cache_file) and args.cache:
         print(f"Loading cached results from {cache_file}")
         with np.load(cache_file) as cache:
-            ludii_playouts_per_second  = float(cache['ludii_playouts_per_second'])
-            ludii_moves_per_second     = float(cache['ludii_moves_per_second'])
-            ldx_times                  = cache['ldx_times']
-            ldx_warmup_times           = cache['ldx_warmup_times']
-            ldx_total_steps            = cache['ldx_total_steps']
-            pgx_times                  = cache['pgx_times']
-            pgx_warmup_times           = cache['pgx_warmup_times']
-            pgx_total_steps            = cache['pgx_total_steps']
+            save_kwargs = dict(
+                batch_sizes=batch_sizes,
+                ludii_playouts_per_second=float(cache['ludii_playouts_per_second']),
+                ludii_moves_per_second=float(cache['ludii_moves_per_second']),
+                ldx_times=cache['ldx_times'],
+                ldx_warmup_times=cache['ldx_warmup_times'],
+                ldx_total_steps=cache['ldx_total_steps'],
+                pgx_times=cache['pgx_times'],
+                pgx_warmup_times=cache['pgx_warmup_times'],
+                pgx_total_steps=cache['pgx_total_steps']
+            )
     else:
         ludii_playouts_per_second, ludii_moves_per_second = retrieve_ludii(args)
 
@@ -233,7 +240,7 @@ def plot_graphs(cmd_args, **kwargs):
 
 
     # ——— Create a new save directory ———
-    save_dir = os.path.join("./data/benchmarks", cmd_args.game)
+    save_dir = os.path.join(f"{current_dir}/data/benchmarks", cmd_args.game)
     os.makedirs(save_dir, exist_ok=True)
 
     # ——— Plot #1: Mean Throughput (Playouts) ———
@@ -257,10 +264,8 @@ def plot_graphs(cmd_args, **kwargs):
     ax.legend()
     fig.tight_layout()
 
-    if cmd_args.save_graphs:
-        fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_playouts_per_second.png'))
-    else:
-        plt.show()
+    fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_playouts_per_second.png'))
+
 
     # ——— Plot #2: Mean Throughput (moves) ———
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -283,10 +288,9 @@ def plot_graphs(cmd_args, **kwargs):
     ax.legend()
     fig.tight_layout()
 
-    if cmd_args.save_graphs:
-        fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_moves_per_second.png'))
-    else:
-        plt.show()
+    fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_moves_per_second.png'))
+
+
 
     # ——— Plot #3: Warmup Bars ———
     # We'll visualize the *first batch* (index 0) warmup times
@@ -300,10 +304,7 @@ def plot_graphs(cmd_args, **kwargs):
     ax.set_ylabel('Execution Time (s)')
     ax.set_title(f'Ludii‑JAX Warmup Times (bs={batch_sizes[batch_idx]})')
     fig.tight_layout()
-    if cmd_args.save_graphs:
-        fig.savefig(f'./data/benchmarks/{cmd_args.game}-ldx_warmup_bs{batch_sizes[batch_idx]}.png')
-    else:
-        plt.show()
+    fig.savefig(os.path.join(save_dir, f'{cmd_args.game}-ldx_warmup_bs{batch_sizes[batch_idx]}.png'))
 
     # PGX warmup (if available)
     if pgx_times is not None:
@@ -314,10 +315,7 @@ def plot_graphs(cmd_args, **kwargs):
         ax.set_ylabel('Execution Time (s)')
         ax.set_title(f'PGX Warmup Times (bs={batch_sizes[batch_idx]})')
         fig.tight_layout()
-        if cmd_args.save_graphs:
-            fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_warmul_bs{batch_sizes[batch_idx]}.png'))
-        else:
-            plt.show()
+        fig.savefig(os.path.join(save_dir, f'{cmd_args.game}_warmul_bs{batch_sizes[batch_idx]}.png'))
 
 
 if __name__ == "__main__":
