@@ -1430,7 +1430,7 @@ class GameRuleParser(Transformer):
         Return whether the board is completely full of pieces
         '''
         def predicate_fn(state):
-            return (state.board != EMPTY).all()
+            return (state.board != EMPTY).any(axis=0).all()
         
         return predicate_fn, {}
     

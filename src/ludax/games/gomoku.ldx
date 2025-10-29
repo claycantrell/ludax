@@ -2,17 +2,20 @@
     (players 2)
     (equipment 
         (board (square 15))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules 
         (play
             (repeat (P1 P2)
-                (place (destination empty))
+                (place "token" (destination empty))
             )
         )
         
         (end 
-            (if (line 5 exact:true) (mover win))
+            (if (line "token" 5 exact:true) (mover win))
             (if (full_board) (draw))    
         )
     )
