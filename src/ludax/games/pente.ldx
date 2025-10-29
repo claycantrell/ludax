@@ -2,24 +2,27 @@
     (players 2)
     (equipment
         (board (square 19))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules 
         (play
             (once_through (P1)
-                (place (destination center))
+                (place "token" (destination center))
             )
             (repeat (P2 P1)
-                (place 
+                (place "token"
                     (destination empty)
                     (effects 
-                        (capture (custodial 2) increment_score:true)
+                        (capture (custodial "token" 2) increment_score:true)
                     )
                 )
             )
         )
         (end 
-            (if (line 5) (mover win))
+            (if (line "token" 5) (mover win))
             (if (>= (score mover) 10) (mover win))
         )
     )
