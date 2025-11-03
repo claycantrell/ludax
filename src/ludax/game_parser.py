@@ -1635,14 +1635,13 @@ class GameRuleParser(Transformer):
         NOTE: to simplify syntax, it's possible to specify "multi-masks" (see above)
         instead of manually enumerating each of the target masks
         '''
-        (_, target_masks_infos), *optional_args = children
+        piece, (_, target_masks_infos), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
         # Parse out the target mask functions
         target_mask_fns, _ = zip(*target_masks_infos)
         num_targets = len(target_mask_fns)
 
-        piece = optional_args[OptionalArgs.PIECE]
         if optional_args[OptionalArgs.MOVER] == PlayerAndMoverRefs.MOVER:
             offset = 0
         else:
