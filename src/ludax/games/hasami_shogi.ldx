@@ -2,21 +2,24 @@
     (players 2)
     (equipment 
         (board (square 9))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules
         (start
-            (place P1 (row 8))
-            (place P2 (row 0))
+            (place "token" P1 (row 8))
+            (place "token" P2 (row 0))
         )
         (play
             (repeat (P1 P2)
-                (move
+                (move "token"
                     (slide direction:orthogonal)
                     (source (occupied mover)) 
                     (destination empty)
                     (effects 
-                        (capture (or (custodial 1 orientation:orthogonal) (corner_custodial)))
+                        (capture (or (custodial "token" 1 orientation:orthogonal) (corner_custodial "token")))
                     )
                 )
             )

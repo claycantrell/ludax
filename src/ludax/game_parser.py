@@ -339,6 +339,9 @@ class GameRuleParser(Transformer):
         Result constraints refer to things that must be true about the board
         immediately following an action. Each kind of action has its own
         'result_constraint' function that knows how to apply that action
+
+        TODO: this needs to consider the piece which is being placed, which is only defined
+        above it in the syntax tree...
         '''
         (predicate_fn, predicate_fn_info) = children[0]
 
@@ -379,7 +382,7 @@ class GameRuleParser(Transformer):
         rule (e.g. sliding, jumping, ...)
         '''
 
-        base_constraint_fns, (source_constraint_fn, _), (destination_constraint_fn, _), *optional_args = children
+        piece, base_constraint_fns, (source_constraint_fn, _), (destination_constraint_fn, _), *optional_args = children
 
         if not isinstance(base_constraint_fns, list):
             base_constraint_fns = [base_constraint_fns]
@@ -388,13 +391,15 @@ class GameRuleParser(Transformer):
 
         # If a game allows multiple move types, then any of them can be used at each turn
         def base_constraint_fn(state):
-            base_values = collect_values(state)
-            return base_values.any(axis=0).astype(jnp.int16)
+            base_values = collect_values(state).any(axis=0).astype(jnp.int16)
+            return base_values
+            sub_board = state.board[piece]
+            return base_values & (sub_board == state.current_player)
 
         def move_piece_fn(state, action):
             start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-            board = state.board.at[end_idx].set(state.current_player)
-            board = board.at[start_idx].set(EMPTY)
+            board = state.board.at[piece, end_idx].set(state.current_player)
+            board = board.at[piece, start_idx].set(EMPTY)
             previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
             return state._replace(board=board, previous_actions=previous_actions)
 
@@ -421,7 +426,7 @@ class GameRuleParser(Transformer):
             result_constraint_fn, apply_effects_fn = optional_args
         
         # We model the action space as "take a piece from any board position and move it to
-        # any other board position"
+        # any other board position" so the total number of actions is board_size^2
         action_size = self.game_info.board_size ** 2
 
         def legal_action_mask_fn(state):
@@ -429,8 +434,12 @@ class GameRuleParser(Transformer):
             # base_mask = jax.vmap(base_constraint_fn, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
             base_mask = base_constraint_fn(state)
 
-            # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape)
+            # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape) and
+            # additionally impose constraints based on the piece being moved
             source_mask = source_constraint_fn(state)
+            piece_mask = (state.board[piece] == state.current_player).astype(jnp.int16)
+            source_mask = source_mask & piece_mask
+
             base_mask = jnp.where(
                 source_mask[:, jnp.newaxis],
                 base_mask, jnp.zeros_like(base_mask)
@@ -453,26 +462,50 @@ class GameRuleParser(Transformer):
     
     def move_hop(self, children):
         '''
-        Move a piece from one position to another by jumping over a piece
+        Move a piece from one position to another by jumping over a piece. Optional arguments can specify a direction,
+        a specific piece to hop over, and which player's pieces can be hopped over (by default: "any" for both args)
 
         TODO: add a 'hopped' field to the state so that hopped pieces can be captured later
         '''
 
         optional_args = self._parse_optional_args(children)
         direction = optional_args[OptionalArgs.DIRECTION]
+
+        piece = optional_args[OptionalArgs.PIECE]
+        if piece == PieceRefs.ANY:
+            filter_to_piece = lambda occ_mask: occ_mask.any(axis=0)
+        else:
+            filter_to_piece = lambda occ_mask: occ_mask[piece]
+
+        mover = optional_args[OptionalArgs.MOVER]
+        if mover == PlayerAndMoverRefs.BOTH:
+            def piece_match_fn(state):
+                occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
+        elif mover == PlayerAndMoverRefs.MOVER:
+            def piece_match_fn(state):
+                occupied_mask = (state.board == state.current_player).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
+        elif mover == PlayerAndMoverRefs.OPPONENT:
+            def piece_match_fn(state):
+                occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
         
         # We use same logic as in mask_custodial since that's what hopping looks like
         inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
-
         left_indices = outer_indices[:, 0]
         right_indices = outer_indices[:, 1]
+
         def legal_hop_mask_fn(state):
 
-            occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+            center_piece_mask = piece_match_fn(state).astype(jnp.int16)
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
 
-            inner_match = (occupied_mask[inner_indices] == 1).all(axis=1)
-            left_match = (occupied_mask[left_indices] == 1) & (occupied_mask[right_indices] == 0) & inner_match
-            right_match = (occupied_mask[right_indices]  == 1) & (occupied_mask[left_indices] == 0) & inner_match
+            # NOTE: we actually don't need to check that the starting position is occupied because that will inherently
+            # be enforced by the overall legal action mask which checks for specific piece occupancy
+            inner_match = (center_piece_mask[inner_indices] == 1).all(axis=1)
+            left_match = (occupied_mask[right_indices] == 0) & inner_match
+            right_match = (occupied_mask[left_indices] == 0) & inner_match
 
             left_match_starts = jnp.where(left_match, left_indices, self.game_info.board_size+1)
             left_match_dests = jnp.where(left_match, right_indices, self.game_info.board_size+1)
@@ -515,12 +548,12 @@ class GameRuleParser(Transformer):
         ones_array = jnp.ones((len(direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
 
         def legal_slide_mask_fn(state):
-            occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
 
             # Get the occupied mask at the slide indices and pad it with 'occupied' to
             # represent the edge of the board, then find the index of the first occupied cell
             occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
-            occupied_at_slide = occupied_at_slide.at[:, actions, :].set(0)
+            occupied_at_slide = occupied_at_slide.at[:, :, 0].set(0)
             
             occupied_at_slide = jnp.concatenate([occupied_at_slide, ones_array], axis=2)
             slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
@@ -610,6 +643,8 @@ class GameRuleParser(Transformer):
     def effect_capture(self, children):
         '''
         Remove pieces from the board according to a mask
+
+        TODO: specify which piece is captured?
         '''
         (child_mask_fn, _), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
@@ -662,6 +697,8 @@ class GameRuleParser(Transformer):
     def effect_flip(self, children):
         '''
         Flip pieces on the board belonging to an opponent according to a mask
+
+        TODO: specify which piece is flipped?
         '''
         (child_mask_fn, _), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
@@ -993,8 +1030,9 @@ class GameRuleParser(Transformer):
         piece in the corner is flanked by the mover's pieces along both edges
         '''
 
-        optional_args = self._parse_optional_args(children)
+        piece, *optional_args = children
 
+        optional_args = self._parse_optional_args(optional_args)
         mover_ref = optional_args[OptionalArgs.MOVER]
         if mover_ref == PlayerAndMoverRefs.MOVER:
             offset = 0
@@ -1017,8 +1055,8 @@ class GameRuleParser(Transformer):
         def mask_fn(state):
             outer_player = (state.current_player + offset) % 2
             inner_player = (outer_player + 1) % 2
-            outer_mask = (state.board == outer_player)
-            inner_mask = (state.board == inner_player)
+            outer_mask = (state.board[piece] == outer_player)
+            inner_mask = (state.board[piece] == inner_player)
 
             # Only keep the custodial arrangements which include the last move
             # among the outer indices. TODO: make this an argument?
@@ -1181,7 +1219,7 @@ class GameRuleParser(Transformer):
 
         if len(children) == 0:
             def mask_fn(state):
-                return (state.board != EMPTY).astype(jnp.int16)
+                return (state.board != EMPTY).any(axis=0).astype(jnp.int16)
             
             return mask_fn, {}
         
@@ -1193,7 +1231,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def mask_fn(state):
-            return (state.board == ((state.current_player + offset)%2)).astype(jnp.int16)
+            return (state.board == ((state.current_player + offset)%2)).any(axis=0).astype(jnp.int16)
         
         return mask_fn, {}
     

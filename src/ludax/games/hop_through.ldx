@@ -2,16 +2,19 @@
     (players 2)
     (equipment 
         (board (square 8))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules
         (start
-            (place P1 ((row 0) (row 1)))
-            (place P2 ((row 6) (row 7)))
+            (place "token" P1 ((row 0) (row 1)))
+            (place "token" P2 ((row 6) (row 7)))
         )
         (play
             (repeat (P1 P2)
-                (move
+                (move "token"
                     (hop direction:any)
                     (source (occupied mover)) 
                     (destination empty)
