@@ -393,8 +393,6 @@ class GameRuleParser(Transformer):
         def base_constraint_fn(state):
             base_values = collect_values(state).any(axis=0).astype(jnp.int16)
             return base_values
-            sub_board = state.board[piece]
-            return base_values & (sub_board == state.current_player)
 
         def move_piece_fn(state, action):
             start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
@@ -460,6 +458,33 @@ class GameRuleParser(Transformer):
         
         return action_size, move_piece_fn, legal_action_mask_fn, apply_effects_fn
     
+    def play_multi_move(self, children):
+        '''
+        Players can move different kinds of pieces according to different rules. By construction, any board position
+        contains only one piece type which allows us to (for instance) compute the overall legal action mask by taking
+        the union of the legal action masks for each piece type.
+        '''
+        action_sizes, apply_action_fns, legal_action_mask_fns, apply_effects_fns = zip(*children)
+
+        action_size = max(action_sizes)
+
+        def apply_action_fn(state, action):
+            start_pos = action // self.game_info.board_size
+            piece_idx = state.board[:, start_pos].argmax()
+            return jax.lax.switch(piece_idx, apply_action_fns, state, action)
+        
+        collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+        def legal_action_mask_fn(state):
+            return collect_legal_masks(state).any(axis=0).astype(jnp.int16)
+        
+        # For move rules, the "previous action" contains the destination position
+        def apply_effects_fn(state, original_player):
+            piece_idx = state.board[:, state.previous_actions[original_player]].argmax()
+            return jax.lax.switch(piece_idx, apply_effects_fns, state, original_player)
+        
+        return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
+
     def move_hop(self, children):
         '''
         Move a piece from one position to another by jumping over a piece. Optional arguments can specify a direction,
@@ -1251,7 +1276,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def mask_fn(state):
-            mask = jnp.zeros_like(state.board).astype(jnp.bool_)
+            mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_)
             prev_move = state.previous_actions[(state.current_player + offset) % 2]
             mask = jax.lax.select(prev_move != -1, mask.at[prev_move].set(True), mask)
 

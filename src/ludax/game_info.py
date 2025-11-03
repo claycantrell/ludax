@@ -159,7 +159,7 @@ class GameInfoExtractor(Visitor):
         
         if child.data == "play_place":
             self.game_info.move_type = "place"
-        elif child.data == "play_move":
+        elif child.data == "play_move" or child.data == "play_multi_move":
             self.game_info.move_type = "move"
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
