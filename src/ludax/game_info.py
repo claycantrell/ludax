@@ -40,6 +40,7 @@ class GameInfoExtractor(Visitor):
         # These attributes are shared across all games
         self.game_state_attributes = [
             "board",
+            "legal_action_mask",
             "current_player",
             "phase_idx",
             "phase_step_count",

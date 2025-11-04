@@ -172,6 +172,7 @@ predicate: predicate_equals
          | predicate_last_move_in
          | predicate_less_equals
          | predicate_mover_is
+         | predicate_no_legal_actions
          | predicate_passed
 
 predicate_equals: "(" "=" function+ ")"
@@ -182,12 +183,13 @@ predicate_greater_equals: "(" ">=" function function ")"
 predicate_last_move_in: "(" "last_move_in" super_mask ")" // equivalent to (exists (and (prev_move mover) mask)), but more readable
 predicate_less_equals: "(" "<=" function function ")"
 predicate_mover_is: "(" "mover_is" player_reference ")"
+predicate_no_legal_actions: "(" "no_legal_actions" ")"
 predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 
 // Additional (potentially optional) arguments for predicates
 custodial_length_arg: ANY | positive_int
 dimensions_arg: "(" positive_int positive_int ")"
-direction_arg: "direction:" direction
+direction_arg: "direction:" (direction | multi_direction)
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
 exclude_arg: "exclude:" multi_mask_arg
@@ -215,6 +217,7 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: true_direction | relative_direction
+?multi_direction: "(" direction+ ")"
 ?true_direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?relative_direction: FORWARD | BACKWARD | FORWARD_LEFT | FORWARD_RIGHT | BACKWARD_LEFT | BACKWARD_RIGHT
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY

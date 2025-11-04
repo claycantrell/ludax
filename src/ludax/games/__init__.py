@@ -18,6 +18,8 @@ tic_tac_toe = _read_game('tic_tac_toe')
 yavalath = _read_game('yavalath')
 yavalax = _read_game('yavalax')
 test = _read_game('test')
+test_slide = _read_game('test_slide')
+wolf_and_sheep = _read_game('wolf_and_sheep')
 
 # List of all games available in the package
 __all__ = [
@@ -34,4 +36,6 @@ __all__ = [
     "yavalath",
     "yavalax",
     "test",
+    "test_slide",
+    "wolf_and_sheep",
 ]

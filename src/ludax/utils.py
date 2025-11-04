@@ -175,7 +175,7 @@ def _get_adjacency_lookup(game_info: GameInfo):
 
     return adjacency_array
 
-def _get_direction_indices(game_info: GameInfo, direction: Directions):
+def _get_direction_indices(game_info: GameInfo, directions: typing.Union[Directions, list[Directions]]):
     '''
     Returns the indices corresponding to the channels in the adjacency lookup for the given (meta)direction.
     This function also supports "relative" directions like "forward" if they've been defined in the game's
@@ -185,17 +185,25 @@ def _get_direction_indices(game_info: GameInfo, direction: Directions):
     '''
     all_directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
 
-    if direction in map(str, RelativeDirections):
-        p1_direction = _get_relative_direction(game_info, RelativeDirections(direction), P1)
-        p2_direction = _get_relative_direction(game_info, RelativeDirections(direction), P2)
+    p1_query_dirs = []
+    p2_query_dirs = []
 
-    else:
-        p1_direction = direction
-        p2_direction = direction
-    
+    if isinstance(directions, str):
+        directions = [directions]
 
-    p1_query_dirs = META_DIRECTION_MAPPING.get(p1_direction, [p1_direction])
-    p2_query_dirs = META_DIRECTION_MAPPING.get(p2_direction, [p2_direction])
+    for direction in directions:
+
+        if direction in map(str, RelativeDirections):
+            p1_direction = _get_relative_direction(game_info, RelativeDirections(direction), P1)
+            p2_direction = _get_relative_direction(game_info, RelativeDirections(direction), P2)
+
+        else:
+            p1_direction = direction
+            p2_direction = direction
+        
+
+        p1_query_dirs += META_DIRECTION_MAPPING.get(p1_direction, [p1_direction])
+        p2_query_dirs += META_DIRECTION_MAPPING.get(p2_direction, [p2_direction])
 
     p1_dir_indices = [all_directions.index(_dir) for _dir in p1_query_dirs if _dir in all_directions]
     p2_dir_indices = [all_directions.index(_dir) for _dir in p2_query_dirs if _dir in all_directions]

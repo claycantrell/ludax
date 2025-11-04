@@ -53,6 +53,7 @@ class LudaxEnvironment():
         temp_current_player = jnp.int16(0)
         game_state = self.game_state_cls(
             board=jnp.ones((self.num_piece_types, self.board_size), dtype=jnp.int16) * EMPTY,
+            legal_action_mask=jnp.ones((self.num_actions,), dtype=jnp.bool_),
             current_player=temp_current_player,
             phase_idx=jnp.int16(0),
             phase_step_count=jnp.int16(0),
@@ -66,14 +67,14 @@ class LudaxEnvironment():
         current_player = self._get_next_player(game_state)
         game_state = game_state._replace(current_player=current_player)
 
+        legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
+        game_state = game_state._replace(legal_action_mask=legal_action_mask)
+
         state = State(
             game_state=game_state,
-            legal_action_mask=jnp.ones(self.num_actions, dtype=jnp.bool_),
+            legal_action_mask=legal_action_mask,
             current_player=current_player
         )
-
-        legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
-        state = state.replace(current_player=current_player, legal_action_mask=legal_action_mask)
 
         return state
 
@@ -146,7 +147,9 @@ class LudaxEnvironment():
         game_state = self._apply_effects(game_state, original_player)
 
         # Compute the legal action mask for the upcoming player (which is used in some end conditions)
+        # TODO: should this be stored separately for each player?
         new_legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
+        game_state = game_state._replace(legal_action_mask=new_legal_action_mask)
         state = state.replace(legal_action_mask=new_legal_action_mask)
 
         # Use the new board to compute the winner, terminal, and rewards -- but consider the

@@ -1612,6 +1612,16 @@ class GameRuleParser(Transformer):
 
         return predicate_fn, info
     
+    def predicate_no_legal_actions(self, children):
+        '''
+        Returns whether the acting player has no legal moves available
+        '''
+        
+        def predicate_fn(state):
+            return ~state.legal_action_mask.any()
+
+        return predicate_fn, {}
+    
     def predicate_passed(self, children):
         '''
         Returns whether one or both players passed their last turn
