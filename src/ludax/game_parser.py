@@ -494,7 +494,6 @@ class GameRuleParser(Transformer):
         '''
 
         optional_args = self._parse_optional_args(children)
-        direction = optional_args[OptionalArgs.DIRECTION]
 
         piece = optional_args[OptionalArgs.PIECE]
         if piece == PieceRefs.ANY:
@@ -516,35 +515,40 @@ class GameRuleParser(Transformer):
                 occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
                 return filter_to_piece(occupied_mask)
         
-        # We use same logic as in mask_custodial since that's what hopping looks like
-        # TODO: handle relative directions
-        inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
-        left_indices = outer_indices[:, 0]
-        right_indices = outer_indices[:, 1]
+
+        direction = optional_args[OptionalArgs.DIRECTION]
+        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        
+        # Hopping is kind of like sliding a distance of 2 except that the middle position needs to be occupied
+        # by a specific piece and the end position needs to be empty
+        slide_lookup = utils._get_slide_lookup(self.game_info)
+        slide_lookup = slide_lookup[:, :, :3]
 
         def legal_hop_mask_fn(state):
-
             center_piece_mask = piece_match_fn(state).astype(jnp.int16)
             occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
 
-            # NOTE: we actually don't need to check that the starting position is occupied because that will inherently
-            # be enforced by the overall legal action mask which checks for specific piece occupancy
-            inner_match = (center_piece_mask[inner_indices] == 1).all(axis=1)
-            left_match = (occupied_mask[right_indices] == 0) & inner_match
-            right_match = (occupied_mask[left_indices] == 0) & inner_match
+            direction_indices = jax.lax.select(
+                state.current_player == P1,
+                p1_direction_indices,
+                p2_direction_indices
+            )
+            slide_indices = slide_lookup[direction_indices, :, :]
 
-            left_match_starts = jnp.where(left_match, left_indices, self.game_info.board_size+1)
-            left_match_dests = jnp.where(left_match, right_indices, self.game_info.board_size+1)
+            start_indices = slide_indices[:, :, 0]
+            middle_indices = slide_indices[:, :, 1]
+            dest_indices = slide_indices[:, :, 2]
 
-            right_match_starts = jnp.where(right_match, right_indices, self.game_info.board_size+1)
-            right_match_dests = jnp.where(right_match, left_indices, self.game_info.board_size+1)
+            inner_match = (center_piece_mask[middle_indices] == 1)
+            dest_free = (occupied_mask[dest_indices] == 0)
 
-            # mask[i] should contain the legal destinations for a hop starting at position i
+            legal_hop = inner_match & dest_free
+            start_positions = jnp.where(legal_hop, start_indices, self.game_info.board_size+1)
+            dest_positions = jnp.where(legal_hop, dest_indices, self.game_info.board_size+1)
             mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
-            mask = mask.at[left_match_starts, left_match_dests].set(1)
-            mask = mask.at[right_match_starts, right_match_dests].set(1)
+            mask = mask.at[start_positions, dest_positions].set(1)
 
-            return mask
+            return mask            
         
         return legal_hop_mask_fn
 
@@ -1008,7 +1012,8 @@ class GameRuleParser(Transformer):
         optional_args = self._parse_optional_args(optional_args)
 
         # TODO: handle relative direction? Odd since we don't specify a player here...
-        direction_indices, _ = utils._get_direction_indices(self.game_info, optional_args[OptionalArgs.DIRECTION])
+        direction = optional_args[OptionalArgs.DIRECTION]
+        direction_indices, _ = utils._get_direction_indices(self.game_info, direction)
         local_lookup = self.adjacency_lookup[direction_indices]
 
         def mask_fn(state):
