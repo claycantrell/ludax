@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import BoardShapes, PieceShapes
+from .config import BoardShapes, PieceShapes, PlayerAndMoverRefs
 
 @dataclass
 class GameInfo:
@@ -23,6 +23,8 @@ class GameInfo:
     num_piece_types: int = None
     piece_names: tuple[str] = ()
     piece_owners: tuple[str] = ()
+
+    forward_directions: tuple[str] = ()
 
     def __repr__(self):
         return f"GameInfo(board_shape={self.board_shape}, observation_shape={self.observation_shape}, board_size={self.board_size}, hex_diameter={self.hex_diameter})"
@@ -64,6 +66,8 @@ class GameInfoExtractor(Visitor):
         for piece_name in self.game_info.piece_names:
             if piece_name not in self.rendering_info.piece_shape_mapping:
                 self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
+
+        print(self.game_info)
 
         return self.game_info, self.rendering_info
 
@@ -164,6 +168,14 @@ class GameInfoExtractor(Visitor):
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
         
+    '''
+    Custom assignments for relative directions (i.e. "forward")
+    '''
+    def forward_assignments(self, tree):
+        p1_dir = self._nav(tree, [0, 1])
+        p2_dir = self._nav(tree, [1, 1])
+        self.game_info.forward_directions = (p1_dir, p2_dir)
+
     '''
     Rendering and graphics related functions
     '''

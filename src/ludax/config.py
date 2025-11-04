@@ -86,6 +86,14 @@ class Directions(StrEnum):
     UP_RIGHT = 'up_right'
     VERTICAL = 'vertical'
 
+class RelativeDirections(StrEnum):
+    FORWARD = 'forward'
+    BACKWARD = 'backward'
+    FORWARD_LEFT = 'forward_left'
+    FORWARD_RIGHT = 'forward_right'
+    BACKWARD_LEFT = 'backward_left'
+    BACKWARD_RIGHT = 'backward_right'
+
 class Orientations(StrEnum):
     ANY = 'any'
     BACK_DIAGONAL = 'back_diagonal'

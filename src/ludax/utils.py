@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .config import EMPTY, INVALID, BoardShapes, Directions, EdgeTypes, Orientations, OptionalArgs, PieceRefs, PlayerAndMoverRefs, P1, P2
+from .config import EMPTY, INVALID, BoardShapes, Directions, RelativeDirections, EdgeTypes, Orientations, OptionalArgs, PieceRefs, PlayerAndMoverRefs, P1, P2
 from .game_info import GameInfo
 
 BOARD_SHAPE_TO_DIRECTIONS = {
@@ -42,6 +42,24 @@ META_DIRECTION_MAPPING = {
         Directions.LEFT, Directions.RIGHT, 
         Directions.DOWN_LEFT, Directions.DOWN, Directions.DOWN_RIGHT
     ]
+}
+
+RELATIVE_DIRECTION_MAPPING = {
+    Directions.UP: {RelativeDirections.FORWARD: Directions.UP, RelativeDirections.BACKWARD: Directions.DOWN,
+                    RelativeDirections.FORWARD_LEFT: Directions.UP_LEFT, RelativeDirections.FORWARD_RIGHT: Directions.UP_RIGHT,
+                    RelativeDirections.BACKWARD_LEFT: Directions.DOWN_LEFT, RelativeDirections.BACKWARD_RIGHT: Directions.DOWN_RIGHT},
+
+    Directions.DOWN: {RelativeDirections.FORWARD: Directions.DOWN, RelativeDirections.BACKWARD: Directions.UP,
+                        RelativeDirections.FORWARD_LEFT: Directions.DOWN_RIGHT, RelativeDirections.FORWARD_RIGHT: Directions.DOWN_LEFT,
+                        RelativeDirections.BACKWARD_LEFT: Directions.UP_RIGHT, RelativeDirections.BACKWARD_RIGHT: Directions.UP_LEFT},
+
+    Directions.LEFT: {RelativeDirections.FORWARD: Directions.LEFT, RelativeDirections.BACKWARD: Directions.RIGHT,
+                      RelativeDirections.FORWARD_LEFT: Directions.DOWN_LEFT, RelativeDirections.FORWARD_RIGHT: Directions.UP_LEFT,
+                      RelativeDirections.BACKWARD_LEFT: Directions.UP_RIGHT, RelativeDirections.BACKWARD_RIGHT: Directions.DOWN_RIGHT},
+
+    Directions.RIGHT: {RelativeDirections.FORWARD: Directions.RIGHT, RelativeDirections.BACKWARD: Directions.LEFT,
+                      RelativeDirections.FORWARD_LEFT: Directions.UP_RIGHT, RelativeDirections.FORWARD_RIGHT: Directions.DOWN_RIGHT,
+                      RelativeDirections.BACKWARD_LEFT: Directions.DOWN_LEFT, RelativeDirections.BACKWARD_RIGHT: Directions.UP_LEFT}
 }
 
 def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
@@ -158,19 +176,38 @@ def _get_adjacency_lookup(game_info: GameInfo):
 
 def _get_direction_indices(game_info: GameInfo, direction: Directions):
     '''
-    Returns the indices corresponding to the channels in the adjacency lookup for the given (meta)direction
+    Returns the indices corresponding to the channels in the adjacency lookup for the given (meta)direction.
+    This function also supports "relative" directions like "forward" if they've been defined in the game's
+    player assignments.
+
+    Returns the direction indices for each player separately (which will be the same for non-relative directions)
     '''
     all_directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
-    query_directions = META_DIRECTION_MAPPING.get(direction, [direction])
 
-    direction_indices = []
-    for dir in query_directions:
-        if dir in all_directions:
-            direction_indices.append(all_directions.index(dir))
+    if direction in map(str, RelativeDirections):
+        p1_direction = _get_relative_direction(game_info, RelativeDirections(direction), P1)
+        p2_direction = _get_relative_direction(game_info, RelativeDirections(direction), P2)
 
-    direction_indices = jnp.array(list(sorted(direction_indices)), dtype=jnp.int16)
+    else:
+        p1_direction = direction
+        p2_direction = direction
+    
 
-    return direction_indices
+    p1_query_dirs = META_DIRECTION_MAPPING.get(p1_direction, [p1_direction])
+    p2_query_dirs = META_DIRECTION_MAPPING.get(p2_direction, [p2_direction])
+
+    p1_dir_indices = [all_directions.index(_dir) for _dir in p1_query_dirs if _dir in all_directions]
+    p2_dir_indices = [all_directions.index(_dir) for _dir in p2_query_dirs if _dir in all_directions]
+
+    p1_dir_indices = jnp.array(list(sorted(p1_dir_indices)), dtype=jnp.int16)
+    p2_dir_indices = jnp.array(list(sorted(p2_dir_indices)), dtype=jnp.int16)
+
+    return p1_dir_indices, p2_dir_indices
+
+def _get_relative_direction(game_info: GameInfo, direction: RelativeDirections, player: int):
+    forward = game_info.forward_directions[player]
+    relative_direction = RELATIVE_DIRECTION_MAPPING[forward][direction]
+    return relative_direction
 
 def _get_slide_lookup(game_info: GameInfo):
     '''

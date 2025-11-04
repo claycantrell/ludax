@@ -517,6 +517,7 @@ class GameRuleParser(Transformer):
                 return filter_to_piece(occupied_mask)
         
         # We use same logic as in mask_custodial since that's what hopping looks like
+        # TODO: handle relative directions
         inner_indices, outer_indices = utils._get_custodial_indices(self.game_info, 1, direction)
         left_indices = outer_indices[:, 0]
         right_indices = outer_indices[:, 1]
@@ -560,7 +561,7 @@ class GameRuleParser(Transformer):
             distance = max(self.game_info.observation_shape[:2])
 
         direction = optional_args[OptionalArgs.DIRECTION]
-        direction_indices = utils._get_direction_indices(self.game_info, direction)
+        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         
         # Restrict the slide lookup to only the specified distance
         slide_lookup = utils._get_slide_lookup(self.game_info)
@@ -568,12 +569,19 @@ class GameRuleParser(Transformer):
 
         # Precompute the static indices used in the sliding logic
         actions = jnp.arange(self.game_info.board_size, dtype=jnp.int16)
-        slide_indices = slide_lookup[direction_indices, :, :]
-        general_indices = jnp.indices(slide_indices.shape, dtype=jnp.int16)[2]
-        ones_array = jnp.ones((len(direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
+        # slide_indices = slide_lookup[direction_indices, :, :]
+        general_indices = jnp.indices(slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int16)[2]
+        ones_array = jnp.ones((len(p1_direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
 
         def legal_slide_mask_fn(state):
             occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
+
+            direction_indices = jax.lax.select(
+                state.current_player == P1,
+                p1_direction_indices,
+                p2_direction_indices
+            )
+            slide_indices = slide_lookup[direction_indices, :, :]
 
             # Get the occupied mask at the slide indices and pad it with 'occupied' to
             # represent the edge of the board, then find the index of the first occupied cell
@@ -999,7 +1007,8 @@ class GameRuleParser(Transformer):
         (child_mask_fn, child_info), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
-        direction_indices = utils._get_direction_indices(self.game_info, optional_args[OptionalArgs.DIRECTION])
+        # TODO: handle relative direction? Odd since we don't specify a player here...
+        direction_indices, _ = utils._get_direction_indices(self.game_info, optional_args[OptionalArgs.DIRECTION])
         local_lookup = self.adjacency_lookup[direction_indices]
 
         def mask_fn(state):

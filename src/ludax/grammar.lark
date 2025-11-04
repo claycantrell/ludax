@@ -2,7 +2,10 @@
 game: "(" "game" name players equipment rules rendering? ")"
 
 // ---Players---
-players: "(" "players" positive_int ")"
+players: "(" "players" positive_int forward_assignments? ")"
+forward_assignments: "(" "set_forward" p1_assignment p2_assignment ")"
+p1_assignment: "(" P1 (UP | DOWN | LEFT | RIGHT) ")"
+p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 
 // ---Equipment---
 equipment: "(" "equipment" board pieces ")"
@@ -211,7 +214,9 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 ?positive_int: /[1-9]\d*/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
-?direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
+?direction: true_direction | relative_direction
+?true_direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
+?relative_direction: FORWARD | BACKWARD | FORWARD_LEFT | FORWARD_RIGHT | BACKWARD_LEFT | BACKWARD_RIGHT
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?color: WHITE | BLACK
 ?shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
@@ -244,6 +249,12 @@ ORTHOGONAL: "orthogonal"
 DIAGONAL: "diagonal"
 BACK_DIAGONAL: "back_diagonal"
 FORWARD_DIAGONAL: "forward_diagonal"
+FORWARD: "forward"
+BACKWARD: "backward"
+FORWARD_LEFT: "forward_left"
+FORWARD_RIGHT: "forward_right"
+BACKWARD_LEFT: "backward_left"
+BACKWARD_RIGHT: "backward_right"
 ANY: "any"
 TRUE: "true"
 FALSE: "false"
