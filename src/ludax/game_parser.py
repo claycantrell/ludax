@@ -393,13 +393,45 @@ class GameRuleParser(Transformer):
         def base_constraint_fn(state):
             base_values = collect_values(state).any(axis=0).astype(jnp.int16)
             return base_values
+        
+        # TODO: work in progress detecting hopped pieces. The difficulty is that a move might support
+        # multiple move types for a single piece, only some of which involve hopping. How can we determine
+        # that a particular action involved a hop?
+        if hasattr(self.game_info.game_state_class, 'hopped'):
 
-        def move_piece_fn(state, action):
-            start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-            board = state.board.at[piece, end_idx].set(state.current_player)
-            board = board.at[piece, start_idx].set(EMPTY)
-            previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
-            return state._replace(board=board, previous_actions=previous_actions)
+            # Somewhat hacky, but a hop always moves a piece one of these lengths based on whether
+            # it's horizontal, vertical, back-diagonal, or forward-diagonal
+            potential_hop_lengths = jnp.array([
+                2, 2 * self.game_info.board_dims[0], 2 * (self.game_info.board_dims[0] + 1),
+                2 * (self.game_info.board_dims[0] - 1)
+            ], dtype=jnp.int16)
+
+
+            def move_piece_fn(state, action):
+                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+                midpoint = (start_idx + end_idx) // 2
+
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
+                previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
+
+                action_was_hop = jnp.isin(jnp.abs(end_idx - start_idx), potential_hop_lengths) & (state.board[:, midpoint] != EMPTY).any()
+                jax.debug.print("[{was_hop}] Hopping from {start} to {end} over {mid}", start=start_idx, end=end_idx, mid=midpoint, was_hop=action_was_hop)
+                hopped = jax.lax.select(
+                    action_was_hop,
+                    jnp.zeros_like(state.hopped).at[midpoint].set(True),
+                    jnp.zeros_like(state.hopped)
+                )
+
+                return state._replace(board=board, previous_actions=previous_actions, hopped=hopped)
+
+        else:
+            def move_piece_fn(state, action):
+                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
+                previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
+                return state._replace(board=board, previous_actions=previous_actions)
 
         # Case 1: no optional arguments -- legal actions determined by the destination constraint
         # and there are no effects
@@ -428,8 +460,7 @@ class GameRuleParser(Transformer):
         action_size = self.game_info.board_size ** 2
 
         def legal_action_mask_fn(state):
-            # Construct the meta mask of all legal slides starting at any board position
-            # base_mask = jax.vmap(base_constraint_fn, in_axes=(None, 0))(state, jnp.arange(self.game_info.board_size, dtype=jnp.int16))
+            # Construct the meta mask of all legal moves starting at any board position
             base_mask = base_constraint_fn(state)
 
             # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape) and
@@ -1246,6 +1277,17 @@ class GameRuleParser(Transformer):
         '''
         def mask_fn(state):
             return (state.board == EMPTY).all(axis=0).astype(jnp.int16)
+        
+        return mask_fn, {}
+
+    def mask_hopped(self, children):
+        '''
+        Return the positions on the board which were hopped over
+        in the last move
+        '''
+        
+        def mask_fn(state):
+            return state.hopped.astype(jnp.int16)
         
         return mask_fn, {}
 

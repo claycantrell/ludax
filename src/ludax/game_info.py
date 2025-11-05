@@ -168,7 +168,23 @@ class GameInfoExtractor(Visitor):
             self.game_info.move_type = "move"
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
-        
+    
+    def move_hop(self, tree):
+        '''
+        Hopping movement requires tracking which pieces have hopped already
+        '''
+        if "hopped" not in self.game_state_attributes:
+            self.game_state_attributes.append("hopped")
+            self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
+    def mask_hopped(self, tree):
+        '''
+        Hopping movement requires tracking which pieces have hopped already
+        '''
+        if "hopped" not in self.game_state_attributes:
+            self.game_state_attributes.append("hopped")
+            self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
     '''
     Custom assignments for relative directions (i.e. "forward")
     '''

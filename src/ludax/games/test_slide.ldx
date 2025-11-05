@@ -29,7 +29,7 @@
                         ((hop direction:forward) (slide direction:orthogonal distance:1))
                         (source (occupied mover)) 
                         (destination empty)
-                        (effects (capture (adjacent (prev_move mover))))
+                        (effects (capture (hopped)))
                     )
                 )
             )
