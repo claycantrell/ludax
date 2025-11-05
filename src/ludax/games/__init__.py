@@ -5,6 +5,7 @@ def _read_game(game_name: str) -> str:
         return f.read()
 
 # Package a subset of default game implementations
+checkers = _read_game('checkers')
 connect_four = _read_game('connect_four')
 connect_six = _read_game('connect_six')
 dai_hasami_shogi = _read_game('dai_hasami_shogi')
@@ -23,6 +24,7 @@ wolf_and_sheep = _read_game('wolf_and_sheep')
 
 # List of all games available in the package
 __all__ = [
+    "checkers",
     "connect_four",
     "connect_six",
     "dai_hasami_shogi",

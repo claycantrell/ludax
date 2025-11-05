@@ -401,6 +401,7 @@ class GameRuleParser(Transformer):
 
             # Somewhat hacky, but a hop always moves a piece one of these lengths based on whether
             # it's horizontal, vertical, back-diagonal, or forward-diagonal
+            # TODO: confirm this logic always holds
             potential_hop_lengths = jnp.array([
                 2, 2 * self.game_info.board_dims[0], 2 * (self.game_info.board_dims[0] + 1),
                 2 * (self.game_info.board_dims[0] - 1)
@@ -416,7 +417,6 @@ class GameRuleParser(Transformer):
                 previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
 
                 action_was_hop = jnp.isin(jnp.abs(end_idx - start_idx), potential_hop_lengths) & (state.board[:, midpoint] != EMPTY).any()
-                jax.debug.print("[{was_hop}] Hopping from {start} to {end} over {mid}", start=start_idx, end=end_idx, mid=midpoint, was_hop=action_was_hop)
                 hopped = jax.lax.select(
                     action_was_hop,
                     jnp.zeros_like(state.hopped).at[midpoint].set(True),
@@ -725,19 +725,22 @@ class GameRuleParser(Transformer):
 
         increment_score = optional_args[OptionalArgs.INCREMENT_SCORE]
 
+        # TODO: if some actions capture and others don't, we need to force an update
+        # to the "captured" field to set it back to empty -- maybe this happens in 
+        # the "additional info" function?
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             child_mask = child_mask_fn(updated_state)
-            occupied_mask = (updated_state.board == (original_player + offset) % 2)
+            occupied_mask = (updated_state.board == (original_player + offset) % 2).any(axis=0)
 
-            to_capture = (occupied_mask * child_mask).astype(jnp.int16)
+            to_capture = (occupied_mask * child_mask).astype(jnp.bool_)
             new_board = jnp.where(to_capture, EMPTY, updated_state.board)
 
             # If specified, increment the mover's score by the amount of pieces captured
             score_update = jax.lax.select(increment_score, to_capture.sum(), 0)
             scores = state.scores.at[original_player].set(state.scores[original_player] + score_update)
 
-            return state._replace(board=new_board, scores=scores)
+            return state._replace(board=new_board, scores=scores, captured=to_capture)
         
         return apply_effects_fn
     
@@ -1055,6 +1058,16 @@ class GameRuleParser(Transformer):
 
         return mask_fn, child_info
     
+    def mask_captured(self, children):
+        '''
+        Return a mask of all the positions on the board which were captured
+        in the last turn
+        '''
+        def mask_fn(state):
+            return state.captured.astype(jnp.int16)
+        
+        return mask_fn, {}
+
     def mask_center(self, children):
         '''
         Return the center of the board (defined as halfway through the board array). For

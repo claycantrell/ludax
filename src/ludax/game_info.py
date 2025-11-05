@@ -168,18 +168,26 @@ class GameInfoExtractor(Visitor):
             self.game_info.move_type = "move"
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
-    
-    def move_hop(self, tree):
+
+    def effect_capture(self, tree):
         '''
-        Hopping movement requires tracking which pieces have hopped already
+        Track which board positions had a piece captured in the last move
         '''
-        if "hopped" not in self.game_state_attributes:
-            self.game_state_attributes.append("hopped")
+        if "captured" not in self.game_state_attributes:
+            self.game_state_attributes.append("captured")
+            self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
+    def mask_captured(self, tree):
+        '''
+        Track which board positions had a piece captured in the last move
+        '''
+        if "captured" not in self.game_state_attributes:
+            self.game_state_attributes.append("captured")
             self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
 
     def mask_hopped(self, tree):
         '''
-        Hopping movement requires tracking which pieces have hopped already
+        Hopping movement requires tracking which pieces are hopped over
         '''
         if "hopped" not in self.game_state_attributes:
             self.game_state_attributes.append("hopped")

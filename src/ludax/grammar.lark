@@ -116,6 +116,7 @@ super_mask_or: "(" "or" super_mask+ ")"
 super_mask_not: "(" "not" super_mask ")"
 
 mask: mask_adjacent
+    | mask_captured
     | mask_center
     | mask_column
     | mask_corners
@@ -130,6 +131,7 @@ mask: mask_adjacent
     | mask_row
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
+mask_captured: "(" "captured" ")"
 mask_center: "center"
 mask_column: "(" "column" nonnegative_int ")"
 mask_corners: "corners"
