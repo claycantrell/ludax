@@ -1,5 +1,6 @@
 
 import math
+import re
 import svgwrite
 from svgwrite import cm, mm
 
@@ -251,12 +252,17 @@ class InteractiveBoardHandler():
         board = state.game_state.board
         if legal_actions is None and show_legal_actions:
             legal_actions = state.legal_action_mask
-        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button)
+
+        # The third index of previous_actions stores the last action taken (regardless of player)
+        last_action = state.game_state.previous_actions[-1]
+        
+        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action)
 
 
-    def render_fn(self, board, legal_actions=None, add_button=True):
+    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None):
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
+
         drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), stroke='black', stroke_width=1, fill='none'))
 
         for i, occupant in enumerate(board):
@@ -266,13 +272,26 @@ class InteractiveBoardHandler():
             # Draw the cell
             drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
+            # Highlight last action
+            if last_action is not None and i == last_action:
+              cls = "last-action"
+            else:
+              cls = "other-action"
+
             # Draw the piece (if present)
             if occupant == P1:
                 fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                drawing.add(drawing.circle(
+                    center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'],
+                    stroke_width=1, class_=cls
+                ))
+
             elif occupant == P2:
                 fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
-                drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
+                drawing.add(drawing.circle(
+                    center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'],
+                    stroke_width=1, class_=cls
+                ))
 
             # Draw the legal action mask
             if legal_actions is not None and legal_actions[i]:
@@ -282,4 +301,21 @@ class InteractiveBoardHandler():
         if add_button:
             drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), class_="btn", onclick="handleClick(event)"))
 
-        return drawing.tostring()
+        drawstr = drawing.tostring()
+        animate_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
+
+        # Insert animation into circles for P1 pieces
+        circle_pattern = re.compile(r'(<circle[^>]*>)')
+        def add_animation(match):
+            circle_tag = match.group(1)
+
+            # Insert animation before closing tag
+            if "last-action" in circle_tag:
+                return circle_tag.replace('/>', f'> {animate_snippet} </circle>')
+            else:
+                return circle_tag
+
+        drawstr = circle_pattern.sub(add_animation, drawstr)
+
+
+        return drawstr

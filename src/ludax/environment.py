@@ -55,7 +55,7 @@ class LudaxEnvironment():
             current_player=temp_current_player,
             phase_idx=jnp.int16(0),
             phase_step_count=jnp.int16(0),
-            previous_actions=jnp.int16([-1, -1]),
+            previous_actions=jnp.int16([-1, -1, -1]),
         )
 
         # Initialize the board using the game rules
