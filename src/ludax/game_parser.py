@@ -378,6 +378,9 @@ class GameRuleParser(Transformer):
     Move rules
     '''
     def play_move(self, children):
+        '''
+        Combine the move rules for each piece / move type based on their priorities
+        '''
         action_size, apply_action_fn, legal_action_infos, apply_effects_fn = children[0]
         grouped_legal_action_infos = groupby(sorted(legal_action_infos, key=lambda x: x[1]), key=lambda x: x[1])
 
@@ -624,8 +627,6 @@ class GameRuleParser(Transformer):
             mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
             mask = mask.at[start_positions, dest_positions].set(1)
 
-            jax.debug.print("LEGAL HOP: {}", mask)
-
             return mask            
         
         return legal_hop_mask_fn, priority
@@ -653,7 +654,6 @@ class GameRuleParser(Transformer):
 
         # Precompute the static indices used in the sliding logic
         actions = jnp.arange(self.game_info.board_size, dtype=jnp.int16)
-        # slide_indices = slide_lookup[direction_indices, :, :]
         general_indices = jnp.indices(slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int16)[2]
         ones_array = jnp.ones((len(p1_direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
 
