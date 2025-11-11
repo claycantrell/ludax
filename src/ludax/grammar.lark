@@ -36,7 +36,7 @@ phase_repeat: "(" "repeat" play_mover_order play_super_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
 play_super_mechanic: play_mechanic force_pass?
-play_mechanic: play_place | play_move | play_multi_move
+play_mechanic: play_place | play_move
 force_pass: "(" "force_pass" ")"
 
 // ---Place rules---
@@ -45,14 +45,15 @@ place_destination_constraint: "(" "destination" super_mask ")"
 place_result_constraint: "(" "result" super_predicate ")"
 
 // ---Move rules---
-play_multi_move: "(" "or" play_move+ ")"
-play_move: "(" "move" piece_reference move_types move_source_constraint move_destination_constraint move_result_constraint? play_effects? ")"
+play_move: play_single_move | play_multi_move
+play_single_move: "(" "move" piece_reference move_types move_source_constraint move_destination_constraint move_result_constraint? play_effects? ")"
+play_multi_move: "(" "or" play_single_move+ ")"
 move_types: move_type | "(" move_type+ ")"
 move_type: move_hop
          | move_slide
 
-move_hop: "(" "hop" direction_arg? piece_arg? mover_arg? ")"
-move_slide: "(" "slide" direction_arg? distance_arg? ")"
+move_hop: "(" "hop" direction_arg? piece_arg? mover_arg? priority_arg? ")"
+move_slide: "(" "slide" direction_arg? distance_arg? priority_arg? ")"
 
 move_source_constraint: "(" "source" super_mask ")"
 move_destination_constraint: "(" "destination" super_mask ")"
@@ -204,6 +205,7 @@ orientation_arg: "orientation:" orientation
 pattern_arg: "(" positive_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
 piece_arg: "piece:" piece_reference
+priority_arg: "priority:" nonnegative_int
 rotate_arg: "rotate:" boolean
 
 // Optional rendering details

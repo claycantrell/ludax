@@ -174,6 +174,7 @@ class OptionalArgs(StrEnum):
     PATTERN = 'pattern_arg'
     PIECE = 'piece_arg'
     PLAYER = 'player_arg'
+    PRIORITY = 'priority_arg'
     ROTATE = 'rotate_arg'
 
 DEFAULT_ARGUMENTS = {
@@ -187,8 +188,8 @@ DEFAULT_ARGUMENTS = {
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
 
-    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both'},
-    MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None},
+    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both', OptionalArgs.PRIORITY: 0},
+    MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},

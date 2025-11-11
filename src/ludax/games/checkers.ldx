@@ -19,7 +19,17 @@
             (repeat (P1 P2)
                 (or
                     (move "pawn"
-                        ((slide direction:(forward_left forward_right) distance:1) (hop direction:(forward_left forward_right) mover:opponent))
+                        ((slide direction:(forward_left forward_right) distance:1 priority:1) (hop direction:(forward_left forward_right) mover:opponent priority:0))
+                        (source (occupied mover)) 
+                        (destination empty)
+                        (effects
+                            (capture (hopped))
+                            (if (exists (captured)) (extra_turn mover))
+                        )
+                    )
+
+                    (move "king"
+                        ((slide direction:diagonal distance:1 priority:1) (hop direction:diagonal mover:opponent priority:0))
                         (source (occupied mover)) 
                         (destination empty)
                         (effects
