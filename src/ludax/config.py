@@ -213,5 +213,19 @@ RENDER_CONFIG = {
     "white": "#fafafa",
     "black": "#323232",
     "dark_grey": "#a6a6a6",
-    "purple": "#8a7af0"
+    "purple": "#8a7af0",
+
+    # SVG Style information
+    "svg_style": """
+        <style>
+        .fade-in-out {
+            animation: fadeOutIn 2s ease-in-out;
+        }
+        @keyframes fadeOutIn {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        </style>
+    """
 }

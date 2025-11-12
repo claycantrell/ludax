@@ -44,7 +44,11 @@ class GameInfoExtractor(Visitor):
             "current_player",
             "phase_idx",
             "phase_step_count",
-            "previous_actions"  # the action position of the previous action (i.e. destination for piece movement)
+
+            # The action position of the previous action (i.e. destination for piece movement) for each player.
+            # The final position stores the last action taken (regardless of player) which is useful for cases
+            # of double-moves
+            "previous_actions"
         ]
 
         self.defaults = []

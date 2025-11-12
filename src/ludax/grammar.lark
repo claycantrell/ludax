@@ -220,8 +220,8 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
-?nonnegative_int: /(0|[1-9]\d*)/
-?positive_int: /[1-9]\d*/
+?nonnegative_int: /(0|[1-9][0-9]*)/
+?positive_int: /[1-9][0-9]*/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: true_direction | relative_direction

@@ -356,8 +356,8 @@ class GameRuleParser(Transformer):
 
         action_size = self.game_info.board_size
         def apply_action_fn(state, action):
-            board = state.board.at[piece_id, action].set((state.current_player + offset) % 2)
-            previous_actions = state.previous_actions.at[state.current_player].set(action)
+            board = state.board.at[action].set((state.current_player + offset) % 2)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(action)
             return state._replace(board=board, previous_actions=previous_actions)
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
@@ -384,7 +384,7 @@ class GameRuleParser(Transformer):
             def apply_action(state, action):
                 pred_val = predicate_fn(state._replace(
                     board=state.board.at[action].set(state.current_player),
-                    previous_actions=state.previous_actions.at[state.current_player].set(action)
+                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, 2])].set(action)
                 ))
                 return pred_val
             
@@ -491,7 +491,7 @@ class GameRuleParser(Transformer):
                 start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
                 return state._replace(board=board, previous_actions=previous_actions)
 
         # Case 1: no optional arguments -- legal actions determined by the destination constraint

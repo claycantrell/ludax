@@ -1,5 +1,6 @@
 
 import math
+import re
 import svgwrite
 from svgwrite import cm, mm
 
@@ -255,14 +256,14 @@ class InteractiveBoardHandler():
 
         return points
 
-    def _draw_circle(self, drawing, center, size, fill, stroke, stroke_width):
-        drawing.add(drawing.circle(center=center, r=size, fill=fill, stroke=stroke, stroke_width=stroke_width))
+    def _draw_circle(self, drawing, center, size, fill, stroke, stroke_width, class_=""):
+        drawing.add(drawing.circle(center=center, r=size, fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
-    def _draw_square(self, drawing, center, size, fill, stroke, stroke_width):
+    def _draw_square(self, drawing, center, size, fill, stroke, stroke_width, class_=""):
         top_left = (center[0] - size, center[1] - size)
-        drawing.add(drawing.rect(insert=top_left, size=(2 * size, 2 * size), fill=fill, stroke=stroke, stroke_width=stroke_width))
+        drawing.add(drawing.rect(insert=top_left, size=(2 * size, 2 * size), fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
-    def _draw_triangle(self, drawing, center, size, fill, stroke, stroke_width):
+    def _draw_triangle(self, drawing, center, size, fill, stroke, stroke_width, class_=""):
         points = []
         angle_step = 2 * math.pi / 3
 
@@ -272,9 +273,9 @@ class InteractiveBoardHandler():
             y = center[1] + size * math.sin(angle)
             points.append((x, y))
 
-        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
-    def _draw_star(self, drawing, center, size, fill, stroke, stroke_width, num_points=5):
+    def _draw_star(self, drawing, center, size, fill, stroke, stroke_width, num_points=5, class_=""):
         points = []
         angle_step = 2 * math.pi / (2 * num_points)
 
@@ -285,28 +286,33 @@ class InteractiveBoardHandler():
             y = center[1] + radius * math.sin(angle)
             points.append((x, y))
 
-        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
-    def _draw_diamond(self, drawing, center, size, fill, stroke, stroke_width):
+    def _draw_diamond(self, drawing, center, size, fill, stroke, stroke_width, class_=""):
         points = [
             (center[0], center[1] - size),
             (center[0] + size, center[1]),
             (center[0], center[1] + size),
             (center[0] - size, center[1])
         ]
-        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width))
+        drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
 
     def render(self, state, add_button=True, show_legal_actions=True, legal_actions=None):
         board = state.game_state.board
         if legal_actions is None and show_legal_actions:
             legal_actions = state.legal_action_mask
-        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button)
+
+        # The third index of previous_actions stores the last action taken (regardless of player)
+        last_action = state.game_state.previous_actions[-1]
+        
+        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action)
 
 
-    def render_fn(self, board, legal_actions=None, add_button=True):
+    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None):
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
+
         drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), stroke='black', stroke_width=1, fill='none'))
 
         # Iterate over the different kinds of pieces
@@ -321,15 +327,20 @@ class InteractiveBoardHandler():
                 if piece_id == 0:
                     drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
 
+                if last_action is not None and i == last_action:
+                    cls = "last-action"
+                else:
+                    cls = "other-action"
+
                 # Draw the piece (if present)
                 draw_fn = self.draw_fns[self.rendering_info.piece_shape_mapping[piece_name]]
                 if occupant == P1:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
-                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1)
+                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=clas)
                     # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
                 elif occupant == P2:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
-                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1)
+                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=cls)
                     # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
 
 
@@ -342,4 +353,21 @@ class InteractiveBoardHandler():
         if add_button:
             drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), class_="btn", onclick="handleClick(event)"))
 
-        return drawing.tostring()
+        drawstr = drawing.tostring()
+        animate_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
+
+        # Insert animation into circles for P1 pieces
+        circle_pattern = re.compile(r'(<circle[^>]*>)')
+        def add_animation(match):
+            circle_tag = match.group(1)
+
+            # Insert animation before closing tag
+            if "last-action" in circle_tag:
+                return circle_tag.replace('/>', f'> {animate_snippet} </circle>')
+            else:
+                return circle_tag
+
+        drawstr = circle_pattern.sub(add_animation, drawstr)
+
+
+        return drawstr
