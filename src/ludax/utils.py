@@ -45,6 +45,7 @@ META_DIRECTION_MAPPING = {
     ]
 }
 
+# Maps from a player's forward direction (first key) and a relative direction (second key) to an absolute direction
 RELATIVE_DIRECTION_MAPPING = {
     Directions.UP: {RelativeDirections.FORWARD: Directions.UP, RelativeDirections.BACKWARD: Directions.DOWN,
                     RelativeDirections.FORWARD_LEFT: Directions.UP_LEFT, RelativeDirections.FORWARD_RIGHT: Directions.UP_RIGHT,
@@ -61,6 +62,15 @@ RELATIVE_DIRECTION_MAPPING = {
     Directions.RIGHT: {RelativeDirections.FORWARD: Directions.RIGHT, RelativeDirections.BACKWARD: Directions.LEFT,
                       RelativeDirections.FORWARD_LEFT: Directions.UP_RIGHT, RelativeDirections.FORWARD_RIGHT: Directions.DOWN_RIGHT,
                       RelativeDirections.BACKWARD_LEFT: Directions.DOWN_LEFT, RelativeDirections.BACKWARD_RIGHT: Directions.UP_LEFT}
+}
+
+# Maps from a player's forward direction (first key) and a relative edge type (second key) to an absolute edge type
+# indicating the furthest edge in that direction
+RELATIVE_EDGE_TYPE_MAPPING = {
+    Directions.UP: {RelativeDirections.FORWARD: EdgeTypes.TOP, RelativeDirections.BACKWARD: EdgeTypes.BOTTOM},
+    Directions.DOWN: {RelativeDirections.FORWARD: EdgeTypes.BOTTOM, RelativeDirections.BACKWARD: EdgeTypes.TOP},
+    Directions.LEFT: {RelativeDirections.FORWARD: EdgeTypes.LEFT, RelativeDirections.BACKWARD: EdgeTypes.RIGHT},
+    Directions.RIGHT: {RelativeDirections.FORWARD: EdgeTypes.RIGHT, RelativeDirections.BACKWARD: EdgeTypes.LEFT}
 }
 
 def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
@@ -217,6 +227,11 @@ def _get_relative_direction(game_info: GameInfo, direction: RelativeDirections, 
     forward = game_info.forward_directions[player]
     relative_direction = RELATIVE_DIRECTION_MAPPING[forward][direction]
     return relative_direction
+
+def _get_relative_edge_type(game_info: GameInfo, direction: RelativeDirections, player: int):
+    forward = game_info.forward_directions[player]
+    relative_edge_type = RELATIVE_EDGE_TYPE_MAPPING[forward][direction]
+    return relative_edge_type
 
 def _get_slide_lookup(game_info: GameInfo):
     '''

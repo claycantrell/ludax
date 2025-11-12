@@ -140,10 +140,9 @@ mask_column: "(" "column" nonnegative_int ")"
 mask_corners: "corners"
 mask_corner_custodial: "(" "corner_custodial" piece_reference mover_arg? ")"
 mask_custodial: "(" "custodial" piece_reference custodial_length_arg mover_arg? orientation_arg? ")"
-mask_edge: "(" "edge" edge ")"
+mask_edge: "(" "edge" (edge | FORWARD | BACKWARD) ")"
 mask_empty: "empty"
 mask_hopped: "(" "hopped" ")"
-
 // TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
 mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"

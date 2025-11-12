@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, Directions, PieceRefs, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, Directions, EdgeTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
 from .game_info import GameInfo
 from . import utils
 
@@ -1345,15 +1345,39 @@ class GameRuleParser(Transformer):
     
     def mask_edge(self, children):
         '''
-        Masks the edges of the board (which depends on the shape of the board)
+        Masks the edges of the board (which depends on the shape of the board). In addition
+        to the standard edge types (e.g. top, bottom, ...), this mask also supports "forward"
+        and "backward" edges which depend on the "forward assignment" for each player
         '''
         edge_type = children[0]
-        indices = utils._get_edge_indices(self.game_info, edge_type)
 
-        def mask_fn(state):
-            mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_)
-            mask = mask.at[indices].set(True)
-            return mask.astype(jnp.int16)
+        # If the edge type is absolute, we can just get the indices directly
+        if edge_type in [item.value for item in EdgeTypes]:
+            indices = utils._get_edge_indices(self.game_info, edge_type)
+
+            def mask_fn(state):
+                mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_)
+                mask = mask.at[indices].set(True)
+                return mask.astype(jnp.int16)
+
+        # Otherwise, we compute them relative to each player's "forward assignment" 
+        else:
+            p1_edge_type = utils._get_relative_edge_type(self.game_info, edge_type, P1)
+            p2_edge_type = utils._get_relative_edge_type(self.game_info, edge_type, P2)
+
+            p1_indices = utils._get_edge_indices(self.game_info, p1_edge_type)
+            p2_indices = utils._get_edge_indices(self.game_info, p2_edge_type)
+
+            p1_mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_).at[p1_indices].set(True)
+            p2_mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_).at[p2_indices].set(True)
+
+            def mask_fn(state):
+                mask = jax.lax.select(
+                    state.current_player == P1,
+                    p1_mask,
+                    p2_mask
+                )
+                return mask.astype(jnp.int16)
         
         return mask_fn, {}
 
