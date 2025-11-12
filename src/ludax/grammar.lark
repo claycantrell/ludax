@@ -170,7 +170,8 @@ super_predicate_and: "(" "and" super_predicate+ ")"
 super_predicate_or: "(" "or" super_predicate+ ")"
 super_predicate_not: "(" "not" super_predicate ")"
 
-predicate: predicate_equals
+predicate: predicate_can_hop
+         | predicate_equals
          | predicate_exists
          | predicate_full_board
          | predicate_function
@@ -181,6 +182,7 @@ predicate: predicate_equals
          | predicate_no_legal_actions
          | predicate_passed
 
+predicate_can_hop: "(" "can_hop" super_mask direction_arg? piece_arg? mover_arg? ")"
 predicate_equals: "(" "=" function+ ")"
 predicate_exists: "(" "exists" super_mask ")" // technically equivalent to (>= (count mask) 1) 
 predicate_full_board: "(" "full_board" ")"

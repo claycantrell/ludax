@@ -162,6 +162,7 @@ class PlayEffects(StrEnum):
     PROMOTE = 'effect_promote'
 
 class Predicates(StrEnum):
+    CAN_HOP = 'predicate_can_hop'
     EXISTS = 'predicate_exists'
 
 class OptionalArgs(StrEnum):
@@ -198,6 +199,8 @@ DEFAULT_ARGUMENTS = {
     PlayEffects.EXTRA_TURN: {OptionalArgs.SAME_PIECE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
     PlayEffects.PROMOTE: {OptionalArgs.MOVER: 'mover'},
+
+    Predicates.CAN_HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both'},
 }
 
 

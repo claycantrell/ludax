@@ -76,7 +76,7 @@ class GameRuleParser(Transformer):
             # Set the "extra turn" flag to FALSE after each move (it's set to TRUE by the effect). This means it will
             # only ever be set to TRUE during the "compute legal actions" step, but that's relevant for the same_piece
             # condition in extra turn effects
-            if attribute == "extra_turn":
+            if attribute == "extra_turn_fn_idx":
                 addl_info_functions.append(lambda state, action: state._replace(extra_turn_fn_idx=-1))
 
         if len(addl_info_functions) > 0:
@@ -1679,6 +1679,89 @@ class GameRuleParser(Transformer):
 
         return predicate_fn, info
     
+    def predicate_can_hop(self, children):
+        '''
+        This is somewhat horrific, but the intent is to be able to check
+        whether there are any legal hop moves available starting from the
+        given mask (e.g. for games like checkers where an extra turn is only
+        granted if the capturing piece can continue hopping)
+
+        TODO: clean this up...
+        '''
+        (child_mask_fn, _), *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
+
+        piece = optional_args[OptionalArgs.PIECE]
+        if piece == PieceRefs.ANY:
+            filter_to_piece = lambda occ_mask: occ_mask.any(axis=0)
+        else:
+            filter_to_piece = lambda occ_mask: occ_mask[piece]
+
+        mover = optional_args[OptionalArgs.MOVER]
+        if mover == PlayerAndMoverRefs.BOTH:
+            def piece_match_fn(state):
+                occupied_mask = (state.board != EMPTY).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
+        elif mover == PlayerAndMoverRefs.MOVER:
+            def piece_match_fn(state):
+                occupied_mask = (state.board == state.current_player).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
+        elif mover == PlayerAndMoverRefs.OPPONENT:
+            def piece_match_fn(state):
+                occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int16)
+                return filter_to_piece(occupied_mask)
+        
+
+        direction = optional_args[OptionalArgs.DIRECTION]
+        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        
+        # Hopping is kind of like sliding a distance of 2 except that the middle position needs to be occupied
+        # by a specific piece and the end position needs to be empty
+        slide_lookup = utils._get_slide_lookup(self.game_info)
+        slide_lookup = slide_lookup[:, :, :3]
+
+        def legal_hop_mask_fn(state):
+            center_piece_mask = piece_match_fn(state).astype(jnp.int16)
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
+
+            direction_indices = jax.lax.select(
+                state.current_player == P1,
+                p1_direction_indices,
+                p2_direction_indices
+            )
+            slide_indices = slide_lookup[direction_indices, :, :]
+
+            start_indices = slide_indices[:, :, 0]
+            middle_indices = slide_indices[:, :, 1]
+            dest_indices = slide_indices[:, :, 2]
+
+            inner_match = (center_piece_mask[middle_indices] == 1)
+            dest_free = (occupied_mask[dest_indices] == 0)
+
+            legal_hop = inner_match & dest_free
+            start_positions = jnp.where(legal_hop, start_indices, self.game_info.board_size+1)
+            dest_positions = jnp.where(legal_hop, dest_indices, self.game_info.board_size+1)
+            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
+            mask = mask.at[start_positions, dest_positions].set(1)
+
+            return mask
+        
+        def predicate_fn(state):
+            child_mask = child_mask_fn(state)
+            legal_hop_mask = legal_hop_mask_fn(state).any(axis=1)
+
+            # jax.debug.print("Child mask: {}", child_mask)
+            # jax.debug.print("Legal hop mask: {}", legal_hop_mask)
+
+            # Check whether there are any legal hops starting from the given mask
+            masked_legal_hops = legal_hop_mask * child_mask
+            jax.debug.print("Can hop: {}", masked_legal_hops.any())
+            return masked_legal_hops.any()
+        
+        info = {}
+
+        return predicate_fn, info
+
     def predicate_exists(self, children):
         '''
         Return whether the given mask is active anywhere on the board
