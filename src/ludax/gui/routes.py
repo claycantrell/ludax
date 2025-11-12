@@ -209,7 +209,8 @@ def step():
 
     print("\n" + "-" * 40)
     print(f"Current player: {STATE.game_state.current_player}")
-    print(f"Scores: {scores}\n")
+    print(f"Scores: {scores}")
+    print("-" * 40)
 
     # debug_state(STATE, ENV)
 

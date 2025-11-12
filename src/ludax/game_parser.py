@@ -14,6 +14,10 @@ class GameRuleParser(Transformer):
         self.end_rule_info = []
         self.adjacency_lookup = utils._get_adjacency_lookup(self.game_info)
 
+        # Optional attributes
+        if "extra_turn_fn_idx" in self.game_info.game_state_attributes:
+            self.extra_turn_fns = []
+
     def __default__(self, data, children, meta):
         if len(children) == 1:
             to_return = children[0]
@@ -64,8 +68,16 @@ class GameRuleParser(Transformer):
         # Handle any optional game state attributes
         addl_info_functions = []
         for attribute in self.game_info.game_state_attributes:
+
+            # Compute the connected components of the board after each move
             if attribute == "connected_components":
                 addl_info_functions.append(utils._get_connected_components_fn(self.game_info, self.adjacency_lookup))
+
+            # Set the "extra turn" flag to FALSE after each move (it's set to TRUE by the effect). This means it will
+            # only ever be set to TRUE during the "compute legal actions" step, but that's relevant for the same_piece
+            # condition in extra turn effects
+            if attribute == "extra_turn":
+                addl_info_functions.append(lambda state, action: state._replace(extra_turn_fn_idx=-1))
 
         if len(addl_info_functions) > 0:
             n = len(addl_info_functions)
@@ -259,6 +271,21 @@ class GameRuleParser(Transformer):
             
             return action_size, new_apply_action_fn, new_legal_action_mask_fn, apply_effects_fn
         
+        # TODO: Is this the right place to put this?
+        elif "extra_turn_fn_idx" in self.game_info.game_state_attributes:
+            def new_legal_action_mask_fn(state):
+                base_mask = legal_action_mask_fn(state)
+                extra_turn_idx = state.extra_turn_fn_idx
+
+                jax.debug.print("Extra turn fn idx: {}", extra_turn_idx)
+
+                new_mask = jax.lax.switch(extra_turn_idx, self.extra_turn_fns, state, base_mask)
+                new_mask = jax.lax.select(extra_turn_idx >= 0, new_mask, base_mask)
+
+                return new_mask
+            
+            return action_size, apply_action_fn, new_legal_action_mask_fn, apply_effects_fn
+
         else:
             return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
@@ -800,15 +827,39 @@ class GameRuleParser(Transformer):
         succession, it will seem like neither is getting an extra turn, since the bonus
         turns happen **immediately**
         '''
-        mover_ref = children[0]
+        mover_ref, *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
 
         if mover_ref == PlayerAndMoverRefs.MOVER:
             offset = 0
         else:
             offset = 1
 
+        extra_turn_fn_idx = len(self.extra_turn_fns)
+
+        # If the "same piece" flag is set and the game is a piece-moving game, then we restrict
+        # legal actions in the extra turn to only those that move the same piece as in the previous turn,
+        # relying on the fact that the rows of t
+        if optional_args[OptionalArgs.SAME_PIECE] and self.game_info.move_type == "move":
+            def extra_turn_condition(state, legal_action_mask):
+                last_action = state.previous_actions[-1]
+                jax.debug.print("Last action: {}", last_action)
+                start_mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[last_action].set(1)
+                jax.debug.print("Start mask: {}", start_mask)
+                base_mask = legal_action_mask.reshape(self.game_info.board_size, self.game_info.board_size)
+                
+                new_legal_action_mask = jnp.where(start_mask, base_mask, 0).flatten()
+
+                return new_legal_action_mask
+        else:
+            def extra_turn_condition(state, legal_action_mask):
+                return legal_action_mask
+            
+        self.extra_turn_fns.append(extra_turn_condition)
+
         def apply_effects_fn(state, original_player):
-            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % 2)
+            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % 2,
+                                  extra_turn_fn_idx=extra_turn_fn_idx)
         
         return apply_effects_fn
 

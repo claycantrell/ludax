@@ -157,6 +157,7 @@ class PieceRefs(StrEnum):
 
 class PlayEffects(StrEnum):
     CAPTURE = 'effect_capture'
+    EXTRA_TURN = 'effect_extra_turn'
     FLIP = 'effect_flip'
     PROMOTE = 'effect_promote'
 
@@ -177,6 +178,7 @@ class OptionalArgs(StrEnum):
     PLAYER = 'player_arg'
     PRIORITY = 'priority_arg'
     ROTATE = 'rotate_arg'
+    SAME_PIECE = 'same_piece_arg'
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
@@ -193,6 +195,7 @@ DEFAULT_ARGUMENTS = {
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
+    PlayEffects.EXTRA_TURN: {OptionalArgs.SAME_PIECE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
     PlayEffects.PROMOTE: {OptionalArgs.MOVER: 'mover'},
 }

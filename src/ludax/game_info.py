@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import BoardShapes, PieceShapes, PlayerAndMoverRefs
+from .config import TRUE, FALSE, BoardShapes, PieceShapes, PlayerAndMoverRefs
 
 @dataclass
 class GameInfo:
@@ -174,6 +174,15 @@ class GameInfoExtractor(Visitor):
         if "captured" not in self.game_state_attributes:
             self.game_state_attributes.append("captured")
             self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
+    def effect_extra_turn(self, tree):
+        '''
+        Track whether the current player is about to take an extra turn as well as the index
+        of the "extra turn function" that granted it
+        '''
+        if "extra_turn_fn_idx" not in self.game_state_attributes:
+            self.game_state_attributes.append("extra_turn_fn_idx")
+            self.defaults.append(-1)
 
     def mask_captured(self, tree):
         '''

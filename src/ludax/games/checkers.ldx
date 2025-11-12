@@ -1,4 +1,4 @@
-(game "Checkers" 
+(game "American Checkers" 
     (players 2
         (set_forward (P1 up) (P2 down))
     )
@@ -19,23 +19,29 @@
             (repeat (P1 P2)
                 (or
                     (move "pawn"
-                        ((slide direction:(forward_left forward_right) distance:1 priority:1) (hop direction:(forward_left forward_right) mover:opponent priority:0))
+                        (
+                            (hop direction:(forward_left forward_right) mover:opponent priority:0)
+                            (slide direction:(forward_left forward_right) distance:1 priority:1)
+                        )
                         (source (occupied mover)) 
                         (destination empty)
                         (effects
                             (capture (hopped))
                             (promote "king" (edge forward))
-                            (if (exists (captured)) (extra_turn mover))
+                            (if (not (exists (captured))) (extra_turn mover same_piece:true))
                         )
                     )
 
                     (move "king"
-                        ((slide direction:diagonal distance:1 priority:1) (hop direction:diagonal mover:opponent priority:0))
+                        (
+                            (hop direction:diagonal mover:opponent priority:0)
+                            (slide direction:diagonal distance:1 priority:1)
+                        )
                         (source (occupied mover)) 
                         (destination empty)
                         (effects
                             (capture (hopped))
-                            (if (exists (captured)) (extra_turn mover))
+                            (if (exists (captured)) (extra_turn mover same_piece:true))
                         )
                     )
                 )
