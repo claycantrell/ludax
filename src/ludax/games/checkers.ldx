@@ -28,7 +28,12 @@
                         (effects
                             (capture (hopped))
                             (promote "king" (edge forward))
-                            (if (not (exists (captured))) (extra_turn mover same_piece:true))
+                            (if (and (exists (captured)) (can_hop (prev_move mover) direction:(forward_left forward_right) mover:opponent))
+                                (extra_turn mover same_piece:true)
+                            )
+                            (if (and (exists (captured)) (exists (promoted)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
+                                (extra_turn mover same_piece:true)
+                            )
                         )
                     )
 
@@ -41,7 +46,9 @@
                         (destination empty)
                         (effects
                             (capture (hopped))
-                            (if (exists (captured)) (extra_turn mover same_piece:true))
+                            (if (and (exists (captured)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
+                                (extra_turn mover same_piece:true)
+                            )
                         )
                     )
                 )

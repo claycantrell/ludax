@@ -131,6 +131,7 @@ mask: mask_adjacent
     | mask_occupied
     | mask_pattern
     | mask_prev_move
+    | mask_promoted
     | mask_row
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
@@ -147,6 +148,7 @@ mask_hopped: "(" "hopped" ")"
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
 mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
+mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
 
 // "Mask-like" functions are special functions that also support returning a mask. Currently this is only

@@ -79,6 +79,9 @@ class GameRuleParser(Transformer):
             if attribute == "extra_turn_fn_idx":
                 addl_info_functions.append(lambda state, action: state._replace(extra_turn_fn_idx=-1))
 
+            if attribute == "promoted":
+                addl_info_functions.append(lambda state, action: state._replace(promoted=jnp.zeros(self.game_info.board_size, dtype=jnp.bool_)))
+
         if len(addl_info_functions) > 0:
             n = len(addl_info_functions)
             def addl_info_fn(state, action):
@@ -276,8 +279,6 @@ class GameRuleParser(Transformer):
             def new_legal_action_mask_fn(state):
                 base_mask = legal_action_mask_fn(state)
                 extra_turn_idx = state.extra_turn_fn_idx
-
-                jax.debug.print("Extra turn fn idx: {}", extra_turn_idx)
 
                 new_mask = jax.lax.switch(extra_turn_idx, self.extra_turn_fns, state, base_mask)
                 new_mask = jax.lax.select(extra_turn_idx >= 0, new_mask, base_mask)
@@ -931,7 +932,7 @@ class GameRuleParser(Transformer):
             new_board = updated_state.board.at[:, to_promote].set(EMPTY)
             new_board = new_board.at[piece, to_promote].set((original_player + offset) % 2)
 
-            return state._replace(board=new_board)
+            return state._replace(board=new_board, promoted=(occupied_mask * child_mask).astype(jnp.bool_))
 
         return apply_effects_fn
 
@@ -1497,6 +1498,16 @@ class GameRuleParser(Transformer):
             return mask.astype(jnp.int16)
         
         return mask_fn, {}
+    
+    def mask_promoted(self, children):
+        '''
+        Return a mask of all the positions on the board which were promoted
+        in the last turn
+        '''
+        def mask_fn(state):
+            return state.promoted.astype(jnp.int16)
+        
+        return mask_fn, {}
 
     def mask_row(self, children):
         '''
@@ -1750,12 +1761,8 @@ class GameRuleParser(Transformer):
             child_mask = child_mask_fn(state)
             legal_hop_mask = legal_hop_mask_fn(state).any(axis=1)
 
-            # jax.debug.print("Child mask: {}", child_mask)
-            # jax.debug.print("Legal hop mask: {}", legal_hop_mask)
-
             # Check whether there are any legal hops starting from the given mask
             masked_legal_hops = legal_hop_mask * child_mask
-            jax.debug.print("Can hop: {}", masked_legal_hops.any())
             return masked_legal_hops.any()
         
         info = {}

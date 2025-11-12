@@ -188,6 +188,14 @@ class GameInfoExtractor(Visitor):
             self.game_state_attributes.append("extra_turn_fn_idx")
             self.defaults.append(-1)
 
+    def effect_promote(self, tree):
+        '''
+        Track which pieces were promoted in the last move
+        '''
+        if "promoted" not in self.game_state_attributes:
+            self.game_state_attributes.append("promoted")
+            self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
     def mask_captured(self, tree):
         '''
         Track which board positions had a piece captured in the last move
