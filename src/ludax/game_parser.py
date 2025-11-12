@@ -498,8 +498,6 @@ class GameRuleParser(Transformer):
         # each move and piece type
         legal_action_mask_infos = []
 
-        # for base_legal_mask_fn, priority in zip(base_legal_mask_fns, priorities):
-
         def build(idx):
             base_legal_mask_fn = base_legal_mask_fns[idx]
             priority = priorities[idx]
@@ -863,6 +861,32 @@ class GameRuleParser(Transformer):
         
         return apply_effects_fn
     
+    def effect_promote(self, children):
+        '''
+        Promote pieces on the board according to a mask and a resulting piece type
+        '''
+        piece, (child_mask_fn, _), *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
+
+        mover_ref = optional_args[OptionalArgs.MOVER]
+        if mover_ref == PlayerAndMoverRefs.MOVER:
+            offset = 0
+        else:
+            offset = 1
+
+        def apply_effects_fn(state, original_player):
+            updated_state = state._replace(current_player=original_player)
+            child_mask = child_mask_fn(updated_state)
+            occupied_mask = (updated_state.board == (original_player + offset) % 2).any(axis=0)
+
+            to_promote = jnp.argwhere(occupied_mask * child_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size+1).flatten()
+            new_board = updated_state.board.at[:, to_promote].set(EMPTY)
+            new_board = new_board.at[piece, to_promote].set((original_player + offset) % 2)
+
+            return state._replace(board=new_board)
+
+        return apply_effects_fn
+
     def effect_set_score(self, children):
         '''
         Set the score for a specified player to the result of a function

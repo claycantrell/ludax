@@ -158,6 +158,7 @@ class PieceRefs(StrEnum):
 class PlayEffects(StrEnum):
     CAPTURE = 'effect_capture'
     FLIP = 'effect_flip'
+    PROMOTE = 'effect_promote'
 
 class Predicates(StrEnum):
     EXISTS = 'predicate_exists'
@@ -193,6 +194,7 @@ DEFAULT_ARGUMENTS = {
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
+    PlayEffects.PROMOTE: {OptionalArgs.MOVER: 'mover'},
 }
 
 

@@ -24,6 +24,7 @@
                         (destination empty)
                         (effects
                             (capture (hopped))
+                            (promote "king" (row 0))
                             (if (exists (captured)) (extra_turn mover))
                         )
                     )

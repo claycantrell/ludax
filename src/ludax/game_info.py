@@ -68,8 +68,6 @@ class GameInfoExtractor(Visitor):
             if piece_name not in self.rendering_info.piece_shape_mapping:
                 self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
 
-        print(self.game_info)
-
         return self.game_info, self.rendering_info
 
     def _nav(self, tree: Tree, children_indices: typing.Union[int, list[int]]):
