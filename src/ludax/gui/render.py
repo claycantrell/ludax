@@ -336,7 +336,7 @@ class InteractiveBoardHandler():
                 draw_fn = self.draw_fns[self.rendering_info.piece_shape_mapping[piece_name]]
                 if occupant == P1:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
-                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=clas)
+                    draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=cls)
                     # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
                 elif occupant == P2:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P2']]

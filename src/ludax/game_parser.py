@@ -475,7 +475,7 @@ class GameRuleParser(Transformer):
 
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[state.current_player].set(end_idx)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
 
                 action_was_hop = jnp.isin(jnp.abs(end_idx - start_idx), potential_hop_lengths) & (state.board[:, midpoint] != EMPTY).any()
                 hopped = jax.lax.select(
@@ -843,11 +843,8 @@ class GameRuleParser(Transformer):
         if optional_args[OptionalArgs.SAME_PIECE] and self.game_info.move_type == "move":
             def extra_turn_condition(state, legal_action_mask):
                 last_action = state.previous_actions[-1]
-                jax.debug.print("Last action: {}", last_action)
-                start_mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[last_action].set(1)
-                jax.debug.print("Start mask: {}", start_mask)
+                start_mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[last_action].set(1)[:, jnp.newaxis]
                 base_mask = legal_action_mask.reshape(self.game_info.board_size, self.game_info.board_size)
-                
                 new_legal_action_mask = jnp.where(start_mask, base_mask, 0).flatten()
 
                 return new_legal_action_mask
