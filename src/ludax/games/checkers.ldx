@@ -1,4 +1,4 @@
-(game "American Checkers" 
+(game "English Draughts" 
     (players 2
         (set_forward (P1 up) (P2 down))
     )
@@ -28,10 +28,13 @@
                         (effects
                             (capture (hopped))
                             (promote "king" (edge forward))
-                            (if (and (exists (captured)) (can_hop (prev_move mover) direction:(forward_left forward_right) mover:opponent))
-                                (extra_turn mover same_piece:true)
-                            )
-                            (if (and (exists (captured)) (exists (promoted)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
+                            (if (and
+                                    (exists (captured))
+                                    (or
+                                        (can_hop (prev_move mover) direction:(forward_left forward_right) mover:opponent)
+                                        (and (exists (promoted)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
+                                    )
+                                )
                                 (extra_turn mover same_piece:true)
                             )
                         )
