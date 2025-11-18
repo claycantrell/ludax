@@ -321,7 +321,7 @@ class GameRuleParser(Transformer):
 
         # Case 1: the 'mover' argument is specified
         if isinstance(children[1], str):
-            piece_id, mover_ref, (destination_constraint_fn, _), *optional_args = children
+            piece, mover_ref, (destination_constraint_fn, _), *optional_args = children
             if mover_ref == PlayerAndMoverRefs.MOVER:
                 offset = 0
             elif mover_ref == PlayerAndMoverRefs.OPPONENT:
@@ -329,7 +329,7 @@ class GameRuleParser(Transformer):
 
         # Case 2 (default): the mover is the current player 
         else:
-            piece_id, (destination_constraint_fn, _), *optional_args = children
+            piece, (destination_constraint_fn, _), *optional_args = children
             offset = 0
 
         # Case 1: no optional arguments -- legal actions determined by the destination constraint
@@ -357,7 +357,7 @@ class GameRuleParser(Transformer):
 
         action_size = self.game_info.board_size
         def apply_action_fn(state, action):
-            board = state.board.at[action].set((state.current_player + offset) % 2)
+            board = state.board.at[piece, action].set((state.current_player + offset) % 2)
             previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(action)
             return state._replace(board=board, previous_actions=previous_actions)
 
