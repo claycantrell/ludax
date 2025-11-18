@@ -337,11 +337,9 @@ class InteractiveBoardHandler():
                 if occupant == P1:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P1']]
                     draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=cls)
-                    # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
                 elif occupant == P2:
                     fill_color = self.render_config[self.rendering_info.color_mapping['P2']]
                     draw_fn(drawing, center=position, size=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1, class_=cls)
-                    # drawing.add(drawing.circle(center=position, r=self.render_config['piece_radius'], fill=fill_color, stroke=self.render_config['dark_grey'], stroke_width=1))
 
 
 
@@ -356,18 +354,19 @@ class InteractiveBoardHandler():
         drawstr = drawing.tostring()
         animate_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
 
-        # Insert animation into circles for P1 pieces
-        circle_pattern = re.compile(r'(<circle[^>]*>)')
+        # Insert animation into shapes for P1 pieces
+        shape_pattern = re.compile(r'(<circle[^>]*>)')
         def add_animation(match):
-            circle_tag = match.group(1)
+            shape_tag = match.group(1)
 
             # Insert animation before closing tag
-            if "last-action" in circle_tag:
-                return circle_tag.replace('/>', f'> {animate_snippet} </circle>')
+            if "last-action" in shape_tag:
+                return shape_tag.replace('/>', f'> {animate_snippet} </{shape_tag[1]}')
             else:
-                return circle_tag
+                return shape_tag
 
-        drawstr = circle_pattern.sub(add_animation, drawstr)
+        drawstr = shape_pattern.sub(add_animation, drawstr)
+        # breakpoint()
 
 
         return drawstr

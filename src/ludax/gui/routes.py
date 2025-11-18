@@ -194,6 +194,9 @@ def step():
             HANDLER.render(STATE, legal_actions=legal_selections)
             MOVE_INFO['stage'] = "selecting_piece"
 
+            # Remove the "last action" class from the SVG so it doesn't highlight twice
+            # HANDLER.rendered_svg = HANDLER.rendered_svg.replace("last-action", "other-action")
+
     else:
         raise ValueError(f"Unknown move type: {HANDLER.game_info.move_type}")
 
