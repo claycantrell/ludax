@@ -23,6 +23,7 @@ class InteractiveBoardHandler():
         self.cell_size = render_config['cell_size']
         self.padding = self.cell_size / 2
         self.rendered_svg = ""
+        self.animation_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
         
 
         if self.game_info.board_shape == BoardShapes.SQUARE or self.game_info.board_shape == BoardShapes.RECTANGLE:
@@ -352,21 +353,21 @@ class InteractiveBoardHandler():
             drawing.add(drawing.rect(insert=(0, 0), size=(self.total_width, self.total_height), class_="btn", onclick="handleClick(event)"))
 
         drawstr = drawing.tostring()
-        animate_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
+        
 
         # Insert animation into shapes for P1 pieces
-        shape_pattern = re.compile(r'(<circle[^>]*>)')
+        shape_pattern = re.compile(r'(<(circle|rect|polygon)[^>]*>)')
         def add_animation(match):
             shape_tag = match.group(1)
+            shape_id = shape_tag.split(" ")[0][1:]
 
             # Insert animation before closing tag
             if "last-action" in shape_tag:
-                return shape_tag.replace('/>', f'> {animate_snippet} </{shape_tag[1]}')
+                return shape_tag.replace('/>', f'> {self.animation_snippet} </{shape_id}>')
             else:
                 return shape_tag
 
         drawstr = shape_pattern.sub(add_animation, drawstr)
-        # breakpoint()
 
 
         return drawstr

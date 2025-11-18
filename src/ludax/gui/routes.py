@@ -106,10 +106,12 @@ def render_game(id):
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
 
+    # NOTE: there's currently a rendering bug where "rendering info" is not properly cleared when switching games
+    # in the brower.
+    print(f"Rendering info: {ENV.rendering_info.color_mapping}, {ENV.rendering_info.piece_shape_mapping}")
+
     STATE = ENV.init(jax.random.PRNGKey(42))
 
-    # breakpoint()
-    
     if HANDLER.game_info.move_type == "place":
         HANDLER.render(STATE)
     elif HANDLER.game_info.move_type == "move":
@@ -187,15 +189,15 @@ def step():
             HANDLER.render(STATE, legal_actions=legal_moves)
             MOVE_INFO['stage'] = "selecting_destination"
 
+            # Remove the "last action" class from the SVG so it doesn't highlight twice
+            HANDLER.rendered_svg = HANDLER.rendered_svg.replace(HANDLER.animation_snippet, "")
+
         elif MOVE_INFO['stage'] == "selecting_destination":
             final_action_idx = np.ravel_multi_index((MOVE_INFO["select_idx"], action_idx), (ENV.board_size, ENV.board_size))
             STATE = ENV.step(STATE, final_action_idx)
             legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
             HANDLER.render(STATE, legal_actions=legal_selections)
             MOVE_INFO['stage'] = "selecting_piece"
-
-            # Remove the "last action" class from the SVG so it doesn't highlight twice
-            # HANDLER.rendered_svg = HANDLER.rendered_svg.replace("last-action", "other-action")
 
     else:
         raise ValueError(f"Unknown move type: {HANDLER.game_info.move_type}")
