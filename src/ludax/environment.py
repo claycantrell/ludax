@@ -67,6 +67,8 @@ class LudaxEnvironment():
         current_player = self._get_next_player(game_state)
         game_state = game_state._replace(current_player=current_player)
 
+        game_state = self._update_info(game_state, -1)
+
         legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
         game_state = game_state._replace(legal_action_mask=legal_action_mask)
 

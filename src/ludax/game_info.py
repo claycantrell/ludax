@@ -212,6 +212,12 @@ class GameInfoExtractor(Visitor):
             self.game_state_attributes.append("hopped")
             self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
 
+    def move_slide(self, tree):
+        if "slide_lookup" not in self.game_state_attributes:
+            num_line_positions = max(self.game_info.board_dims) if self.game_info.board_shape != BoardShapes.HEXAGON else self.game_info.hex_diameter
+            self.game_state_attributes.append("slide_lookup")
+            self.defaults.append(jnp.zeros((8, num_line_positions, self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16))
+
     '''
     Custom assignments for relative directions (i.e. "forward")
     '''
