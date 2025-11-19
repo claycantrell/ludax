@@ -426,6 +426,12 @@ class GameRuleParser(Transformer):
 
         legal_action_mask_fns = list(map(build, range(len(groups))))
 
+        # if len(legal_action_mask_fns) == 1:
+        #     def legal_action_mask_fn(state):
+        #         return legal_action_mask_fns[0](state)
+        #         # return jnp.ones(action_size**2, dtype=jnp.int16)
+        #     return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
         collect_general = utils._get_collect_values_fn(legal_action_mask_fns)
         
         # For legal actions with different priorities, we return the mask of the highest priority
@@ -538,6 +544,7 @@ class GameRuleParser(Transformer):
                 # additionally impose constraints based on the piece being moved
                 source_mask = source_constraint_fn(state)
                 piece_mask = (state.board[piece] == state.current_player).astype(jnp.int16)
+                # source_mask = piece_mask
                 source_mask = source_mask & piece_mask
 
                 base_mask = jnp.where(
@@ -548,6 +555,7 @@ class GameRuleParser(Transformer):
                 # Keep only the columns corresponding to valid positions under the destination and
                 # result constraints (but keep the shape)
                 destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
+                # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int16)
                 base_mask = jnp.where(
                     destination_mask[jnp.newaxis, :],
                     base_mask, jnp.zeros_like(base_mask)
@@ -683,37 +691,63 @@ class GameRuleParser(Transformer):
         general_indices = jnp.indices(slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int16)[2]
         ones_array = jnp.ones((len(p1_direction_indices), self.game_info.board_size, 1), dtype=jnp.int16)
 
-        def legal_slide_mask_fn(state):
-            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
+        # def legal_slide_mask_fn(state):
+        #     occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
 
+        #     direction_indices = jax.lax.select(
+        #         state.current_player == P1,
+        #         p1_direction_indices,
+        #         p2_direction_indices
+        #     )
+        #     slide_indices = slide_lookup[direction_indices, :, :]
+
+        #     # Get the occupied mask at the slide indices and pad it with 'occupied' to
+        #     # represent the edge of the board, then find the index of the first occupied cell
+        #     occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
+        #     occupied_at_slide = occupied_at_slide.at[:, :, 0].set(0)
+            
+        #     occupied_at_slide = jnp.concatenate([occupied_at_slide, ones_array], axis=2)
+        #     slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
+
+        #     # Extract the board indices corresponding to legal slides, replacing the other
+        #     # indices with a pad value that's larger than the board size
+        #     final_indices = jnp.where(
+        #         general_indices < slide_until_idx[:, :, jnp.newaxis],
+        #         slide_indices, self.game_info.board_size+1
+        #     )
+
+        #     final_indices = final_indices.transpose((1, 0, 2)).reshape(self.game_info.board_size, -1)
+
+        #     mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
+        #     mask = mask.at[actions[:, jnp.newaxis], final_indices].set(1)
+        #     mask = mask.at[actions, actions].set(0)
+
+        #     return mask
+        
+        def _can_slide(state, from_, to_):
             direction_indices = jax.lax.select(
                 state.current_player == P1,
                 p1_direction_indices,
                 p2_direction_indices
             )
-            slide_indices = slide_lookup[direction_indices, :, :]
+            slide_indices = slide_lookup[direction_indices, from_, :]
 
-            # Get the occupied mask at the slide indices and pad it with 'occupied' to
-            # represent the edge of the board, then find the index of the first occupied cell
-            occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
-            occupied_at_slide = occupied_at_slide.at[:, :, 0].set(0)
-            
-            occupied_at_slide = jnp.concatenate([occupied_at_slide, ones_array], axis=2)
-            slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
+            occupied_at_slide = (state.board != EMPTY).any(axis=0).astype(jnp.int16)
+            occupied_at_slide = occupied_at_slide.at[slide_indices].get(mode="fill", fill_value=1)
+            occupied_at_slide = occupied_at_slide.at[:, 0].set(0)
 
-            # Extract the board indices corresponding to legal slides, replacing the other
-            # indices with a pad value that's larger than the board size
-            final_indices = jnp.where(
-                general_indices < slide_until_idx[:, :, jnp.newaxis],
-                slide_indices, self.game_info.board_size+1
-            )
+            occupied_at_slide = jnp.concatenate([occupied_at_slide, jnp.ones((len(direction_indices), 1), dtype=jnp.int16)], axis=1)
+            slide_until_idx = jnp.argmax(occupied_at_slide, axis=1)
 
-            final_indices = final_indices.transpose((1, 0, 2)).reshape(self.game_info.board_size, -1)
+            valid_destinations = slide_indices[jnp.arange(len(direction_indices)), slide_until_idx - 1]
+            can_slide = (valid_destinations == to_).any()
 
-            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int16)
-            mask = mask.at[actions[:, jnp.newaxis], final_indices].set(1)
-            mask = mask.at[actions, actions].set(0)
-
+            return can_slide
+        
+        indices = jnp.arange(self.game_info.board_size, dtype=jnp.int16)
+        def legal_slide_mask_fn(state):
+            mask = jax.vmap(jax.vmap(_can_slide, in_axes=(None, None, 0)), in_axes=(None, 0, None))(state, indices, indices).astype(jnp.int16)
+            mask = mask.at[indices, indices].set(0)
             return mask
 
         return legal_slide_mask_fn, priority
