@@ -33,7 +33,7 @@
         )
         
         (end 
-            (if (and (exists (and (occupied mover) (row 7))) (mover_is P1)) (mover win))
+            (if (and (exists (and (occupied mover) (edge forward))) (mover_is P1)) (mover win))
             (if (no_legal_actions) (mover win))
         )
     )
