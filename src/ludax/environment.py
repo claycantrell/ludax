@@ -50,14 +50,14 @@ class LudaxEnvironment():
     def init(self, rng: PRNGKey) -> State:
 
         # Temporarily hard-coding the init of the game state
-        temp_current_player = jnp.int16(0)
+        temp_current_player = jnp.int8(0)
         game_state = self.game_state_cls(
-            board=jnp.ones((self.num_piece_types, self.board_size), dtype=jnp.int16) * EMPTY,
+            board=jnp.ones((self.num_piece_types, self.board_size), dtype=jnp.int8) * EMPTY,
             legal_action_mask=jnp.ones((self.num_actions,), dtype=jnp.bool_),
             current_player=temp_current_player,
-            phase_idx=jnp.int16(0),
-            phase_step_count=jnp.int16(0),
-            previous_actions=jnp.int16([-1, -1, -1]),
+            phase_idx=jnp.int8(0),
+            phase_step_count=jnp.int8(0),
+            previous_actions=jnp.int8([-1, -1, -1]),
         )
 
         # Initialize the board using the game rules

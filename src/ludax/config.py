@@ -18,10 +18,10 @@ PRNGKey = Any
 TRUE = jnp.bool_(True)
 FALSE = jnp.bool_(False)
 
-INVALID = jnp.int16(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
-EMPTY = jnp.int16(-1)
-P1 = jnp.int16(0)
-P2 = jnp.int16(1)
+INVALID = jnp.int8(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
+EMPTY = jnp.int8(-1)
+P1 = jnp.int8(0)
+P2 = jnp.int8(1)
 
 MAX_STEP_COUNT = 200
 
@@ -44,7 +44,7 @@ class State():
     game_state: type
     current_player: Array
     legal_action_mask: Array
-    winners: Array = EMPTY * jnp.ones(2, jnp.int16)
+    winners: Array = EMPTY * jnp.ones(2, jnp.int8)
     rewards: Array = jnp.float32([0.0, 0.0])
     mover_reward: Array = jnp.float32(0.0)
     terminated: Array = FALSE
