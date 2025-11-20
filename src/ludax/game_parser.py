@@ -82,65 +82,6 @@ class GameRuleParser(Transformer):
             if attribute == "promoted":
                 addl_info_functions.append(lambda state, action: state._replace(promoted=jnp.zeros(self.game_info.board_size, dtype=jnp.bool_)))
 
-            if attribute == "slide_lookup":
-                base_slide_lookup = utils._get_slide_lookup(self.game_info)
-                directions = utils.BOARD_SHAPE_TO_DIRECTIONS[self.game_info.board_shape]
-                num_line_positions = max(self.game_info.board_dims) if self.game_info.board_shape != BoardShapes.HEXAGON else self.game_info.hex_diameter
-
-                # def _can_slide(state, direction, distance, from_, to_):
-                #     # jax.debug.print("from_: {}, to_: {}, direction: {}, distance: {}", from_, to_, direction, distance)
-                #     # return jnp.array(1, dtype=jnp.int8)  # Placeholder to be replaced below
-                #     slide_indices = base_slide_lookup[direction, from_, :]
-
-                #     occupied_at_slide = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
-                #     occupied_at_slide = occupied_at_slide.at[slide_indices].get(mode="fill", fill_value=1)
-                #     occupied_at_slide = occupied_at_slide.at[0].set(0)
-
-                #     occupied_at_slide = jnp.concatenate([occupied_at_slide, jnp.ones(1, dtype=jnp.int8)], axis=0)
-                #     slide_until_idx = jnp.argmax(occupied_at_slide, axis=0)
-
-                #     valid_destination = slide_indices[slide_until_idx - 1]
-                #     can_slide = (valid_destination == to_)
-                #     jax.debug.print("from_: {}, to_: {}, direction: {}, distance: {}, can_slide: {}", from_, to_, direction, distance, can_slide)
-
-                #     return can_slide
-                
-                # def _can_slide(state, direction, distance, from_, to_):
-                #     slide_indices = base_slide_lookup[direction, from_, :]
-                #     right_pos = (slide_indices[distance] == to_)
-                #     return right_pos
-                
-                def _can_slide(state, from_, to_):
-                    slide_indices = base_slide_lookup[:, from_, :]
-                    right_pos = (slide_indices == to_)
-                    return right_pos
-                
-                def set_slide_lookup(state, action):
-                    
-                    # lookup_fn = jax.vmap(jax.vmap(jax.vmap(jax.vmap(
-                    #     _can_slide, (None, None, None, None, 0)), (None, None, None, 0, None)),
-                    #     (None, None, 0, None, None)), (None, 0, None, None, None))
-                    
-                    lookup_fn = jax.vmap(jax.vmap(
-                        _can_slide, (None, None, 0)), (None, 0, None))
-                    
-                    slide_lookup = lookup_fn(
-                        state,
-                        # jnp.arange(len(directions)), # directions
-                        # jnp.arange(num_line_positions), # distances
-                        jnp.arange(self.game_info.board_size), # from_
-                        jnp.arange(self.game_info.board_size), # to_
-                    ).astype(jnp.int8)
-
-                    slide_lookup = slide_lookup.transpose((2, 3, 0, 1))  # directions, distances, from_, to_
-
-                    # jax.debug.print("slide_lookup shape: {}", slide_lookup.shape)
-
-                    return state._replace(slide_lookup=slide_lookup)
-                
-                # addl_info_functions.append(set_slide_lookup)
-            
-
         if len(addl_info_functions) > 0:
             n = len(addl_info_functions)
             def addl_info_fn(state, action):
@@ -750,41 +691,6 @@ class GameRuleParser(Transformer):
         general_indices = jnp.indices(slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int8)[2]
         ones_array = jnp.ones((len(p1_direction_indices), self.game_info.board_size, 1), dtype=jnp.int8)
 
-        # def legal_slide_mask_fn(state):
-        #     occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
-
-        #     direction_indices = jax.lax.select(
-        #         state.current_player == P1,
-        #         p1_direction_indices,
-        #         p2_direction_indices
-        #     )
-        #     slide_indices = slide_lookup[direction_indices, :, :]
-
-        #     # Get the occupied mask at the slide indices and pad it with 'occupied' to
-        #     # represent the edge of the board, then find the index of the first occupied cell
-        #     occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
-        #     occupied_at_slide = occupied_at_slide.at[:, :, 0].set(0)
-            
-        #     occupied_at_slide = jnp.concatenate([occupied_at_slide, ones_array], axis=2)
-        #     slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
-
-        #     # Extract the board indices corresponding to legal slides, replacing the other
-        #     # indices with a pad value that's larger than the board size
-        #     final_indices = jnp.where(
-        #         general_indices < slide_until_idx[:, :, jnp.newaxis],
-        #         slide_indices, self.game_info.board_size+1
-        #     )
-
-        #     final_indices = final_indices.transpose((1, 0, 2)).reshape(self.game_info.board_size, -1)
-
-        #     mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
-        #     mask = mask.at[actions[:, jnp.newaxis], final_indices].set(1)
-        #     mask = mask.at[actions, actions].set(0)
-
-        #     return mask
-        
-
-        # V2: vmapped version of the above logic
         def _can_slide(state, from_, to_):
             direction_indices = jax.lax.select(
                 state.current_player == P1,
@@ -810,18 +716,6 @@ class GameRuleParser(Transformer):
             mask = jax.vmap(jax.vmap(_can_slide, in_axes=(None, None, 0)), in_axes=(None, 0, None))(state, indices, indices).astype(jnp.int8)
             mask = mask.at[indices, indices].set(0)
             return mask
-
-        # V3: using addl_info
-        # def legal_slide_mask_fn(state):
-        #     direction_indices = jax.lax.select(
-        #         state.current_player == P1,
-        #         p1_direction_indices,
-        #         p2_direction_indices
-        #     )
-        #     slide_indices = state.slide_lookup[direction_indices, distance, :, :]
-        #     mask = slide_indices.any(axis=0).astype(jnp.int8)
-        #     mask = mask.at[actions, actions].set(0)
-        #     return mask
 
         return legal_slide_mask_fn, priority
 
