@@ -1682,24 +1682,38 @@ class GameRuleParser(Transformer):
 
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
+            # This array contains the "left" and "right" overshoot positions for each line and is set to
+            # an overflow value if there is no overshoot in that direction
+            overshoot_indices = jnp.ones((line_indices.shape[0], 2), dtype=jnp.int16) * (self.game_info.board_size + 1)
+            for i in range(line_indices.shape[0]):
+                line = line_indices[i]
+                left_match = (overshoot_line_indices[:, :-1] == line).all(axis=1)
+                right_match = (overshoot_line_indices[:, 1:] == line).all(axis=1)
+
+                if left_match.any():
+                    match_idx = jnp.argmax(left_match)
+                    overshoot_indices = overshoot_indices.at[i, 0].set(overshoot_line_indices[match_idx, -1])
+                if right_match.any():
+                    match_idx = jnp.argmax(right_match)
+                    overshoot_indices = overshoot_indices.at[i, 1].set(overshoot_line_indices[match_idx, 0])
+
             def function_fn(state):
                 occupied_mask = get_occupied_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
-                num_lines = line_matches.sum()
-                num_overshoot_lines = jax.lax.cond(num_lines, lambda: 0, lambda: (occupied_mask[overshoot_line_indices] == 1).all(axis=1).sum())
+                no_overshoot = (occupied_mask.at[overshoot_indices].get(fill_value=0) == 0).all(axis=1)
 
-                return num_lines - 2 * num_overshoot_lines
+                no_overshoot_line_matches = line_matches & no_overshoot
+                return no_overshoot_line_matches.sum()
             
             def mask_fn(state):
                 occupied_mask = get_occupied_mask(state)
                 line_matches = (occupied_mask[line_indices] == 1).all(axis=1)
-                overshoot_line_matches = (occupied_mask[overshoot_line_indices] == 1).all(axis=1)
+                no_overshoot = (occupied_mask.at[overshoot_indices].get(fill_value=0) == 0).all(axis=1)
 
-                matched_indices = jnp.where(line_matches[:, jnp.newaxis], line_indices, self.game_info.board_size+1).flatten()
-                overshoot_matched_indices = jnp.where(overshoot_line_matches[:, jnp.newaxis], overshoot_line_indices, self.game_info.board_size+1).flatten()
-                
+                no_overshoot_line_matches = line_matches & no_overshoot
+
+                matched_indices = jnp.where(no_overshoot_line_matches[:, jnp.newaxis], line_indices, self.game_info.board_size+1).flatten()
                 mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[matched_indices].set(1)
-                mask = mask.at[overshoot_matched_indices].set(0)
 
                 return mask
 
