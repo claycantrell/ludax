@@ -51,9 +51,11 @@ play_multi_move: "(" "or" play_single_move+ ")"
 move_types: move_type | "(" move_type+ ")"
 move_type: move_hop
          | move_slide
+         | move_step
 
 move_hop: "(" "hop" direction_arg? piece_arg? mover_arg? priority_arg? ")"
 move_slide: "(" "slide" direction_arg? distance_arg? priority_arg? ")"
+move_step: "(" "step" direction_arg? priority_arg? ")"
 
 move_source_constraint: "(" "source" super_mask ")"
 move_destination_constraint: "(" "destination" super_mask ")"

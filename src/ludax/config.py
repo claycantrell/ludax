@@ -147,9 +147,10 @@ class Masks(StrEnum):
     PATTERN = 'mask_pattern'
 
 class MoveTypes(StrEnum):
+    PLACE = 'move_place'
     HOP = 'move_hop'
     SLIDE = 'move_slide'
-    PLACE = 'move_place'
+    STEP = 'move_step'
 
 # A bit odd, but pieces are either "any" or are defined by name elsewhere
 class PieceRefs(StrEnum):
@@ -194,6 +195,7 @@ DEFAULT_ARGUMENTS = {
 
     MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both', OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
+    MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.EXTRA_TURN: {OptionalArgs.SAME_PIECE: False},

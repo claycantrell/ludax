@@ -19,12 +19,12 @@
             (repeat (P1 P2)
                 (or
                     (move "wolf"
-                        (slide direction:diagonal distance:1)
+                        (step direction:diagonal)
                         (source (occupied mover)) 
                         (destination empty)
                     )
                     (move "sheep"
-                        (slide direction:(forward_left forward_right) distance:1)
+                        (step direction:(forward_left forward_right))
                         (source (occupied mover)) 
                         (destination empty)
                     )

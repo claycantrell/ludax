@@ -718,6 +718,41 @@ class GameRuleParser(Transformer):
             return mask
 
         return legal_slide_mask_fn, priority
+    
+    def move_step(self, children):
+        '''
+        Step a piece in one of the specified directions (default to any) by exactly one space
+        '''
+
+        optional_args = self._parse_optional_args(children)
+
+        priority = optional_args[OptionalArgs.PRIORITY]
+        direction = optional_args[OptionalArgs.DIRECTION]
+
+        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
+        
+        # Restrict the slide lookup to only the specified distance
+        slide_lookup = utils._get_slide_lookup(self.game_info)
+        slide_lookup = slide_lookup[:, :, :2]
+
+        indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
+
+        def legal_step_mask_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+
+            # Shape is (board_size, num_directions) and contains the indices that are
+            # reachable by stepping in each direction from each board position (or a pad value)
+            step_indices = slide_lookup[direction_indices, :, 1].T
+
+            valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
+            
+            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
+            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
+
+            return mask
+        
+        return legal_step_mask_fn, priority
 
     def move_result_constraint(self, children):
         raise NotImplementedError("Move result constraints not implemented yet!")
