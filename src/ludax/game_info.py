@@ -23,6 +23,7 @@ class GameInfo:
     num_piece_types: int = None
     piece_names: tuple[str] = ()
     piece_owners: tuple[str] = ()
+    disjoint_asymmetric: bool = False
 
     forward_directions: tuple[str] = ()
 
@@ -138,6 +139,11 @@ class GameInfoExtractor(Visitor):
         self.game_info.num_piece_types = len(piece_names)
         self.game_info.piece_names = tuple(piece_names)
         self.game_info.piece_owners = tuple(piece_owners)
+
+        # If there are exactly two piece types and one belongs to each player, then
+        # the game is "disjoint asymmetric"
+        if list(sorted(piece_owners)) == [PlayerAndMoverRefs.P1, PlayerAndMoverRefs.P2]:
+            self.game_info.disjoint_asymmetric = True
     
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:

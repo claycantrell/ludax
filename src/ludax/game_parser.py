@@ -424,28 +424,35 @@ class GameRuleParser(Transformer):
         grouped_legal_action_infos = groupby(sorted(legal_action_infos, key=lambda x: x[1]), key=lambda x: x[1])
 
         groups = [list(items) for key, items in grouped_legal_action_infos]
+        
 
         def build(idx):
             items = groups[idx]
             fns, _ = zip(*list(items))
 
+            # TODO: under a vmap, cond is replaced by select which indicates that this
+            # actualyl wouldn't be any more efficient...
+            if len(fns) == 2 and self.game_info.disjoint_asymmetric:
+                def single_legal_action_mask_fn(state):
+                    mask = jax.lax.cond(
+                        state.current_player == P1,
+                        lambda: fns[0](state),
+                        lambda: fns[1](state)
+                    )
+                    return mask.astype(jnp.int8)
 
-            # TODO: here we are computing the legal actions for all piece types even if 
-            #       one player always moves a single piece type. We could optimize this
-            #       by detecting this pattern at compile time...
-            collect_same_prio = utils._get_collect_values_fn(fns)
-            def single_legal_action_mask_fn(state):
-                return collect_same_prio(state).any(axis=0).astype(jnp.int8)
+            else:
+                collect_same_prio = utils._get_collect_values_fn(fns)
+                def single_legal_action_mask_fn(state):
+                    return collect_same_prio(state).any(axis=0).astype(jnp.int8)
             
             return single_legal_action_mask_fn
 
         legal_action_mask_fns = list(map(build, range(len(groups))))
 
-        # if len(legal_action_mask_fns) == 1:
-        #     def legal_action_mask_fn(state):
-        #         return legal_action_mask_fns[0](state)
-        #         # return jnp.ones(action_size**2, dtype=jnp.int8)
-        #     return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+        # If there is only one priority level, we can return the function directly
+        if len(legal_action_mask_fns) == 1:
+            return action_size, apply_action_fn, legal_action_mask_fns[0], apply_effects_fn
 
         collect_general = utils._get_collect_values_fn(legal_action_mask_fns)
         
@@ -605,6 +612,11 @@ class GameRuleParser(Transformer):
             piece_idx = state.board[:, start_pos].argmax()
             return jax.lax.switch(piece_idx, apply_action_fns, state, action)
         
+        # If all of the apply_effects_fns are the identity function, we can skip this step
+        # (stored as <lambda> in the parser)
+        if all(fn.__name__ == "<lambda>" for fn in apply_effects_fns):
+            return action_size, apply_action_fn, legal_action_infos, lambda state, original_player: state
+
         # For move rules, the "previous action" contains the destination position
         def apply_effects_fn(state, original_player):
             piece_idx = state.board[:, state.previous_actions[original_player]].argmax()
