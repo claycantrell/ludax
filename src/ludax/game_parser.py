@@ -170,21 +170,32 @@ class GameRuleParser(Transformer):
 
         (action_sizes, apply_action_fns, legal_action_mask_fns, 
          apply_effects_fns, next_phase_fns, next_player_fns) = zip(*children)
-
-        def apply_action_fn(state, action):
-            return jax.lax.switch(state.phase_idx, apply_action_fns, state, action)
-
-        def legal_action_mask_fn(state):
-            return jax.lax.switch(state.phase_idx, legal_action_mask_fns, state)
         
-        def apply_effects_fn(state, original_player):
-            return jax.lax.switch(state.phase_idx, apply_effects_fns, state, original_player)
 
-        def next_phase_fn(state):
-            return jax.lax.switch(state.phase_idx, next_phase_fns, state)
+        # For single-phase games, we can just use the functions directly
+        if len(action_sizes) == 1:
+            apply_action_fn = apply_action_fns[0]
+            legal_action_mask_fn = legal_action_mask_fns[0]
+            apply_effects_fn = apply_effects_fns[0]
+            next_phase_fn = next_phase_fns[0]
+            next_player_fn = next_player_fns[0]
 
-        def next_player_fn(state):
-            return jax.lax.switch(state.phase_idx, next_player_fns, state)
+        else:
+
+            def apply_action_fn(state, action):
+                return jax.lax.switch(state.phase_idx, apply_action_fns, state, action)
+
+            def legal_action_mask_fn(state):
+                return jax.lax.switch(state.phase_idx, legal_action_mask_fns, state)
+            
+            def apply_effects_fn(state, original_player):
+                return jax.lax.switch(state.phase_idx, apply_effects_fns, state, original_player)
+
+            def next_phase_fn(state):
+                return jax.lax.switch(state.phase_idx, next_phase_fns, state)
+
+            def next_player_fn(state):
+                return jax.lax.switch(state.phase_idx, next_player_fns, state)
 
         play_rule_dict = {
             'action_size': max(action_sizes),
@@ -418,6 +429,10 @@ class GameRuleParser(Transformer):
             items = groups[idx]
             fns, _ = zip(*list(items))
 
+
+            # TODO: here we are computing the legal actions for all piece types even if 
+            #       one player always moves a single piece type. We could optimize this
+            #       by detecting this pattern at compile time...
             collect_same_prio = utils._get_collect_values_fn(fns)
             def single_legal_action_mask_fn(state):
                 return collect_same_prio(state).any(axis=0).astype(jnp.int8)
