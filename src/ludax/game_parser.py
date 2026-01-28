@@ -431,8 +431,8 @@ class GameRuleParser(Transformer):
             fns, _ = zip(*list(items))
 
             # TODO: under a vmap, cond is replaced by select which indicates that this
-            # actualyl wouldn't be any more efficient...
-            if len(fns) == 2 and self.game_info.disjoint_asymmetric:
+            # actually wouldn't be any more efficient...
+            if len(fns) == 2 and self.game_info.disjoint_asymmetric and False:
                 def single_legal_action_mask_fn(state):
                     mask = jax.lax.cond(
                         state.current_player == P1,
@@ -482,7 +482,7 @@ class GameRuleParser(Transformer):
         if not isinstance(base_legal_mask_infos, list):
             base_legal_mask_infos = [base_legal_mask_infos]
 
-        base_legal_mask_fns, priorities = zip(*base_legal_mask_infos)
+        base_legal_mask_fns, base_move_piece_fns, priorities = zip(*base_legal_mask_infos)
         
         # TODO: work in progress detecting hopped pieces. The difficulty is that a move might support
         # multiple move types for a single piece, only some of which involve hopping. How can we determine
@@ -516,12 +516,15 @@ class GameRuleParser(Transformer):
                 return state._replace(board=board, previous_actions=previous_actions, hopped=hopped)
 
         else:
-            def move_piece_fn(state, action):
-                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
-                return state._replace(board=board, previous_actions=previous_actions)
+            # def move_piece_fn(state, action):
+            #     start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+            #     board = state.board.at[piece, end_idx].set(state.current_player)
+            #     board = board.at[piece, start_idx].set(EMPTY)
+            #     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+            #     return state._replace(board=board, previous_actions=previous_actions)
+            
+            # WIP: hard-coded Wolf and Sheep
+            move_piece_fn = base_move_piece_fns[0]
 
         # Case 1: no optional arguments -- legal actions determined by the destination constraint
         # and there are no effects
@@ -548,6 +551,9 @@ class GameRuleParser(Transformer):
         # We model the action space as "take a piece from any board position and move it to
         # any other board position" so the total number of actions is board_size^2
         action_size = self.game_info.board_size ** 2
+
+        # WIP: let's try changing this to board_size * 4 (for orthogonal stepping games)
+        action_size = self.game_info.board_size * 4
 
         # We define a separate "legal action mask" for seach sub-type of move (e.g. slide, hop) which
         # will ultimately be combined to form the overall legal action mask based on the priorities of
@@ -576,12 +582,12 @@ class GameRuleParser(Transformer):
 
                 # Keep only the columns corresponding to valid positions under the destination and
                 # result constraints (but keep the shape)
-                destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
-                # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
-                base_mask = jnp.where(
-                    destination_mask[jnp.newaxis, :],
-                    base_mask, jnp.zeros_like(base_mask)
-                )
+                # destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
+                # # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
+                # base_mask = jnp.where(
+                #     destination_mask[jnp.newaxis, :],
+                #     base_mask, jnp.zeros_like(base_mask)
+                # )
 
                 # Finally, flatten the mask to get the legal action mask
                 legal_mask = base_mask.flatten()
@@ -757,6 +763,10 @@ class GameRuleParser(Transformer):
         direction = optional_args[OptionalArgs.DIRECTION]
 
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        if len(p1_direction_indices) == 2:
+            p1_direction_indices = jnp.array(p1_direction_indices.tolist() + 2*[p1_direction_indices[1]])
+            p2_direction_indices = jnp.array(p2_direction_indices.tolist() + 2*[p2_direction_indices[1]])
+
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
         
         # Restrict the slide lookup to only the specified distance
@@ -779,6 +789,35 @@ class GameRuleParser(Transformer):
 
             return mask
         
+        # WIP: a hard-coded implementation for Wolf and Sheep that has an action size of board_size * 4
+        # uses the fact that the slide_lookup has a value larger than the board size for invalid steps
+        def legal_step_mask_fn_wolf_sheep(state):
+            direction_indices = all_direction_indices[state.current_player]
+
+            # Shape is (board_size, num_directions) and contains the indices that are
+            # reachable by stepping in each direction from each board position (or a pad value)
+            step_indices = slide_lookup[direction_indices, :, 1].T
+
+            mask = (step_indices < self.game_info.board_size).astype(jnp.int8)
+            return mask
+        
+        def move_piece_fn_wolf_sheep(state, action):
+            start_idx = action // 4
+            direction_idx = action % 4
+
+            direction_indices = all_direction_indices[state.current_player]
+            step_indices = slide_lookup[direction_indices, :, 1].T
+
+            end_idx = step_indices[start_idx, direction_idx % len(direction_indices)]
+
+            board = state.board.at[:, end_idx].set(state.current_player)
+            board = board.at[:, start_idx].set(EMPTY)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+
+            return state._replace(board=board, previous_actions=previous_actions)
+        
+        return legal_step_mask_fn_wolf_sheep, move_piece_fn_wolf_sheep, priority
+
         return legal_step_mask_fn, priority
 
     def move_result_constraint(self, children):
