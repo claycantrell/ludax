@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, BoardShapes, Directions, EdgeTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
 from .game_info import GameInfo
 from . import utils
 
@@ -13,6 +13,8 @@ class GameRuleParser(Transformer):
         self.game_info = game_info
         self.end_rule_info = []
         self.adjacency_lookup = utils._get_adjacency_lookup(self.game_info)
+        self.slide_lookup = utils._get_slide_lookup(self.game_info)
+        self.num_directions = self.slide_lookup.shape[0]
 
         # Optional attributes
         if "extra_turn_fn_idx" in self.game_info.game_state_attributes:
@@ -763,17 +765,64 @@ class GameRuleParser(Transformer):
         direction = optional_args[OptionalArgs.DIRECTION]
 
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
-        if len(p1_direction_indices) == 2:
-            p1_direction_indices = jnp.array(p1_direction_indices.tolist() + 2*[p1_direction_indices[1]])
-            p2_direction_indices = jnp.array(p2_direction_indices.tolist() + 2*[p2_direction_indices[1]])
-
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
-        
-        # Restrict the slide lookup to only the specified distance
-        slide_lookup = utils._get_slide_lookup(self.game_info)
-        slide_lookup = slide_lookup[:, :, :2]
 
-        indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
+        # The legal action function and apply action function depend on the action space structure
+        # Case 1: action space is (board_size, num_directions)
+        if self.game_info.action_type == ActionTypes.FROM_DIR:
+             def legal_action_fn(state):
+                direction_indices = all_direction_indices[state.current_player]
+
+                step_indices = self.slide_lookup[direction_indices, :, 1].T
+                valid_steps = (step_indices < self.game_info.board_size).astype(jnp.int8)
+
+                mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=jnp.int8)
+                mask = mask.at[:, direction_indices].set(valid_steps)
+
+                return mask
+             
+             def apply_action_fn(state, action):
+                start_idx = action // self.num_directions
+                direction_idx = action % self.num_directions
+                end_idx = self.slide_lookup[direction_idx, start_idx, 1]
+
+                piece_idx = state.board[:, start_idx].argmax()
+                board = state.board.at[piece_idx, end_idx].set(state.current_player)
+                board = board.at[piece_idx, start_idx].set(EMPTY)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+
+                return state._replace(board=board, previous_actions=previous_actions)
+
+        # Case 2: action space is (from_pos, to_pos)
+        elif self.game_info.action_type == ActionTypes.FROM_TO:
+            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
+
+            def legal_action_fn(state):
+                direction_indices = all_direction_indices[state.current_player]
+                step_indices = self.slide_lookup[direction_indices, :, 1].T
+
+                valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
+                
+                mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
+                mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
+
+                return mask
+            
+            def apply_action_fn(state, action):
+                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+                
+                piece_idx = state.board[:, start_idx].argmax()
+                board = state.board.at[piece_idx, end_idx].set(state.current_player)
+                board = board.at[piece_idx, start_idx].set(EMPTY)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+                
+                return state._replace(board=board, previous_actions=previous_actions)
+
+        else:
+            raise ValueError(f"Move step not implemented for action space type {self.game_info.action_space_type}")
+        
+        return legal_action_fn, apply_action_fn, priority
+
 
         def legal_step_mask_fn(state):
             direction_indices = all_direction_indices[state.current_player]

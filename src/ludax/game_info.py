@@ -6,12 +6,13 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import TRUE, FALSE, BoardShapes, PieceShapes, PlayerAndMoverRefs
+from .config import ActionTypes, BoardShapes, PieceShapes, PlayerAndMoverRefs, MoveTypes
 
 @dataclass
 class GameInfo:
     num_players: int = 2
     board_shape: str = None
+    num_directions: int = None
     observation_shape: tuple = None
     board_dims: tuple = None
     board_size: int = None
@@ -19,6 +20,7 @@ class GameInfo:
     game_state_class: type = None
     game_state_attributes: list = None
     move_type: str = None
+    action_type: ActionTypes = None
 
     num_piece_types: int = None
     piece_names: tuple[str] = ()
@@ -56,6 +58,8 @@ class GameInfoExtractor(Visitor):
 
         self.rendering_info = RenderingInfo()
     
+        self.used_mechanics = set()
+
     def __call__(self, tree):
         self.visit_topdown(tree)
         
@@ -72,6 +76,14 @@ class GameInfoExtractor(Visitor):
         for piece_name in self.game_info.piece_names:
             if piece_name not in self.rendering_info.piece_shape_mapping:
                 self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
+
+        # Determine the action space type based on the used mechanics
+        if MoveTypes.SLIDE in self.used_mechanics:
+            self.game_info.action_type = ActionTypes.FROM_TO
+        elif MoveTypes.HOP in self.used_mechanics or MoveTypes.STEP in self.used_mechanics:
+            self.game_info.action_type = ActionTypes.FROM_DIR
+        else:
+            self.game_info.action_type = ActionTypes.TO
 
         return self.game_info, self.rendering_info
 
@@ -97,13 +109,15 @@ class GameInfoExtractor(Visitor):
             size = int(shape_tree.children[0])
             self.game_info.observation_shape = (size, size, 2)
             self.game_info.board_dims = (size, size)
-            self.game_info.board_size = size ** 2        
+            self.game_info.board_size = size ** 2
+            self.game_info.num_directions = 8
 
         elif board_shape == BoardShapes.RECTANGLE:
             width, height = map(int, shape_tree.children)
             self.game_info.observation_shape = (width, height, 2)
             self.game_info.board_dims = (width, height)
             self.game_info.board_size = width * height
+            self.game_info.num_directions = 8
 
         elif board_shape == BoardShapes.HEXAGON:
             diameter = int(shape_tree.children[0])
@@ -116,12 +130,14 @@ class GameInfoExtractor(Visitor):
             # Consider rings of tiles moving outward from the center tile.
             # The total number of tiles in a hex-hex board is: 1 + [(i* 6) for i in range(1, diameter-1)]
             self.game_info.board_size = 1 + sum([(i * 6) for i in range(1, diameter//2 + 1)])
+            self.game_info.num_directions = 6
 
         elif board_shape == BoardShapes.HEX_RECTANGLE:
             width, height = map(int, shape_tree.children)
             self.game_info.observation_shape = (width, height, 2)
             self.game_info.board_dims = (width, height)
             self.game_info.board_size = width * height    
+            self.game_info.num_directions = 6
 
         else:
             raise NotImplementedError(f"Board shape {board_shape} not implemented yet!")
@@ -176,6 +192,18 @@ class GameInfoExtractor(Visitor):
             self.game_info.move_type = "move"
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
+
+    def play_place(self, tree):
+        self.used_mechanics.add(MoveTypes.PLACE)
+
+    def move_slide(self, tree):
+        self.used_mechanics.add(MoveTypes.SLIDE)
+
+    def move_hop(self, tree):
+        self.used_mechanics.add(MoveTypes.HOP)
+
+    def move_step(self, tree):
+        self.used_mechanics.add(MoveTypes.STEP)
 
     def effect_capture(self, tree):
         '''

@@ -51,6 +51,11 @@ class State():
     truncated: Array = FALSE
     global_step_count: Array = jnp.int16(0)
 
+class ActionTypes(StrEnum):
+    TO = 'action_to'
+    FROM_DIR = 'action_from_dir'
+    FROM_TO = 'action_from_to'
+
 class BoardShapes(StrEnum):
     SQUARE = 'board_square'
     RECTANGLE = 'board_rectangle'
