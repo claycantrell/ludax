@@ -432,21 +432,9 @@ class GameRuleParser(Transformer):
             items = groups[idx]
             fns, _ = zip(*list(items))
 
-            # TODO: under a vmap, cond is replaced by select which indicates that this
-            # actually wouldn't be any more efficient...
-            if len(fns) == 2 and self.game_info.disjoint_asymmetric and False:
-                def single_legal_action_mask_fn(state):
-                    mask = jax.lax.cond(
-                        state.current_player == P1,
-                        lambda: fns[0](state),
-                        lambda: fns[1](state)
-                    )
-                    return mask.astype(jnp.int8)
-
-            else:
-                collect_same_prio = utils._get_collect_values_fn(fns)
-                def single_legal_action_mask_fn(state):
-                    return collect_same_prio(state).any(axis=0).astype(jnp.int8)
+            collect_same_prio = utils._get_collect_values_fn(fns)
+            def single_legal_action_mask_fn(state):
+                return collect_same_prio(state).any(axis=0).astype(jnp.int8)
             
             return single_legal_action_mask_fn
 
@@ -585,9 +573,9 @@ class GameRuleParser(Transformer):
                 # Keep only the columns corresponding to valid positions under the destination and
                 # result constraints (but keep the shape)
                 # destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
-                # # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
+                # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
                 # base_mask = jnp.where(
-                #     destination_mask[jnp.newaxis, :],
+                #     destination_mask[:, jnp.newaxis],
                 #     base_mask, jnp.zeros_like(base_mask)
                 # )
 
@@ -772,9 +760,12 @@ class GameRuleParser(Transformer):
         if self.game_info.action_type == ActionTypes.FROM_DIR:
              def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
+                occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+                occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
 
                 step_indices = self.slide_lookup[direction_indices, :, 1].T
                 valid_steps = (step_indices < self.game_info.board_size).astype(jnp.int8)
+                valid_steps = valid_steps & ~jnp.isin(step_indices, occupied_idxs).astype(jnp.int8)
 
                 mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=jnp.int8)
                 mask = mask.at[:, direction_indices].set(valid_steps)
@@ -797,6 +788,8 @@ class GameRuleParser(Transformer):
         elif self.game_info.action_type == ActionTypes.FROM_TO:
             indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
 
+
+            # TODO: block occupied squares!
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
                 step_indices = self.slide_lookup[direction_indices, :, 1].T
