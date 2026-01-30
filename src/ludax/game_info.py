@@ -1,5 +1,6 @@
 from collections import namedtuple
 from dataclasses import dataclass
+import inspect
 import typing
 
 import jax.numpy as jnp
@@ -59,6 +60,7 @@ class GameInfoExtractor(Visitor):
         self.rendering_info = RenderingInfo()
     
         self.used_mechanics = set()
+        self.used_direction_indices = set()
 
     def __call__(self, tree):
         self.visit_topdown(tree)
@@ -98,6 +100,12 @@ class GameInfoExtractor(Visitor):
             return tree.value
         
         return tree
+
+    def _filter_children_args(self, tree: Tree, arg_type: str):
+        children = [child for child in tree.children if isinstance(child, Tree) and child.data.value == arg_type]
+        if children == []:
+            return [None]
+        return children
 
     def board(self, tree):
 
@@ -204,6 +212,7 @@ class GameInfoExtractor(Visitor):
 
     def move_step(self, tree):
         self.used_mechanics.add(MoveTypes.STEP)
+        dir_child = self._filter_children_args(tree, "direction_arg")[0]
 
     def effect_capture(self, tree):
         '''

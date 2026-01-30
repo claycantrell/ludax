@@ -543,7 +543,7 @@ class GameRuleParser(Transformer):
         action_size = self.game_info.board_size ** 2
 
         # WIP: let's try changing this to board_size * 4 (for orthogonal stepping games)
-        action_size = self.game_info.board_size * 4
+        action_size = self.game_info.board_size * 8
 
         # We define a separate "legal action mask" for seach sub-type of move (e.g. slide, hop) which
         # will ultimately be combined to form the overall legal action mask based on the priorities of
@@ -788,16 +788,22 @@ class GameRuleParser(Transformer):
         elif self.game_info.action_type == ActionTypes.FROM_TO:
             indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
 
-
-            # TODO: block occupied squares!
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
                 step_indices = self.slide_lookup[direction_indices, :, 1].T
+                occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
 
                 valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
                 
                 mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
                 mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
+
+                # Block moves to occupied squares
+                mask = jnp.where(
+                    occupied_mask[jnp.newaxis, :],
+                    jnp.zeros_like(mask),
+                    mask
+                )
 
                 return mask
             
