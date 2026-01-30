@@ -1,0 +1,34 @@
+(game "WolfAndSheep" 
+    (players 2
+        (set_forward (P1 down) (P2 up))
+    )
+    (equipment 
+        (board (square 8))
+        (pieces
+            ("wolf" P1)
+            ("sheep" P2)
+        )
+    ) 
+    
+    (rules
+        (start
+            (place "wolf" P1 (3))
+            (place "sheep" P2 (56 58 60 62))
+        )
+        (play
+            (repeat (P1 P2)
+                (move
+                    (or
+                        (step "wolf" direction:diagonal)
+                        (step "sheep" direction:(forward_left forward_right))
+                    )
+                )
+            )
+        )
+        
+        (end 
+            (if (and (exists (and (occupied mover) (edge forward))) (mover_is P1)) (mover win))
+            (if (no_legal_actions) (mover win))
+        )
+    )
+)
