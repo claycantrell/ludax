@@ -21,6 +21,7 @@ yavalax = _read_game('yavalax')
 test = _read_game('test')
 test_slide = _read_game('test_slide')
 wolf_and_sheep = _read_game('wolf_and_sheep')
+wolf_and_sheep_alt = _read_game('wolf_and_sheep_alt')
 
 # List of all games available in the package
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "test",
     "test_slide",
     "wolf_and_sheep",
+    "wolf_and_sheep_alt",
 ]

@@ -45,15 +45,17 @@ place_destination_constraint: "(" "destination" super_mask ")"
 place_result_constraint: "(" "result" super_predicate ")"
 
 // ---Move rules---
-play_move: "(" "move" move_type_definition play_effects? ")"
-move_type_definition: move_type | "(" "or" move_type+ ")"
+play_move: play_single_move | play_multi_move
+play_single_move: "(" "move" piece_reference move_types move_source_constraint move_destination_constraint move_result_constraint? play_effects? ")"
+play_multi_move: "(" "or" play_single_move+ ")"
+move_types: move_type | "(" move_type+ ")"
 move_type: move_hop
          | move_slide
          | move_step
 
-move_hop: "(" "hop" piece_reference direction_arg? piece_arg? mover_arg? priority_arg? ")"
-move_slide: "(" "slide" piece_reference direction_arg? distance_arg? priority_arg? ")"
-move_step: "(" "step" piece_reference direction_arg? priority_arg? ")"
+move_hop: "(" "hop" direction_arg? piece_arg? mover_arg? priority_arg? ")"
+move_slide: "(" "slide" direction_arg? distance_arg? priority_arg? ")"
+move_step: "(" "step" direction_arg? priority_arg? ")"
 
 move_source_constraint: "(" "source" super_mask ")"
 move_destination_constraint: "(" "destination" super_mask ")"

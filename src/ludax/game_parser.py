@@ -418,208 +418,273 @@ class GameRuleParser(Transformer):
     '''
     Move rules
     '''
+    # def play_move(self, children):
+    #     '''
+    #     Combine the move rules for each piece / move type based on their priorities
+    #     '''
+    #     action_size, apply_action_fn, legal_action_infos, apply_effects_fn = children[0]
+    #     grouped_legal_action_infos = groupby(sorted(legal_action_infos, key=lambda x: x[1]), key=lambda x: x[1])
+
+    #     groups = [list(items) for key, items in grouped_legal_action_infos]
+        
+
+    #     def build(idx):
+    #         items = groups[idx]
+    #         fns, _ = zip(*list(items))
+
+    #         collect_same_prio = utils._get_collect_values_fn(fns)
+    #         def single_legal_action_mask_fn(state):
+    #             return collect_same_prio(state).any(axis=0).astype(jnp.int8)
+            
+    #         return single_legal_action_mask_fn
+
+    #     legal_action_mask_fns = list(map(build, range(len(groups))))
+
+    #     # If there is only one priority level, we can return the function directly
+    #     if len(legal_action_mask_fns) == 1:
+    #         return action_size, apply_action_fn, legal_action_mask_fns[0], apply_effects_fn
+
+    #     collect_general = utils._get_collect_values_fn(legal_action_mask_fns)
+        
+    #     # For legal actions with different priorities, we return the mask of the highest priority
+    #     # with at least one legal action
+    #     def legal_action_mask_fn(state):
+    #         all_masks = collect_general(state)
+
+    #         any_legal = all_masks.any()
+    #         first_active = all_masks.any(axis=1).argmax()
+
+    #         mask = jax.lax.select(any_legal, all_masks[first_active], jnp.zeros(action_size, dtype=jnp.int8))
+
+    #         return mask
+
+    #     return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
+    # def play_single_move(self, children):
+    #     '''
+    #     Players move a single kind of piece from one position on the board to another according to some
+    #     rule (e.g. sliding, jumping, ...)
+    #     '''
+
+    #     piece, base_legal_mask_infos, (source_constraint_fn, _), (destination_constraint_fn, _), *optional_args = children
+
+
+    #     if not isinstance(base_legal_mask_infos, list):
+    #         base_legal_mask_infos = [base_legal_mask_infos]
+
+    #     base_legal_mask_fns, base_move_piece_fns, priorities = zip(*base_legal_mask_infos)
+        
+    #     # TODO: work in progress detecting hopped pieces. The difficulty is that a move might support
+    #     # multiple move types for a single piece, only some of which involve hopping. How can we determine
+    #     # that a particular action involved a hop?
+    #     if hasattr(self.game_info.game_state_class, 'hopped'):
+
+    #         # Somewhat hacky, but a hop always moves a piece one of these lengths based on whether
+    #         # it's horizontal, vertical, back-diagonal, or forward-diagonal
+    #         # TODO: confirm this logic always holds
+    #         potential_hop_lengths = jnp.array([
+    #             2, 2 * self.game_info.board_dims[0], 2 * (self.game_info.board_dims[0] + 1),
+    #             2 * (self.game_info.board_dims[0] - 1)
+    #         ], dtype=jnp.int8)
+
+
+    #         def move_piece_fn(state, action):
+    #             start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+    #             midpoint = (start_idx + end_idx) // 2
+
+    #             board = state.board.at[piece, end_idx].set(state.current_player)
+    #             board = board.at[piece, start_idx].set(EMPTY)
+    #             previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+
+    #             action_was_hop = jnp.isin(jnp.abs(end_idx - start_idx), potential_hop_lengths) & (state.board[:, midpoint] != EMPTY).any()
+    #             hopped = jax.lax.select(
+    #                 action_was_hop,
+    #                 jnp.zeros_like(state.hopped).at[midpoint].set(True),
+    #                 jnp.zeros_like(state.hopped)
+    #             )
+
+    #             return state._replace(board=board, previous_actions=previous_actions, hopped=hopped)
+
+    #     else:
+    #         # def move_piece_fn(state, action):
+    #         #     start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+    #         #     board = state.board.at[piece, end_idx].set(state.current_player)
+    #         #     board = board.at[piece, start_idx].set(EMPTY)
+    #         #     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+    #         #     return state._replace(board=board, previous_actions=previous_actions)
+            
+    #         # WIP: hard-coded Wolf and Sheep
+    #         move_piece_fn = base_move_piece_fns[0]
+
+    #     # Case 1: no optional arguments -- legal actions determined by the destination constraint
+    #     # and there are no effects
+    #     if len(optional_args) == 0:
+    #         result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int8)
+    #         apply_effects_fn = lambda state, original_player: state
+
+    #     # Case 2: one optional argument is specified -- either a result constraint or an effect
+    #     elif len(optional_args) == 1:
+    #         arg = optional_args[0]
+    #         if arg.__name__ == "result_constraint_fn" or arg.__name__ == "lookahead_mask_fn":
+    #             result_constraint_fn = lambda state: arg(state)
+    #             apply_effects_fn = lambda state, original_player: state
+
+    #         elif arg.__name__ == "apply_effects_fn":
+    #             result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int8)
+    #             apply_effects_fn = arg
+
+    #     # Case 3: two optional arguments are specified -- result constraints and effects, always
+    #     # in that order
+    #     else:
+    #         result_constraint_fn, apply_effects_fn = optional_args
+        
+    #     # We model the action space as "take a piece from any board position and move it to
+    #     # any other board position" so the total number of actions is board_size^2
+    #     action_size = self.game_info.board_size ** 2
+
+    #     # WIP: let's try changing this to board_size * 4 (for orthogonal stepping games)
+    #     action_size = self.game_info.board_size * 8
+
+    #     # We define a separate "legal action mask" for seach sub-type of move (e.g. slide, hop) which
+    #     # will ultimately be combined to form the overall legal action mask based on the priorities of
+    #     # each move and piece type
+    #     legal_action_mask_infos = []
+
+    #     def build(idx):
+    #         base_legal_mask_fn = base_legal_mask_fns[idx]
+    #         priority = priorities[idx]
+
+    #         def legal_action_mask_fn(state):
+    #             # Construct the meta mask of all legal moves starting at any board position
+    #             base_mask = base_legal_mask_fn(state)
+
+    #             # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape) and
+    #             # additionally impose constraints based on the piece being moved
+    #             source_mask = source_constraint_fn(state)
+    #             piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+    #             # source_mask = piece_mask
+    #             source_mask = source_mask & piece_mask
+
+    #             base_mask = jnp.where(
+    #                 source_mask[:, jnp.newaxis],
+    #                 base_mask, jnp.zeros_like(base_mask)
+    #             )
+
+    #             # Keep only the columns corresponding to valid positions under the destination and
+    #             # result constraints (but keep the shape)
+    #             # destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
+    #             # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
+    #             # base_mask = jnp.where(
+    #             #     destination_mask[:, jnp.newaxis],
+    #             #     base_mask, jnp.zeros_like(base_mask)
+    #             # )
+
+    #             # Finally, flatten the mask to get the legal action mask
+    #             legal_mask = base_mask.flatten()
+
+    #             return legal_mask.astype(jnp.int8)
+            
+    #         return legal_action_mask_fn, priority
+            
+    #     legal_action_mask_infos = list(map(build, range(len(base_legal_mask_fns))))
+        
+    #     return action_size, move_piece_fn, legal_action_mask_infos, apply_effects_fn
+    
+    # def play_multi_move(self, children):
+    #     '''
+    #     Players can move different kinds of pieces according to different rules. By construction, any board position
+    #     contains only one piece type which allows us to (for instance) compute the overall legal action mask by taking
+    #     the union of the legal action masks for each piece type.
+    #     '''
+    #     action_sizes, apply_action_fns, legal_action_infos, apply_effects_fns = zip(*children)
+
+    #     # Combine the legal action information from each piece type
+    #     legal_action_infos = sum(legal_action_infos, [])
+
+    #     action_size = max(action_sizes)
+
+    #     def apply_action_fn(state, action):
+    #         start_pos = action // self.game_info.board_size
+    #         piece_idx = state.board[:, start_pos].argmax()
+    #         return jax.lax.switch(piece_idx, apply_action_fns, state, action)
+        
+    #     # If all of the apply_effects_fns are the identity function, we can skip this step
+    #     # (stored as <lambda> in the parser)
+    #     if all(fn.__name__ == "<lambda>" for fn in apply_effects_fns):
+    #         return action_size, apply_action_fn, legal_action_infos, lambda state, original_player: state
+
+    #     # For move rules, the "previous action" contains the destination position
+    #     def apply_effects_fn(state, original_player):
+    #         piece_idx = state.board[:, state.previous_actions[original_player]].argmax()
+    #         return jax.lax.switch(piece_idx, apply_effects_fns, state, original_player)
+        
+    #     return action_size, apply_action_fn, legal_action_infos, apply_effects_fn
+
     def play_move(self, children):
         '''
-        Combine the move rules for each piece / move type based on their priorities
+        TODO
         '''
-        action_size, apply_action_fn, legal_action_infos, apply_effects_fn = children[0]
-        grouped_legal_action_infos = groupby(sorted(legal_action_infos, key=lambda x: x[1]), key=lambda x: x[1])
+        move_infos, *optional_args = children
+        legal_action_mask_fns, apply_action_fns, priorities = zip(*move_infos)
 
-        groups = [list(items) for key, items in grouped_legal_action_infos]
-        
+        # TODO: combine legal action masks based on priorities
 
-        def build(idx):
-            items = groups[idx]
-            fns, _ = zip(*list(items))
+        # In a "disjoint asymmetric" game (in which there are two piece types, each belonging to one player),
+        # we can reduce the action space size since each player can only move their own piece type
+        if self.game_info.disjoint_asymmetric:
+            num_move_types = 1
+        else:
+            num_move_types = len(legal_action_mask_fns)
 
-            collect_same_prio = utils._get_collect_values_fn(fns)
-            def single_legal_action_mask_fn(state):
-                return collect_same_prio(state).any(axis=0).astype(jnp.int8)
+        # NOTE: for games with step and hop moves, we should actually still be able to compress
+        # the action space -- in a given direction, it's not possible to both step and hop from
+        # the same position
+
+        # NOTE: similarly, if each piece only has one move type, we can just use the board position
+        # to determine the piece type and thereby the move type
+
+        # In the from-dir case, we add a dimension to the action space to account for move types
+        if self.game_info.action_type == ActionTypes.FROM_DIR:
+            from_dir_size = self.game_info.board_size * self.num_directions
+            action_size = num_move_types * from_dir_size
+
+            # Get legal action masks via vmap and flatten
+            collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+            if self.game_info.disjoint_asymmetric:
+                def legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.any(axis=0).flatten().astype(jnp.int8)
+                
+                def apply_action_fn(state, action):
+                    start_pos = action // (self.num_directions)
+                    move_type_idx = state.board[:, start_pos].argmax()
+                    sub_action = action % from_dir_size
+                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
+                
+            else:
+                def legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.flatten().astype(jnp.int8)
             
-            return single_legal_action_mask_fn
-
-        legal_action_mask_fns = list(map(build, range(len(groups))))
-
-        # If there is only one priority level, we can return the function directly
-        if len(legal_action_mask_fns) == 1:
-            return action_size, apply_action_fn, legal_action_mask_fns[0], apply_effects_fn
-
-        collect_general = utils._get_collect_values_fn(legal_action_mask_fns)
+                # To apply actions, determine the move type from the action index and
+                # then use switch to apply the correct action
+                def apply_action_fn(state, action):
+                    move_type_idx = action // from_dir_size
+                    sub_action = action % from_dir_size
+                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
         
-        # For legal actions with different priorities, we return the mask of the highest priority
-        # with at least one legal action
-        def legal_action_mask_fn(state):
-            all_masks = collect_general(state)
+        # NOTE: for FROM_TO actions, we can combine all the various legal action masks into one
+        # using <any> over the first axis, since the action space is the same for all move types
+        elif self.game_info.action_type == ActionTypes.FROM_TO:
+            raise NotImplementedError("FROM_TO action type not implemented yet!")
 
-            any_legal = all_masks.any()
-            first_active = all_masks.any(axis=1).argmax()
 
-            mask = jax.lax.select(any_legal, all_masks[first_active], jnp.zeros(action_size, dtype=jnp.int8))
-
-            return mask
+        if len(optional_args) == 0:
+            apply_effects_fn = lambda state, original_player: state
+        else:
+            apply_effects_fn = optional_args[0]
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
-
-    def play_single_move(self, children):
-        '''
-        Players move a single kind of piece from one position on the board to another according to some
-        rule (e.g. sliding, jumping, ...)
-        '''
-
-        piece, base_legal_mask_infos, (source_constraint_fn, _), (destination_constraint_fn, _), *optional_args = children
-
-
-        if not isinstance(base_legal_mask_infos, list):
-            base_legal_mask_infos = [base_legal_mask_infos]
-
-        base_legal_mask_fns, base_move_piece_fns, priorities = zip(*base_legal_mask_infos)
-        
-        # TODO: work in progress detecting hopped pieces. The difficulty is that a move might support
-        # multiple move types for a single piece, only some of which involve hopping. How can we determine
-        # that a particular action involved a hop?
-        if hasattr(self.game_info.game_state_class, 'hopped'):
-
-            # Somewhat hacky, but a hop always moves a piece one of these lengths based on whether
-            # it's horizontal, vertical, back-diagonal, or forward-diagonal
-            # TODO: confirm this logic always holds
-            potential_hop_lengths = jnp.array([
-                2, 2 * self.game_info.board_dims[0], 2 * (self.game_info.board_dims[0] + 1),
-                2 * (self.game_info.board_dims[0] - 1)
-            ], dtype=jnp.int8)
-
-
-            def move_piece_fn(state, action):
-                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-                midpoint = (start_idx + end_idx) // 2
-
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
-
-                action_was_hop = jnp.isin(jnp.abs(end_idx - start_idx), potential_hop_lengths) & (state.board[:, midpoint] != EMPTY).any()
-                hopped = jax.lax.select(
-                    action_was_hop,
-                    jnp.zeros_like(state.hopped).at[midpoint].set(True),
-                    jnp.zeros_like(state.hopped)
-                )
-
-                return state._replace(board=board, previous_actions=previous_actions, hopped=hopped)
-
-        else:
-            # def move_piece_fn(state, action):
-            #     start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-            #     board = state.board.at[piece, end_idx].set(state.current_player)
-            #     board = board.at[piece, start_idx].set(EMPTY)
-            #     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
-            #     return state._replace(board=board, previous_actions=previous_actions)
-            
-            # WIP: hard-coded Wolf and Sheep
-            move_piece_fn = base_move_piece_fns[0]
-
-        # Case 1: no optional arguments -- legal actions determined by the destination constraint
-        # and there are no effects
-        if len(optional_args) == 0:
-            result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int8)
-            apply_effects_fn = lambda state, original_player: state
-
-        # Case 2: one optional argument is specified -- either a result constraint or an effect
-        elif len(optional_args) == 1:
-            arg = optional_args[0]
-            if arg.__name__ == "result_constraint_fn" or arg.__name__ == "lookahead_mask_fn":
-                result_constraint_fn = lambda state: arg(state)
-                apply_effects_fn = lambda state, original_player: state
-
-            elif arg.__name__ == "apply_effects_fn":
-                result_constraint_fn = lambda state: jnp.ones(self.game_info.board_size, dtype=jnp.int8)
-                apply_effects_fn = arg
-
-        # Case 3: two optional arguments are specified -- result constraints and effects, always
-        # in that order
-        else:
-            result_constraint_fn, apply_effects_fn = optional_args
-        
-        # We model the action space as "take a piece from any board position and move it to
-        # any other board position" so the total number of actions is board_size^2
-        action_size = self.game_info.board_size ** 2
-
-        # WIP: let's try changing this to board_size * 4 (for orthogonal stepping games)
-        action_size = self.game_info.board_size * 8
-
-        # We define a separate "legal action mask" for seach sub-type of move (e.g. slide, hop) which
-        # will ultimately be combined to form the overall legal action mask based on the priorities of
-        # each move and piece type
-        legal_action_mask_infos = []
-
-        def build(idx):
-            base_legal_mask_fn = base_legal_mask_fns[idx]
-            priority = priorities[idx]
-
-            def legal_action_mask_fn(state):
-                # Construct the meta mask of all legal moves starting at any board position
-                base_mask = base_legal_mask_fn(state)
-
-                # Keep only the rows corresponding to valid positions under the source constraint (but keep the shape) and
-                # additionally impose constraints based on the piece being moved
-                source_mask = source_constraint_fn(state)
-                piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
-                # source_mask = piece_mask
-                source_mask = source_mask & piece_mask
-
-                base_mask = jnp.where(
-                    source_mask[:, jnp.newaxis],
-                    base_mask, jnp.zeros_like(base_mask)
-                )
-
-                # Keep only the columns corresponding to valid positions under the destination and
-                # result constraints (but keep the shape)
-                # destination_mask = destination_constraint_fn(state) & result_constraint_fn(state)
-                # destination_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
-                # base_mask = jnp.where(
-                #     destination_mask[:, jnp.newaxis],
-                #     base_mask, jnp.zeros_like(base_mask)
-                # )
-
-                # Finally, flatten the mask to get the legal action mask
-                legal_mask = base_mask.flatten()
-
-                return legal_mask.astype(jnp.int8)
-            
-            return legal_action_mask_fn, priority
-            
-        legal_action_mask_infos = list(map(build, range(len(base_legal_mask_fns))))
-        
-        return action_size, move_piece_fn, legal_action_mask_infos, apply_effects_fn
-    
-    def play_multi_move(self, children):
-        '''
-        Players can move different kinds of pieces according to different rules. By construction, any board position
-        contains only one piece type which allows us to (for instance) compute the overall legal action mask by taking
-        the union of the legal action masks for each piece type.
-        '''
-        action_sizes, apply_action_fns, legal_action_infos, apply_effects_fns = zip(*children)
-
-        # Combine the legal action information from each piece type
-        legal_action_infos = sum(legal_action_infos, [])
-
-        action_size = max(action_sizes)
-
-        def apply_action_fn(state, action):
-            start_pos = action // self.game_info.board_size
-            piece_idx = state.board[:, start_pos].argmax()
-            return jax.lax.switch(piece_idx, apply_action_fns, state, action)
-        
-        # If all of the apply_effects_fns are the identity function, we can skip this step
-        # (stored as <lambda> in the parser)
-        if all(fn.__name__ == "<lambda>" for fn in apply_effects_fns):
-            return action_size, apply_action_fn, legal_action_infos, lambda state, original_player: state
-
-        # For move rules, the "previous action" contains the destination position
-        def apply_effects_fn(state, original_player):
-            piece_idx = state.board[:, state.previous_actions[original_player]].argmax()
-            return jax.lax.switch(piece_idx, apply_effects_fns, state, original_player)
-        
-        return action_size, apply_action_fn, legal_action_infos, apply_effects_fn
-
 
     def move_hop(self, children):
         '''
@@ -747,7 +812,8 @@ class GameRuleParser(Transformer):
         Step a piece in one of the specified directions (default to any) by exactly one space
         '''
 
-        optional_args = self._parse_optional_args(children)
+        piece, *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
 
         priority = optional_args[OptionalArgs.PRIORITY]
         direction = optional_args[OptionalArgs.DIRECTION]
@@ -760,6 +826,11 @@ class GameRuleParser(Transformer):
         if self.game_info.action_type == ActionTypes.FROM_DIR:
              def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
+
+                # piece_idxs = jnp.argwhere(state.board[piece] == state.current_player, size=self.game_info.board_size, fill_value=-1).flatten()
+                # valid_starts = jnp.isin(jnp.arange(self.game_info.board_size, dtype=jnp.int8), piece_idxs).astype(jnp.int8)
+                piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+
                 occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
                 occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
 
@@ -770,6 +841,11 @@ class GameRuleParser(Transformer):
                 mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=jnp.int8)
                 mask = mask.at[:, direction_indices].set(valid_steps)
 
+                mask = jnp.where(
+                    piece_mask[:, jnp.newaxis],
+                    mask, jnp.zeros_like(mask)
+                )
+
                 return mask
              
              def apply_action_fn(state, action):
@@ -777,9 +853,8 @@ class GameRuleParser(Transformer):
                 direction_idx = action % self.num_directions
                 end_idx = self.slide_lookup[direction_idx, start_idx, 1]
 
-                piece_idx = state.board[:, start_idx].argmax()
-                board = state.board.at[piece_idx, end_idx].set(state.current_player)
-                board = board.at[piece_idx, start_idx].set(EMPTY)
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
 
                 return state._replace(board=board, previous_actions=previous_actions)
@@ -810,9 +885,8 @@ class GameRuleParser(Transformer):
             def apply_action_fn(state, action):
                 start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
                 
-                piece_idx = state.board[:, start_idx].argmax()
-                board = state.board.at[piece_idx, end_idx].set(state.current_player)
-                board = board.at[piece_idx, start_idx].set(EMPTY)
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
                 
                 return state._replace(board=board, previous_actions=previous_actions)
