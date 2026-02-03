@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, MoveTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
 from .game_info import GameInfo
 from . import utils
 
@@ -620,13 +620,183 @@ class GameRuleParser(Transformer):
         
     #     return action_size, apply_action_fn, legal_action_infos, apply_effects_fn
 
+    def _group_by_index(self, items, index):
+        '''
+        Group a list of items by the specified index
+        '''
+        grouped = groupby(
+            sorted(items, key=lambda x: x[index]),
+            key=lambda x: x[index]
+        )
+        groups = [list(items) for key, items in grouped]
+        return groups
+
+    def _determine_action_space_shape(self, move_infos):
+        '''
+        Determine the overall action space shape based on the move information for each piece / move type
+        '''
+        action_space, action_size = None, -1
+        for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
+            for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
+                _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
+
+                if self.game_info.action_type == ActionTypes.FROM_DIR:
+                    if list(sorted(move_types)) == [MoveTypes.HOP, MoveTypes.STEP] or len(move_types) == 1:
+                        shape = (1, self.game_info.board_size, self.num_directions)
+                    else:
+                        shape = (len(move_types), self.game_info.board_size, self.num_directions)
+
+                    size = jnp.prod(jnp.array(shape))
+                    if size > action_size:
+                        action_size = size
+                        action_space = shape
+
+                else:
+                    raise NotImplementedError("FROM_TO action type not implemented yet!")
+                
+        return action_space
+
+    def _combine_move_fns(self, action_space_shape, move_types, legal_action_mask_fns, apply_action_fns):
+        '''
+        Combine a list of legal action mask functions into a single function
+        based on the game's overall action type and the specific move types
+        '''
+
+        if self.game_info.action_type == ActionTypes.FROM_DIR:
+
+            # Special case for hop and step moves -- these can be combined into a single array
+            # since it's not possible to both hop and step in the same direction from the same 
+            # position. This is relevant in Checkers / Draughts, for instance
+            if list(sorted(move_types)) == [MoveTypes.HOP, MoveTypes.STEP]:
+                # Reorder the legal action mask functions so that hop is first
+                if move_types[0] == MoveTypes.STEP:
+                    legal_action_mask_fns = [legal_action_mask_fns[1], legal_action_mask_fns[0]]
+                    apply_action_fns = [apply_action_fns[1], apply_action_fns[0]]
+
+                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+                def sub_legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.any(axis=0).astype(jnp.int8)
+                
+                def sub_apply_action_fn(state, action):
+
+                    # By construction, we know that the legal action mask computed above will be
+                    # stored in the first dimension at the 0th index and that hops are stored first
+                    # TODO: can we avoid recomputing this mask here?
+                    all_masks = collect_legal_masks(state)
+
+                    # Determine whether the action is a hop or a step based on the legal masks
+                    start, direction = action // self.num_directions, action % self.num_directions
+                    is_hop = all_masks[0, start, direction] == 1
+
+                    return jax.lax.cond(
+                        is_hop,
+                        apply_action_fns[0],
+                        apply_action_fns[1],
+                        state,
+                        action
+                    )
+                
+                sub_shape = (1, self.game_info.board_size, self.num_directions)
+
+            elif len(move_types) == 1:
+                sub_legal_action_mask_fn = legal_action_mask_fns[0]
+                sub_apply_action_fn = apply_action_fns[0]
+                sub_shape = (1, self.game_info.board_size, self.num_directions)
+
+            else:
+                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+
+                def sub_legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.astype(jnp.int8)
+                
+                def sub_apply_action_fn(state, action):
+                    move_type_idx = action // (self.game_info.board_size * self.num_directions)
+                    sub_action = action % (self.game_info.board_size * self.num_directions)
+                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
+                
+                sub_shape = (len(move_types), self.game_info.board_size, self.num_directions)
+
+            # Now check whether we need to inflate the legal mask to match the overall action space shape
+            # If it doesn't match the argument, we can assume that it is strictly smaller in the first dimension
+            if sub_shape != action_space_shape:
+                def legal_action_mask_fn(state):
+                    base_mask = sub_legal_action_mask_fn(state)
+                    inflated_mask = jnp.zeros(action_space_shape, dtype=jnp.int8)
+                    inflated_mask = inflated_mask.at[:sub_shape[0]].set(base_mask)
+                    return inflated_mask.flatten().astype(jnp.int8)
+     
+            # If it does match, we can just flatten and return
+            else:
+                def legal_action_mask_fn(state):
+                    base_mask = sub_legal_action_mask_fn(state)
+                    return base_mask.flatten().astype(jnp.int8)
+                
+            # We don't need to worry about exceeding the action space shape since those
+            # actions will already be illegal
+            apply_action_fn = sub_apply_action_fn
+                
+        else:
+            raise NotImplementedError("FROM_TO action type not implemented yet!")
+
+        return legal_action_mask_fn, apply_action_fn
+
+
     def play_move(self, children):
         '''
         TODO
         '''
         move_infos, *optional_args = children
-        legal_action_mask_fns, apply_action_fns, priorities = zip(*move_infos)
 
+        action_space_shape = self._determine_action_space_shape(move_infos)
+
+        legal_fns_by_prio, apply_fns_by_prio = [], []
+        for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
+
+            legal_fns_by_piece, apply_fns_by_piece = [], []
+            for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
+                _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
+                legal_action_mask_fn, apply_action_fn = self._combine_move_fns(
+                    action_space_shape, move_types, legal_fns, apply_fns
+                )
+                legal_fns_by_piece.append(legal_action_mask_fn)
+                apply_fns_by_piece.append(apply_action_fn)
+
+            # Legal action masks from different pieces can be combined via <any>
+            collect_legal_masks = utils._get_collect_values_fn(legal_fns_by_piece)
+            def piece_legal_action_mask_fn(state):
+                all_masks = collect_legal_masks(state)
+                return all_masks.any(axis=0).astype(jnp.int8)
+            
+            # Actions can be applied by determining the piece type from the start position
+            def piece_apply_action_fn(state, action):
+                move_type, start, direction = jnp.unravel_index(action, action_space_shape)
+                piece = state.board[:, start].argmax()
+                return jax.lax.switch(piece, apply_fns_by_piece, state, action)
+            
+            legal_fns_by_prio.append(piece_legal_action_mask_fn)
+            apply_fns_by_prio.append(piece_apply_action_fn)
+
+        if len(legal_fns_by_prio) == 1:
+            legal_action_mask_fn = legal_fns_by_prio[0]
+            apply_action_fn = apply_fns_by_prio[0]
+        else:
+            raise NotImplementedError("Multiple priority levels not implemented yet!")
+
+        action_size = jnp.prod(jnp.array(action_space_shape))
+
+        if len(optional_args) == 0:
+            apply_effects_fn = lambda state, original_player: state
+        else:
+            apply_effects_fn = optional_args[0]
+
+        return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
+        breakpoint()
+
+
+        pieces, move_types, legal_action_mask_fns, apply_action_fns, priorities = zip(*move_infos)
         # TODO: combine legal action masks based on priorities
 
         # In a "disjoint asymmetric" game (in which there are two piece types, each belonging to one player),
@@ -894,7 +1064,7 @@ class GameRuleParser(Transformer):
         else:
             raise ValueError(f"Move step not implemented for action space type {self.game_info.action_space_type}")
         
-        return legal_action_fn, apply_action_fn, priority
+        return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, priority
 
 
         def legal_step_mask_fn(state):
