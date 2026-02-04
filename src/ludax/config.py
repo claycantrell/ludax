@@ -200,7 +200,7 @@ DEFAULT_ARGUMENTS = {
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
 
-    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
+    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
     MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
 

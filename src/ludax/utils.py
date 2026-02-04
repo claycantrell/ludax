@@ -248,7 +248,7 @@ def _get_slide_lookup(game_info: GameInfo):
     n_rows, n_cols = game_info.board_dims
     num_line_positions = max(game_info.board_dims) if game_info.board_shape != BoardShapes.HEXAGON else game_info.hex_diameter
 
-    slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=jnp.int16)
+    slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=jnp.int8)
 
     for channel_idx, direction in enumerate(directions):
         for i in range(num_board_positions):
@@ -789,22 +789,52 @@ def _get_occupied_mask_fn(piece, player_or_mover):
     function helps to reduce code duplication.
     '''
 
-    if player_or_mover == PlayerAndMoverRefs.MOVER:
-        def get_mask(state):
-            return (state.board[piece] == state.current_player).astype(jnp.int8)
-    
-    elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
-        def get_mask(state):
-            return (state.board[piece] == (state.current_player + 1) % 2).astype(jnp.int8)
-    
-    elif player_or_mover == PlayerAndMoverRefs.P1:
-        def get_mask(state):
-            return (state.board[piece] == P1).astype(jnp.int8)
-    
-    elif player_or_mover == PlayerAndMoverRefs.P2:
-        def get_mask(state):
-            return (state.board[piece] == P2).astype(jnp.int8)
+    if piece == PieceRefs.ANY:
+        if player_or_mover == PlayerAndMoverRefs.MOVER:
+            def get_mask(state):
+                return (state.board == state.current_player).any(axis=0).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
+            def get_mask(state):
+                return (state.board == (state.current_player + 1) % 2).any(axis=0).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.P1:
+            def get_mask(state):
+                return (state.board == P1).any(axis=0).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.P2:
+            def get_mask(state):
+                return (state.board == P2).any(axis=0).astype(jnp.int8)
+            
+        elif player_or_mover == PlayerAndMoverRefs.BOTH:
+            def get_mask(state):
+                return (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+            
+        else:
+            raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
+
     else:
-        raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
+        if player_or_mover == PlayerAndMoverRefs.MOVER:
+            def get_mask(state):
+                return (state.board[piece] == state.current_player).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
+            def get_mask(state):
+                return (state.board[piece] == (state.current_player + 1) % 2).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.P1:
+            def get_mask(state):
+                return (state.board[piece] == P1).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.P2:
+            def get_mask(state):
+                return (state.board[piece] == P2).astype(jnp.int8)
+        
+        elif player_or_mover == PlayerAndMoverRefs.BOTH:
+            def get_mask(state):
+                return (state.board[piece] != EMPTY).astype(jnp.int8)
+
+        else:
+            raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
     
     return get_mask

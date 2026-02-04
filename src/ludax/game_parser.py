@@ -750,30 +750,40 @@ class GameRuleParser(Transformer):
         move_infos, *optional_args = children
 
         action_space_shape = self._determine_action_space_shape(move_infos)
+        action_size = jnp.prod(jnp.array(action_space_shape))
 
         legal_fns_by_prio, apply_fns_by_prio = [], []
         for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
-
             legal_fns_by_piece, apply_fns_by_piece = [], []
             for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
                 _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
-                legal_action_mask_fn, apply_action_fn = self._combine_move_fns(
+                _legal_action_mask_fn, _apply_action_fn = self._combine_move_fns(
                     action_space_shape, move_types, legal_fns, apply_fns
                 )
-                legal_fns_by_piece.append(legal_action_mask_fn)
-                apply_fns_by_piece.append(apply_action_fn)
+                legal_fns_by_piece.append(_legal_action_mask_fn)
+                apply_fns_by_piece.append(_apply_action_fn)
 
-            # Legal action masks from different pieces can be combined via <any>
-            collect_legal_masks = utils._get_collect_values_fn(legal_fns_by_piece)
-            def piece_legal_action_mask_fn(state):
-                all_masks = collect_legal_masks(state)
-                return all_masks.any(axis=0).astype(jnp.int8)
+            # Legal action masks from different pieces can be combined via <any> over the leading axis
+            # because only one piece can occupy a given board position at a time
+            if len(legal_fns_by_piece) == 1:
+                piece_legal_action_mask_fn = legal_fns_by_piece[0]
+                piece_apply_action_fn = apply_fns_by_piece[0]
             
-            # Actions can be applied by determining the piece type from the start position
-            def piece_apply_action_fn(state, action):
-                move_type, start, direction = jnp.unravel_index(action, action_space_shape)
-                piece = state.board[:, start].argmax()
-                return jax.lax.switch(piece, apply_fns_by_piece, state, action)
+            else:
+                collect_legal_masks = utils._get_collect_values_fn(legal_fns_by_piece)
+                def piece_legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.any(axis=0).astype(jnp.int8)
+            
+                # For some reason, directly referencing apply_fns_by_piece inside the piece_apply_action_fn
+                # seems to cause some kind of mis-reference when there are multiple priorities
+                local_apply_fns = apply_fns_by_piece[:]
+                
+                # Actions can be applied by determining the piece type from the start position
+                def piece_apply_action_fn(state, action):
+                    move_type, start, direction = jnp.unravel_index(action, action_space_shape)
+                    piece = state.board[:, start].argmax()
+                    return jax.lax.switch(piece, local_apply_fns, state, action)
             
             legal_fns_by_prio.append(piece_legal_action_mask_fn)
             apply_fns_by_prio.append(piece_apply_action_fn)
@@ -781,10 +791,31 @@ class GameRuleParser(Transformer):
         if len(legal_fns_by_prio) == 1:
             legal_action_mask_fn = legal_fns_by_prio[0]
             apply_action_fn = apply_fns_by_prio[0]
+        
+        # For legal actions with different priorities, we return the mask of the highest priority
+        # with at least one legal action
         else:
-            raise NotImplementedError("Multiple priority levels not implemented yet!")
+            collect_general = utils._get_collect_values_fn(legal_fns_by_prio)
+        
+            def legal_action_mask_fn(state):
+                all_masks = collect_general(state)
 
-        action_size = jnp.prod(jnp.array(action_space_shape))
+                any_legal = all_masks.any()
+                first_active = all_masks.any(axis=1).argmax()
+
+                mask = jax.lax.select(any_legal, all_masks[first_active], jnp.zeros(action_size, dtype=jnp.int8))
+
+                return mask
+
+            def apply_action_fn(state, action):
+                move_type, start, direction = jnp.unravel_index(action, action_space_shape)
+
+                # Determine which priority level the action belongs to based on the legal action masks
+                all_masks = collect_general(state)
+                prio_idx = all_masks[:, action].argmax()
+                # prio_idx = jnp.where(all_masks[:, action] == 1, size=len(legal_fns_by_prio), fill_value=-1)[0, 0]
+
+                return jax.lax.switch(prio_idx, apply_fns_by_prio, state, action)
 
         if len(optional_args) == 0:
             apply_effects_fn = lambda state, original_player: state
@@ -804,23 +835,13 @@ class GameRuleParser(Transformer):
         optional_args = self._parse_optional_args(optional_args)
 
         direction = optional_args[OptionalArgs.DIRECTION]
-        hop_over = optional_args[OptionalArgs.HOP_OVER]
+        hop_over_piece = optional_args[OptionalArgs.PIECE]
+        hop_over_player = optional_args[OptionalArgs.HOP_OVER]
         capture = optional_args[OptionalArgs.CAPTURE]
         priority = optional_args[OptionalArgs.PRIORITY]
 
-        # Determine the player indices that can be hopped over
-        if hop_over == PlayerAndMoverRefs.BOTH:
-            hop_over_idxs_fn = lambda state: jnp.array([P1, P2], dtype=jnp.int8)
-        elif hop_over == PlayerAndMoverRefs.MOVER:
-            hop_over_idxs_fn = lambda state: jnp.array([state.current_player], dtype=jnp.int8)
-        elif hop_over == PlayerAndMoverRefs.OPPONENT:
-            hop_over_idxs_fn = lambda state: jnp.array([(state.current_player + 1) % 2], dtype=jnp.int8)
-        elif hop_over == PlayerAndMoverRefs.P1:
-            hop_over_idxs_fn = lambda state: jnp.array([P1], dtype=jnp.int8)
-        elif hop_over == PlayerAndMoverRefs.P2:
-            hop_over_idxs_fn = lambda state: jnp.array([P2], dtype=jnp.int8)
-        else:
-            raise ValueError(f"Invalid hop_over argument: {hop_over}")
+        # Determine the mask of pieces that can be hopped over, based on their piece type / player
+        hop_over_mask_fn = utils._get_occupied_mask_fn(hop_over_piece, hop_over_player)
 
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
@@ -830,11 +851,10 @@ class GameRuleParser(Transformer):
         if self.game_info.action_type == ActionTypes.FROM_DIR:
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
-                hop_over_idxs = hop_over_idxs_fn(state)
 
                 piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
 
-                hop_over_mask = jnp.isin(state.board, hop_over_idxs).any(axis=0).astype(jnp.int8)
+                hop_over_mask = hop_over_mask_fn(state)
                 hop_over_idxs = jnp.argwhere(hop_over_mask, size=self.game_info.board_size, fill_value=-1).flatten()
 
                 occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
@@ -867,8 +887,10 @@ class GameRuleParser(Transformer):
                     board = board.at[piece, start].set(EMPTY)
                     board = board.at[:, step_index].set(EMPTY)  # Remove the hopped-over piece
 
+                    captured_mask = jnp.zeros_like(state.captured).at[step_index].set(1)
                     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
-                    return state._replace(board=board, previous_actions=previous_actions)
+
+                    return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
                 
             else:
                 def apply_action_fn(state, action):
@@ -1047,6 +1069,8 @@ class GameRuleParser(Transformer):
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+
+                jax.debug.print("Stepping piece {piece} from {start} to {end}", piece=piece, start=start_idx, end=end_idx)
 
                 return state._replace(board=board, previous_actions=previous_actions)
 

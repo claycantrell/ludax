@@ -209,6 +209,12 @@ class GameInfoExtractor(Visitor):
 
     def move_hop(self, tree):
         self.used_mechanics.add(MoveTypes.HOP)
+        capture_arg = self._filter_children_args(tree, "capture_arg")[0]
+        if capture_arg is not None:
+            value = capture_arg.children[0]
+            if value == "true" and "captured" not in self.game_state_attributes:
+                self.game_state_attributes.append("captured")
+                self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
 
     def move_step(self, tree):
         self.used_mechanics.add(MoveTypes.STEP)
