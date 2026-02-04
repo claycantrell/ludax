@@ -793,68 +793,6 @@ class GameRuleParser(Transformer):
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
-        breakpoint()
-
-
-        pieces, move_types, legal_action_mask_fns, apply_action_fns, priorities = zip(*move_infos)
-        # TODO: combine legal action masks based on priorities
-
-        # In a "disjoint asymmetric" game (in which there are two piece types, each belonging to one player),
-        # we can reduce the action space size since each player can only move their own piece type
-        if self.game_info.disjoint_asymmetric:
-            num_move_types = 1
-        else:
-            num_move_types = len(legal_action_mask_fns)
-
-        # NOTE: for games with step and hop moves, we should actually still be able to compress
-        # the action space -- in a given direction, it's not possible to both step and hop from
-        # the same position
-
-        # NOTE: similarly, if each piece only has one move type, we can just use the board position
-        # to determine the piece type and thereby the move type
-
-        # In the from-dir case, we add a dimension to the action space to account for move types
-        if self.game_info.action_type == ActionTypes.FROM_DIR:
-            from_dir_size = self.game_info.board_size * self.num_directions
-            action_size = num_move_types * from_dir_size
-
-            # Get legal action masks via vmap and flatten
-            collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
-            if self.game_info.disjoint_asymmetric:
-                def legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.any(axis=0).flatten().astype(jnp.int8)
-                
-                def apply_action_fn(state, action):
-                    start_pos = action // (self.num_directions)
-                    move_type_idx = state.board[:, start_pos].argmax()
-                    sub_action = action % from_dir_size
-                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
-                
-            else:
-                def legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.flatten().astype(jnp.int8)
-            
-                # To apply actions, determine the move type from the action index and
-                # then use switch to apply the correct action
-                def apply_action_fn(state, action):
-                    move_type_idx = action // from_dir_size
-                    sub_action = action % from_dir_size
-                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
-        
-        # NOTE: for FROM_TO actions, we can combine all the various legal action masks into one
-        # using <any> over the first axis, since the action space is the same for all move types
-        elif self.game_info.action_type == ActionTypes.FROM_TO:
-            raise NotImplementedError("FROM_TO action type not implemented yet!")
-
-
-        if len(optional_args) == 0:
-            apply_effects_fn = lambda state, original_player: state
-        else:
-            apply_effects_fn = optional_args[0]
-
-        return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
     def move_hop(self, children):
         '''
@@ -862,9 +800,92 @@ class GameRuleParser(Transformer):
         a specific piece to hop over, and which player's pieces can be hopped over (by default: "any" for both args)
         '''
 
-        optional_args = self._parse_optional_args(children)
+        piece, *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
 
+        direction = optional_args[OptionalArgs.DIRECTION]
+        hop_over = optional_args[OptionalArgs.HOP_OVER]
+        capture = optional_args[OptionalArgs.CAPTURE]
         priority = optional_args[OptionalArgs.PRIORITY]
+
+        # Determine the player indices that can be hopped over
+        if hop_over == PlayerAndMoverRefs.BOTH:
+            hop_over_idxs_fn = lambda state: jnp.array([P1, P2], dtype=jnp.int8)
+        elif hop_over == PlayerAndMoverRefs.MOVER:
+            hop_over_idxs_fn = lambda state: jnp.array([state.current_player], dtype=jnp.int8)
+        elif hop_over == PlayerAndMoverRefs.OPPONENT:
+            hop_over_idxs_fn = lambda state: jnp.array([(state.current_player + 1) % 2], dtype=jnp.int8)
+        elif hop_over == PlayerAndMoverRefs.P1:
+            hop_over_idxs_fn = lambda state: jnp.array([P1], dtype=jnp.int8)
+        elif hop_over == PlayerAndMoverRefs.P2:
+            hop_over_idxs_fn = lambda state: jnp.array([P2], dtype=jnp.int8)
+        else:
+            raise ValueError(f"Invalid hop_over argument: {hop_over}")
+
+        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
+
+        # The legal action function and apply action function depend on the action space structure
+        # Case 1: action space is (board_size, num_directions)
+        if self.game_info.action_type == ActionTypes.FROM_DIR:
+            def legal_action_fn(state):
+                direction_indices = all_direction_indices[state.current_player]
+                hop_over_idxs = hop_over_idxs_fn(state)
+
+                piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+
+                hop_over_mask = jnp.isin(state.board, hop_over_idxs).any(axis=0).astype(jnp.int8)
+                hop_over_idxs = jnp.argwhere(hop_over_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+
+                occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+                occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+
+                step_indices = self.slide_lookup[direction_indices, :, 1].T
+                hop_indices = self.slide_lookup[direction_indices, :, 2].T
+
+                valid_hops = (hop_indices < self.game_info.board_size).astype(jnp.int8)
+                valid_hops = valid_hops & ~jnp.isin(hop_indices, occupied_idxs).astype(jnp.int8)
+                valid_hops = valid_hops & jnp.isin(step_indices, hop_over_idxs).astype(jnp.int8)
+
+                mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=jnp.int8)
+                mask = mask.at[:, direction_indices].set(valid_hops)
+
+                mask = jnp.where(
+                    piece_mask[:, jnp.newaxis],
+                    mask, jnp.zeros_like(mask)
+                )
+
+                return mask
+             
+            if capture:
+                def apply_action_fn(state, action):
+                    start, direction = action // self.num_directions, action % self.num_directions
+                    step_index = self.slide_lookup[direction, start, 1]
+                    end_index = self.slide_lookup[direction, start, 2]
+
+                    board = state.board.at[piece, end_index].set(state.current_player)
+                    board = board.at[piece, start].set(EMPTY)
+                    board = board.at[:, step_index].set(EMPTY)  # Remove the hopped-over piece
+
+                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
+                    return state._replace(board=board, previous_actions=previous_actions)
+                
+            else:
+                def apply_action_fn(state, action):
+                    start, direction = action // self.num_directions, action % self.num_directions
+                    end_index = self.slide_lookup[direction, start, 2]
+
+                    board = state.board.at[piece, end_index].set(state.current_player)
+                    board = board.at[piece, start].set(EMPTY)
+
+                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
+                    return state._replace(board=board, previous_actions=previous_actions)
+                
+        else:
+            raise NotImplementedError("FROM_TO action type not implemented yet!")
+        
+        return piece, MoveTypes.HOP, legal_action_fn, apply_action_fn, priority
+
 
         piece = optional_args[OptionalArgs.PIECE]
         if piece == PieceRefs.ANY:

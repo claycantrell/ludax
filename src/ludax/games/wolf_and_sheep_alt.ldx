@@ -21,6 +21,7 @@
                     (or
                         (step "wolf" direction:diagonal)
                         (step "sheep" direction:(forward_left forward_right))
+                        (hop "sheep" direction:(forward_left forward_right))
                     )
                 )
             )

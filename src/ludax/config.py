@@ -172,10 +172,12 @@ class Predicates(StrEnum):
     EXISTS = 'predicate_exists'
 
 class OptionalArgs(StrEnum):
+    CAPTURE = 'capture_arg'
     DIRECTION = 'direction_arg'
     DISTANCE = 'distance_arg'
     EXACT = 'exact_arg'
     EXCLUDE = 'exclude_arg'
+    HOP_OVER = 'hop_over_arg'
     INCREMENT_SCORE = 'increment_score_arg'
     ORIENTATION = 'orientation_arg'
     MOVER = 'mover_arg'
@@ -198,7 +200,7 @@ DEFAULT_ARGUMENTS = {
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
 
-    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both', OptionalArgs.PRIORITY: 0},
+    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
     MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
 

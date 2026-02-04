@@ -51,7 +51,7 @@ move_type: move_hop
          | move_slide
          | move_step
 
-move_hop: "(" "hop" piece_reference direction_arg? piece_arg? mover_arg? priority_arg? ")"
+move_hop: "(" "hop" piece_reference direction_arg? hop_over_arg? capture_arg? priority_arg? ")"
 move_slide: "(" "slide" piece_reference direction_arg? distance_arg? priority_arg? ")"
 move_step: "(" "step" piece_reference direction_arg? priority_arg? ")"
 
@@ -197,12 +197,14 @@ predicate_no_legal_actions: "(" "no_legal_actions" ")"
 predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 
 // Additional (potentially optional) arguments for predicates
+capture_arg: "capture:" boolean
 custodial_length_arg: ANY | positive_int
 dimensions_arg: "(" positive_int positive_int ")"
 direction_arg: "direction:" (direction | multi_direction)
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
 exclude_arg: "exclude:" multi_mask_arg
+hop_over_arg: "hop_over:" (player_reference | mover_reference)
 increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
