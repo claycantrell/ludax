@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument('--num_warmup_games', type=int, default=100, help='Number of games to simulate before measuring each sample')
     parser.add_argument('--batch_size_step', type=int, default=2, help='Multiplier for batch size between runs')
     parser.add_argument('--num_batch_sizes', type=int, default=11, help='Number of batch sizes to evaluate')
+    parser.add_argument('--starting_power', type=int, default=0, help='Starting batch size is 2^starting_power')
     parser.add_argument('--ludii_cache_prefix', type=str, default='yaldabaoth')
     parser.add_argument('--ludii_thread_nums', type=int, nargs='+', default=[1, 16, 32], help='Number of threads to use for Ludii')
     parser.add_argument('--cache', type=bool, default=False, help='Load cached results if available')
@@ -124,7 +125,7 @@ def cached_eval(args):
     )
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
 
-    batch_sizes = np.array([args.batch_size_step ** i for i in range(args.num_batch_sizes)])
+    batch_sizes = np.array([2 ** (args.starting_power + (args.batch_size_step * i)) for i in range(args.num_batch_sizes)])
 
     # ——— Load from cache if present ———
     if os.path.exists(cache_file) and args.cache:
