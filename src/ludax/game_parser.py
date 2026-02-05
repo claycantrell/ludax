@@ -754,12 +754,15 @@ class GameRuleParser(Transformer):
 
         legal_fns_by_prio, apply_fns_by_prio = [], []
         for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
+            
             legal_fns_by_piece, apply_fns_by_piece = [], []
             for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
+               
                 _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
                 _legal_action_mask_fn, _apply_action_fn = self._combine_move_fns(
                     action_space_shape, move_types, legal_fns, apply_fns
                 )
+
                 legal_fns_by_piece.append(_legal_action_mask_fn)
                 apply_fns_by_piece.append(_apply_action_fn)
 
@@ -770,23 +773,31 @@ class GameRuleParser(Transformer):
                 piece_apply_action_fn = apply_fns_by_piece[0]
             
             else:
-                collect_legal_masks = utils._get_collect_values_fn(legal_fns_by_piece)
-                def piece_legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.any(axis=0).astype(jnp.int8)
-            
-                # For some reason, directly referencing apply_fns_by_piece inside the piece_apply_action_fn
-                # seems to cause some kind of mis-reference when there are multiple priorities
-                local_apply_fns = apply_fns_by_piece[:]
                 
-                # Actions can be applied by determining the piece type from the start position
-                def piece_apply_action_fn(state, action):
-                    move_type, start, direction = jnp.unravel_index(action, action_space_shape)
-                    piece = state.board[:, start].argmax()
-                    return jax.lax.switch(piece, local_apply_fns, state, action)
+                # This "build" pattern is necessary to capture the current value of legal_fns_by_piece
+                # and apply_fns_by_piece in the returned functions
+                def build_legal(legal_fns):
+                    collect_legal_masks = utils._get_collect_values_fn(legal_fns)
+                    def piece_legal_action_mask_fn(state):
+                        all_masks = collect_legal_masks(state)
+                        return all_masks.any(axis=0).astype(jnp.int8)
+                    
+                    return piece_legal_action_mask_fn
+                
+                def build_apply(apply_fns):
+                    def piece_apply_action_fn(state, action):
+                        move_type, start, direction = jnp.unravel_index(action, action_space_shape)
+                        piece = state.board[:, start].argmax()
+                        return jax.lax.switch(piece, apply_fns, state, action)
+                    
+                    return piece_apply_action_fn
+
+                piece_legal_action_mask_fn = build_legal(legal_fns_by_piece)
+                piece_apply_action_fn = build_apply(apply_fns_by_piece)
             
             legal_fns_by_prio.append(piece_legal_action_mask_fn)
             apply_fns_by_prio.append(piece_apply_action_fn)
+        
 
         if len(legal_fns_by_prio) == 1:
             legal_action_mask_fn = legal_fns_by_prio[0]
