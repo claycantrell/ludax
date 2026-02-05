@@ -20,8 +20,7 @@
                 (move
                     (or
                         (step "wolf" direction:diagonal)
-                        (step "sheep" direction:(forward_left forward_right) priority:1)
-                        (hop "sheep" direction:(forward_left forward_right))
+                        (step "sheep" direction:(forward_left forward_right))
                     )
                 )
             )

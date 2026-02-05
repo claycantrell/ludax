@@ -79,7 +79,7 @@ effect_capture: "(" "capture" super_mask mover_arg? increment_score_arg? ")"
 effect_extra_turn: "(" "extra_turn" mover_reference same_piece_arg? ")"
 effect_flip: "(" "flip" super_mask mover_arg? ")"
 effect_increment_score: "(" "increment_score" mover_reference function ")"
-effect_promote: "(" "promote" piece_reference super_mask mover_arg? ")" // TODO: include mover arg?
+effect_promote: "(" "promote" piece_reference piece_reference super_mask mover_arg? ")" // TODO: include mover arg?
 effect_set_score: "(" "set_score" mover_reference function ")"
 
 // ---Functions---
@@ -172,7 +172,8 @@ super_predicate_and: "(" "and" super_predicate+ ")"
 super_predicate_or: "(" "or" super_predicate+ ")"
 super_predicate_not: "(" "not" super_predicate ")"
 
-predicate: predicate_can_hop
+predicate: predicate_action_was
+         | predicate_can_move_again
          | predicate_equals
          | predicate_exists
          | predicate_full_board
@@ -184,7 +185,8 @@ predicate: predicate_can_hop
          | predicate_no_legal_actions
          | predicate_passed
 
-predicate_can_hop: "(" "can_hop" super_mask direction_arg? piece_arg? mover_arg? ")"
+predicate_action_was: "(" "action_was" mover_reference move_type_name ")"
+predicate_can_move_again: "(" "can_move_again" ")"
 predicate_equals: "(" "=" function+ ")"
 predicate_exists: "(" "exists" super_mask ")" // technically equivalent to (>= (count mask) 1) 
 predicate_full_board: "(" "full_board" ")"
@@ -231,6 +233,7 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: true_direction | relative_direction
+?move_type_name: HOP | SLIDE | STEP
 ?multi_direction: "(" direction+ ")"
 ?true_direction: UP | DOWN | LEFT | RIGHT | UP_LEFT | UP_RIGHT | DOWN_LEFT | DOWN_RIGHT | VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?relative_direction: FORWARD | BACKWARD | FORWARD_LEFT | FORWARD_RIGHT | BACKWARD_LEFT | BACKWARD_RIGHT
@@ -280,6 +283,9 @@ OPPONENT: "opponent"
 P1: "P1"
 P2: "P2"
 BOTH: "both"
+HOP: "hop"
+SLIDE: "slide"
+STEP: "step"
 
 WHITE: "white"
 BLACK: "black"

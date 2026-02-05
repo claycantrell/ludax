@@ -75,8 +75,8 @@ class GameRuleParser(Transformer):
             if attribute == "connected_components":
                 addl_info_functions.append(utils._get_connected_components_fn(self.game_info, self.adjacency_lookup))
 
-            # Set the "extra turn" flag to FALSE after each move (it's set to TRUE by the effect). This means it will
-            # only ever be set to TRUE during the "compute legal actions" step, but that's relevant for the same_piece
+            # Set the "extra turn" flag to the sentinel -1 after each move (it's set to some non-negative index by effect_extra_turn)
+            # This means it will only ever be non-negative during the "compute legal actions" step, but that's relevant for the same_piece
             # condition in extra turn effects
             if attribute == "extra_turn_fn_idx":
                 addl_info_functions.append(lambda state, action: state._replace(extra_turn_fn_idx=-1))
@@ -622,7 +622,7 @@ class GameRuleParser(Transformer):
 
     def _group_by_index(self, items, index):
         '''
-        Group a list of items by the specified index
+        Group a list of tuples by the specified index
         '''
         grouped = groupby(
             sorted(items, key=lambda x: x[index]),
@@ -824,6 +824,45 @@ class GameRuleParser(Transformer):
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
+    def move_type(self, children):
+        '''
+        This is the direct grammatical parent of the specific move types (defined below). It's responsible
+        for adding optional tracking information to the apply_action_fn that gets used by later predicates,
+        like "can_move_again" in English Draughts
+        '''
+
+        piece, move_type, legal_action_fn, apply_action_fn, priority = children[0]
+        move_type_idx = list(MoveTypes).index(move_type)
+
+        # Some games require us to check whether the piece can move again after hopping (e.g. English Draughts)
+        # This specific implementation works because in both action space types, the first dimension corresponds
+        # to the starting position of the piece being moved, so we can index into that dimension with position
+        # that the piece ended up at after applying the previous action
+        if "can_move_again" in self.game_info.game_state_attributes:
+            def check_again_fn(state, end_index):
+                legal_mask = legal_action_fn(state)
+                can_hop_again = legal_mask[end_index].any()
+                return state._replace(can_move_again=state.can_move_again.at[state.current_player].set(can_hop_again))
+
+        else:
+            check_again_fn = lambda state, end_index: state
+
+        if "action_was" in self.game_info.game_state_attributes:
+            def action_was_fn(state):
+                return state._replace(action_was=state.action_was.at[state.current_player].set(move_type_idx))
+            
+        else:
+            action_was_fn = lambda state: state
+
+        def new_apply_action_fn(state, action):
+            new_state = apply_action_fn(state, action)
+            end_idx = new_state.previous_actions[state.current_player]
+            new_state = check_again_fn(new_state, end_idx)
+            new_state = action_was_fn(new_state)
+            return new_state
+        
+        return piece, move_type, legal_action_fn, new_apply_action_fn, priority
+
 
     def move_hop(self, children):
         '''
@@ -876,7 +915,7 @@ class GameRuleParser(Transformer):
                 )
 
                 return mask
-             
+
             if capture:
                 def apply_action_fn(state, action):
                     start, direction = action // self.num_directions, action % self.num_directions
@@ -901,6 +940,7 @@ class GameRuleParser(Transformer):
                     board = board.at[piece, start].set(EMPTY)
 
                     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
+
                     return state._replace(board=board, previous_actions=previous_actions)
                 
         else:
@@ -972,6 +1012,9 @@ class GameRuleParser(Transformer):
         limited by the board boundaries and the non-empty cell encountered
         '''
 
+        # TODO: REFACTOR FOR NEW ACTION SPACES
+        # TODO: ADD SUPPORT FOR CHECK_AGAIN (AND CAPTURE ?)
+
         optional_args = self._parse_optional_args(children)
 
         priority = optional_args[OptionalArgs.PRIORITY]
@@ -1025,6 +1068,8 @@ class GameRuleParser(Transformer):
         Step a piece in one of the specified directions (default to any) by exactly one space
         '''
 
+        # TODO: ADD SUPPORT FOR CHECK_AGAIN (AND CAPTURE ?)
+
         piece, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
@@ -1069,8 +1114,6 @@ class GameRuleParser(Transformer):
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
-
-                jax.debug.print("Stepping piece {piece} from {start} to {end}", piece=piece, start=start_idx, end=end_idx)
 
                 return state._replace(board=board, previous_actions=previous_actions)
 
@@ -1264,8 +1307,8 @@ class GameRuleParser(Transformer):
         the phase step count before returning to the normal turn exchange
 
         NOTE: if two players both trigger an extra turn effect for their opponent in
-        succession, it will seem like neither is getting an extra turn, since the bonus
-        turns happen **immediately**
+        succession, it will appear like neither is getting an extra turn, since the bonus
+        turns happen immediately after the current turn ends
         '''
         mover_ref, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
@@ -1279,12 +1322,19 @@ class GameRuleParser(Transformer):
 
         # If the "same piece" flag is set and the game is a piece-moving game, then we restrict
         # legal actions in the extra turn to only those that move the same piece as in the previous turn,
-        # relying on the fact that the rows of t
+        # relying on the fact that the rows of the legal action mask correspond to the piece start positions
         if optional_args[OptionalArgs.SAME_PIECE] and self.game_info.move_type == "move":
+            if self.game_info.action_type == ActionTypes.FROM_DIR:
+                action_shape = (self.game_info.board_size, self.num_directions)
+            elif self.game_info.action_type == ActionTypes.FROM_TO:
+                action_shape = (self.game_info.board_size, self.game_info.board_size)
+            else:
+                raise ValueError(f"Unsupported action type {self.game_info.action_type} for piece-restricted extra turn")
+
             def extra_turn_condition(state, legal_action_mask):
                 last_action = state.previous_actions[-1]
                 start_mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int8).at[last_action].set(1)[:, jnp.newaxis]
-                base_mask = legal_action_mask.reshape(self.game_info.board_size, self.game_info.board_size)
+                base_mask = legal_action_mask.reshape(action_shape)
                 new_legal_action_mask = jnp.where(start_mask, base_mask, 0).flatten()
 
                 return new_legal_action_mask
@@ -1353,7 +1403,7 @@ class GameRuleParser(Transformer):
         '''
         Promote pieces on the board according to a mask and a resulting piece type
         '''
-        piece, (child_mask_fn, _), *optional_args = children
+        promotee, piece, (child_mask_fn, _), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
         mover_ref = optional_args[OptionalArgs.MOVER]
@@ -2101,6 +2151,40 @@ class GameRuleParser(Transformer):
 
         return predicate_fn, info
 
+    def predicate_action_was(self, children):
+        '''
+        Returns whether the last action taken by the specified player
+        was of the specified move type
+        '''
+        mover_ref, move_type = children
+        move_type_idx = list(MoveTypes).index(f"move_{move_type}")
+
+        if mover_ref == PlayerAndMoverRefs.MOVER:
+            offset = 0
+        elif mover_ref == PlayerAndMoverRefs.OPPONENT:
+            offset = 1
+
+        def predicate_fn(state):
+            player = (state.current_player + offset) % 2
+            return state.action_was[player] == move_type_idx
+        
+        return predicate_fn, {}
+
+    def predicate_can_move_again(self, children):
+        '''
+        Returns whether the current player can make another move with the same piece they
+        previously moved
+        '''
+
+        if self.game_info.move_type == MoveTypes.PLACE:
+            raise NotImplementedError("can_move_again predicate is not implemented for placing games")
+        
+        else:
+            def predicate_fn(state):
+                return state.can_move_again[state.current_player]
+            
+        return predicate_fn, {}
+
     def predicate_equals(self, children):
         '''
         Return whether all of the child function values are equal
@@ -2128,85 +2212,85 @@ class GameRuleParser(Transformer):
             info['lookahead_mask_fn'] = lookahead_mask_fn
 
         return predicate_fn, info
-    
-    def predicate_can_hop(self, children):
-        '''
-        This is somewhat horrific, but the intent is to be able to check
-        whether there are any legal hop moves available starting from the
-        given mask (e.g. for games like checkers where an extra turn is only
-        granted if the capturing piece can continue hopping)
 
-        TODO: clean this up...
-        '''
-        (child_mask_fn, _), *optional_args = children
-        optional_args = self._parse_optional_args(optional_args)
+    # def predicate_can_hop(self, children):
+    #     '''
+    #     This is somewhat horrific, but the intent is to be able to check
+    #     whether there are any legal hop moves available starting from the
+    #     given mask (e.g. for games like checkers where an extra turn is only
+    #     granted if the capturing piece can continue hopping)
 
-        piece = optional_args[OptionalArgs.PIECE]
-        if piece == PieceRefs.ANY:
-            filter_to_piece = lambda occ_mask: occ_mask.any(axis=0)
-        else:
-            filter_to_piece = lambda occ_mask: occ_mask[piece]
+    #     TODO: clean this up...
+    #     '''
+    #     (child_mask_fn, _), *optional_args = children
+    #     optional_args = self._parse_optional_args(optional_args)
 
-        mover = optional_args[OptionalArgs.MOVER]
-        if mover == PlayerAndMoverRefs.BOTH:
-            def piece_match_fn(state):
-                occupied_mask = (state.board != EMPTY).astype(jnp.int8)
-                return filter_to_piece(occupied_mask)
-        elif mover == PlayerAndMoverRefs.MOVER:
-            def piece_match_fn(state):
-                occupied_mask = (state.board == state.current_player).astype(jnp.int8)
-                return filter_to_piece(occupied_mask)
-        elif mover == PlayerAndMoverRefs.OPPONENT:
-            def piece_match_fn(state):
-                occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int8)
-                return filter_to_piece(occupied_mask)
+    #     piece = optional_args[OptionalArgs.PIECE]
+    #     if piece == PieceRefs.ANY:
+    #         filter_to_piece = lambda occ_mask: occ_mask.any(axis=0)
+    #     else:
+    #         filter_to_piece = lambda occ_mask: occ_mask[piece]
+
+    #     mover = optional_args[OptionalArgs.MOVER]
+    #     if mover == PlayerAndMoverRefs.BOTH:
+    #         def piece_match_fn(state):
+    #             occupied_mask = (state.board != EMPTY).astype(jnp.int8)
+    #             return filter_to_piece(occupied_mask)
+    #     elif mover == PlayerAndMoverRefs.MOVER:
+    #         def piece_match_fn(state):
+    #             occupied_mask = (state.board == state.current_player).astype(jnp.int8)
+    #             return filter_to_piece(occupied_mask)
+    #     elif mover == PlayerAndMoverRefs.OPPONENT:
+    #         def piece_match_fn(state):
+    #             occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int8)
+    #             return filter_to_piece(occupied_mask)
         
 
-        direction = optional_args[OptionalArgs.DIRECTION]
-        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+    #     direction = optional_args[OptionalArgs.DIRECTION]
+    #     p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         
-        # Hopping is kind of like sliding a distance of 2 except that the middle position needs to be occupied
-        # by a specific piece and the end position needs to be empty
-        slide_lookup = utils._get_slide_lookup(self.game_info)
-        slide_lookup = slide_lookup[:, :, :3]
+    #     # Hopping is kind of like sliding a distance of 2 except that the middle position needs to be occupied
+    #     # by a specific piece and the end position needs to be empty
+    #     slide_lookup = utils._get_slide_lookup(self.game_info)
+    #     slide_lookup = slide_lookup[:, :, :3]
 
-        def legal_hop_mask_fn(state):
-            center_piece_mask = piece_match_fn(state).astype(jnp.int8)
-            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+    #     def legal_hop_mask_fn(state):
+    #         center_piece_mask = piece_match_fn(state).astype(jnp.int8)
+    #         occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
 
-            direction_indices = jax.lax.select(
-                state.current_player == P1,
-                p1_direction_indices,
-                p2_direction_indices
-            )
-            slide_indices = slide_lookup[direction_indices, :, :]
+    #         direction_indices = jax.lax.select(
+    #             state.current_player == P1,
+    #             p1_direction_indices,
+    #             p2_direction_indices
+    #         )
+    #         slide_indices = slide_lookup[direction_indices, :, :]
 
-            start_indices = slide_indices[:, :, 0]
-            middle_indices = slide_indices[:, :, 1]
-            dest_indices = slide_indices[:, :, 2]
+    #         start_indices = slide_indices[:, :, 0]
+    #         middle_indices = slide_indices[:, :, 1]
+    #         dest_indices = slide_indices[:, :, 2]
 
-            inner_match = (center_piece_mask[middle_indices] == 1)
-            dest_free = (occupied_mask[dest_indices] == 0)
+    #         inner_match = (center_piece_mask[middle_indices] == 1)
+    #         dest_free = (occupied_mask[dest_indices] == 0)
 
-            legal_hop = inner_match & dest_free
-            start_positions = jnp.where(legal_hop, start_indices, self.game_info.board_size+1)
-            dest_positions = jnp.where(legal_hop, dest_indices, self.game_info.board_size+1)
-            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
-            mask = mask.at[start_positions, dest_positions].set(1)
+    #         legal_hop = inner_match & dest_free
+    #         start_positions = jnp.where(legal_hop, start_indices, self.game_info.board_size+1)
+    #         dest_positions = jnp.where(legal_hop, dest_indices, self.game_info.board_size+1)
+    #         mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
+    #         mask = mask.at[start_positions, dest_positions].set(1)
 
-            return mask
+    #         return mask
         
-        def predicate_fn(state):
-            child_mask = child_mask_fn(state)
-            legal_hop_mask = legal_hop_mask_fn(state).any(axis=1)
+    #     def predicate_fn(state):
+    #         child_mask = child_mask_fn(state)
+    #         legal_hop_mask = legal_hop_mask_fn(state).any(axis=1)
 
-            # Check whether there are any legal hops starting from the given mask
-            masked_legal_hops = legal_hop_mask * child_mask
-            return masked_legal_hops.any()
+    #         # Check whether there are any legal hops starting from the given mask
+    #         masked_legal_hops = legal_hop_mask * child_mask
+    #         return masked_legal_hops.any()
         
-        info = {}
+    #     info = {}
 
-        return predicate_fn, info
+    #     return predicate_fn, info
 
     def predicate_exists(self, children):
         '''

@@ -261,6 +261,16 @@ class GameInfoExtractor(Visitor):
             self.game_state_attributes.append("hopped")
             self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
 
+    def predicate_action_was(self, tree):
+        if "action_was" not in self.game_state_attributes:
+            self.game_state_attributes.append("action_was")
+            self.defaults.append(-jnp.ones(2, dtype=jnp.int8))
+
+    def predicate_can_move_again(self, tree):
+        if "can_move_again" not in self.game_state_attributes:
+            self.game_state_attributes.append("can_move_again")
+            self.defaults.append(jnp.zeros(2, dtype=jnp.bool_))
+
     '''
     Custom assignments for relative directions (i.e. "forward")
     '''
