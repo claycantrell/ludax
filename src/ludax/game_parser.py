@@ -642,9 +642,9 @@ class GameRuleParser(Transformer):
         Determine the overall action space shape based on the move information for each piece / move type
         '''
         action_space, action_size = None, -1
-        for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
+        for group_by_prio in self._group_by_index(move_infos, -1): # priority is last element
             for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
-                _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
+                _, move_types, legal_fns, apply_fns, _, _ = zip(*list(group_by_piece))
 
                 if self.game_info.action_type == ActionTypes.FROM_DIR:
                     if list(sorted(move_types)) == [MoveTypes.HOP, MoveTypes.STEP] or len(move_types) == 1:
@@ -763,12 +763,12 @@ class GameRuleParser(Transformer):
             self.action_space_shape = action_space_shape
 
         legal_fns_by_prio, apply_fns_by_prio = [], []
-        for group_by_prio in self._group_by_index(move_infos, 4): # priority is last element
+        for group_by_prio in self._group_by_index(move_infos, -1): # priority is last element
             
             legal_fns_by_piece, apply_fns_by_piece = [], []
             for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
                
-                _, move_types, legal_fns, apply_fns, _ = zip(*list(group_by_piece))
+                _, move_types, legal_fns, apply_fns, _, _ = zip(*list(group_by_piece))
                 _legal_action_mask_fn, _apply_action_fn = self._combine_move_fns(
                     action_space_shape, move_types, legal_fns, apply_fns
                 )
@@ -842,7 +842,25 @@ class GameRuleParser(Transformer):
         else:
             apply_effects_fn = optional_args[0]
 
-        return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+        # If necessary, compute the "can_move_again" result and add it to the end of the 
+        # by scanning over the can_move_again functions returned by each move
+        if "can_move_again" in self.game_info.game_state_attributes:
+            _, _, _, _, can_move_again_fns, _ = zip(*move_infos)
+
+            def new_apply_action_fn(state, action):
+                new_state = apply_action_fn(state, action)
+
+                for fn in can_move_again_fns:
+                    new_state = fn(new_state)
+                
+                return new_state
+
+            apply_action_fn_to_return = new_apply_action_fn
+
+        else:
+            apply_action_fn_to_return = apply_action_fn
+
+        return action_size, apply_action_fn_to_return, legal_action_mask_fn, apply_effects_fn
 
     def move_type(self, children):
         '''
@@ -851,37 +869,8 @@ class GameRuleParser(Transformer):
         like "can_move_again" in English Draughts
         '''
 
-        piece, move_type, legal_action_fn, apply_action_fn, priority = children[0]
+        piece, move_type, legal_action_fn, apply_action_fn, can_move_again_fn, priority = children[0]
         move_type_idx = list(MoveTypes).index(move_type)
-
-        # Some games require us to check whether the piece can move again after hopping (e.g. English Draughts)
-        # This specific implementation works because in both action space types, the first dimension corresponds
-        # to the starting position of the piece being moved, so we can index into that dimension with position
-        # that the piece ended up at after applying the previous action
-        if "can_move_again" in self.game_info.game_state_attributes:
-
-            # TODO: the issue here is that effects like promotion have not yet been applied when this check is made!
-            # One potential fix is to make the low-level legal action functions not actually filter based on piece
-            # occupancy (i.e. just return "if a piece was here, where could it move to?") and then apply the piece
-            # occupancy constraints at this level
-
-            # TODO: another issue is that only one of the outputs of these "check_again" functions will actually
-            # be used in the final apply_action_fn -- so even though we'll compute the check for whether a king
-            # can move again after a hop (and update state.can_move_again accordingly), that information won't 
-            # actually appear in the new_state which we get after apply_action_fn is called...
-
-            def check_again_fn(state, end_index):
-                legal_mask = legal_action_fn(state)
-                # global_legal = self.legal_action_mask_fn(state).reshape(self.action_space_shape).astype(jnp.int8)
-                # jax.debug.print("Global legal shape: {shape}, legal mask shape: {legal_shape}", shape=global_legal.shape, legal_shape=legal_mask.shape)
-                # jax.debug.print("Current board:\n{board}", board=state.board.max(axis=0).reshape((8, 8)))
-                # jax.debug.print("Can move again, according to global_legal: {mask}", mask=global_legal.any(axis=1))
-                # legal_mask = self.legal_action_mask_fn(state).reshape(self.action_space_shape).astype(jnp.int8)
-                can_move_again = legal_mask[end_index].any()
-                return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(can_move_again))
-
-        else:
-            check_again_fn = lambda state, end_index: state
 
         if "action_was" in self.game_info.game_state_attributes:
             def action_was_fn(state):
@@ -892,12 +881,11 @@ class GameRuleParser(Transformer):
 
         def new_apply_action_fn(state, action):
             new_state = apply_action_fn(state, action)
-            end_idx = new_state.previous_actions[state.current_player]
-            new_state = check_again_fn(new_state, end_idx)
             new_state = action_was_fn(new_state)
+
             return new_state
         
-        return piece, move_type, legal_action_fn, new_apply_action_fn, priority
+        return piece, move_type, legal_action_fn, new_apply_action_fn, can_move_again_fn, priority
 
 
     def move_hop(self, children):
@@ -982,7 +970,24 @@ class GameRuleParser(Transformer):
         else:
             raise NotImplementedError("FROM_TO action type not implemented yet!")
         
-        return piece, MoveTypes.HOP, legal_action_fn, apply_action_fn, priority
+        move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
+        def can_move_again_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+            end_idx = state.previous_actions[state.current_player]
+
+            hop_over_mask = hop_over_mask_fn(state)
+            empty_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
+
+            step_indices = self.slide_lookup[direction_indices, end_idx, 1].T
+            hop_indices = self.slide_lookup[direction_indices, end_idx, 2].T
+
+            step_occ = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(jnp.bool_)
+            hop_empty = empty_mask.at[hop_indices].get(mode='fill', fill_value=0).astype(jnp.bool_)
+            can_move_again = (step_occ & hop_empty).any()
+
+            return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(can_move_again))
+        
+        return piece, MoveTypes.HOP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
 
 
         piece = optional_args[OptionalArgs.PIECE]
@@ -1118,7 +1123,7 @@ class GameRuleParser(Transformer):
         # The legal action function and apply action function depend on the action space structure
         # Case 1: action space is (board_size, num_directions)
         if self.game_info.action_type == ActionTypes.FROM_DIR:
-             def legal_action_fn(state):
+            def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
 
                 # piece_idxs = jnp.argwhere(state.board[piece] == state.current_player, size=self.game_info.board_size, fill_value=-1).flatten()
@@ -1142,7 +1147,7 @@ class GameRuleParser(Transformer):
 
                 return mask
              
-             def apply_action_fn(state, action):
+            def apply_action_fn(state, action):
                 start_idx = action // self.num_directions
                 direction_idx = action % self.num_directions
                 end_idx = self.slide_lookup[direction_idx, start_idx, 1]
@@ -1152,6 +1157,11 @@ class GameRuleParser(Transformer):
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
 
                 return state._replace(board=board, previous_actions=previous_actions)
+             
+            # TODO: implement can_move_again_fn for steps
+            move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
+            def can_move_again_fn(state):
+                return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(False))
 
         # Case 2: action space is (from_pos, to_pos)
         elif self.game_info.action_type == ActionTypes.FROM_TO:
@@ -1188,7 +1198,7 @@ class GameRuleParser(Transformer):
         else:
             raise ValueError(f"Move step not implemented for action space type {self.game_info.action_space_type}")
         
-        return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, priority
+        return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
 
 
         def legal_step_mask_fn(state):
@@ -2212,16 +2222,13 @@ class GameRuleParser(Transformer):
         previously moved
         '''
 
-        piece, move_type = children
+        move_type = children[0]
         move_type_idx = list(MoveTypes).index(f"move_{move_type}")
 
-        if self.game_info.move_type == MoveTypes.PLACE:
-            raise NotImplementedError("can_move_again predicate is not implemented for placing games")
+        def predicate_fn(state):
+            piece = state.board[state.previous_actions[state.current_player]].argmax()
+            return state.can_move_again[state.current_player, piece, move_type_idx]
         
-        else:
-            def predicate_fn(state):
-                return state.can_move_again[state.current_player, piece, move_type_idx]
-            
         return predicate_fn, {}
 
     def predicate_equals(self, children):

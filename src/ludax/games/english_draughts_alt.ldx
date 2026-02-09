@@ -27,7 +27,7 @@
                     )
                     (effects
                         (promote "pawn" "king" (edge forward))
-                        (if (and (action_was mover hop) (can_move_again))
+                        (if (and (action_was mover hop) (can_move_again hop))
                             (extra_turn mover same_piece:true)
                         )
                     )
