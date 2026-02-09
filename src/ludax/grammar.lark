@@ -186,7 +186,7 @@ predicate: predicate_action_was
          | predicate_passed
 
 predicate_action_was: "(" "action_was" mover_reference move_type_name ")"
-predicate_can_move_again: "(" "can_move_again" ")"
+predicate_can_move_again: "(" "can_move_again" piece_reference move_type_name ")"
 predicate_equals: "(" "=" function+ ")"
 predicate_exists: "(" "exists" super_mask ")" // technically equivalent to (>= (count mask) 1) 
 predicate_full_board: "(" "full_board" ")"

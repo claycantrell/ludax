@@ -269,7 +269,11 @@ class GameInfoExtractor(Visitor):
     def predicate_can_move_again(self, tree):
         if "can_move_again" not in self.game_state_attributes:
             self.game_state_attributes.append("can_move_again")
-            self.defaults.append(jnp.zeros(2, dtype=jnp.bool_))
+            
+            # The "can_move_again" array tracks for each player,
+            # piece type, and move type
+            num_move_types = len(MoveTypes)
+            self.defaults.append(jnp.zeros((2, self.game_info.num_piece_types, num_move_types), dtype=jnp.bool_))
 
     '''
     Custom assignments for relative directions (i.e. "forward")
