@@ -1157,11 +1157,6 @@ class GameRuleParser(Transformer):
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
 
                 return state._replace(board=board, previous_actions=previous_actions)
-             
-            # TODO: implement can_move_again_fn for steps
-            move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
-            def can_move_again_fn(state):
-                return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(False))
 
         # Case 2: action space is (from_pos, to_pos)
         elif self.game_info.action_type == ActionTypes.FROM_TO:
@@ -1197,6 +1192,17 @@ class GameRuleParser(Transformer):
 
         else:
             raise ValueError(f"Move step not implemented for action space type {self.game_info.action_space_type}")
+        
+        move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
+        def can_move_again_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+            end_idx = state.previous_actions[state.current_player]
+
+            empty_mask = (state.board == EMPTY).all(axis=0).astype(jnp.int8)
+            step_indices = self.slide_lookup[direction_indices, end_idx, 1].T
+
+            can_step = (empty_mask.at[step_indices].get(mode='fill', fill_value=0) == 1).any()
+            return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(can_step))
         
         return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
 
