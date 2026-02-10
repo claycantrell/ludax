@@ -641,6 +641,13 @@ class GameRuleParser(Transformer):
         '''
         Determine the overall action space shape based on the move information for each piece / move type
         '''
+
+        # *TODO*: we want to detect (probably in game_info) whether a game will require us to inflate the
+        # action space into a move_type dimension. We should check the directions that are used for each
+        # piece / move type to determine this. For instance, it's OK to have a step and slide action if
+        # they apply to disjoint directions, but if they overlap then there's ambiguity. Analogously,
+        # having step and hop is OK even if they overlap directions
+
         action_space, action_size = None, -1
         for group_by_prio in self._group_by_index(move_infos, -1): # priority is last element
             for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
@@ -657,8 +664,20 @@ class GameRuleParser(Transformer):
                         action_size = size
                         action_space = shape
 
+                elif self.game_info.action_type == ActionTypes.FROM_TO:
+                    # All distinct move types can be combined into a single "from-to" action space
+                    if len(set(move_types)) == len(move_types):
+                        shape = (1, self.game_info.board_size, self.game_info.board_size)
+                    else:
+                        shape = (len(move_types), self.game_info.board_size, self.game_info.board_size)
+
+                    size = jnp.prod(jnp.array(shape))
+                    if size > action_size:
+                        action_size = size
+                        action_space = shape
+
                 else:
-                    raise NotImplementedError("FROM_TO action type not implemented yet!")
+                    raise ValueError(f"Unsupported action type for action space shape computation: {self.game_info.action_type}!")
                 
         return action_space
 
@@ -744,7 +763,65 @@ class GameRuleParser(Transformer):
             apply_action_fn = sub_apply_action_fn
                 
         else:
-            raise NotImplementedError("FROM_TO action type not implemented yet!")
+
+            # Special case: hops and slides can be combined into a single "from-to" action space without an additional
+            # move type dimension since it's not possible to both hop and slide from the same position to the same position,
+            # and the same goes for Hop and Step
+            sorted_move_types = list(sorted(move_types))
+            if sorted_move_types == [MoveTypes.HOP, MoveTypes.SLIDE] or sorted_move_types == [MoveTypes.HOP, MoveTypes.STEP]:
+                # Reorder the legal action mask functions so that hop is first
+                if move_types[0] != MoveTypes.HOP:
+                    legal_action_mask_fns = [legal_action_mask_fns[1], legal_action_mask_fns[0]]
+                    apply_action_fns = [apply_action_fns[1], apply_action_fns[0]]
+
+                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+                def sub_legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.any(axis=0).astype(jnp.int8)
+                
+                def sub_apply_action_fn(state, action):
+                    all_masks = collect_legal_masks(state)
+
+                    # Determine whether the action is a hop or not based on the legal masks
+                    start, direction = action // self.num_directions, action % self.num_directions
+                    is_hop = all_masks[0, start, direction] == 1
+
+                    return jax.lax.cond(
+                        is_hop,
+                        apply_action_fns[0],
+                        apply_action_fns[1],
+                        state,
+                        action
+                    )
+                
+                sub_shape = (1, self.game_info.board_size, self.num_directions)
+
+            elif len(move_types) == 1:
+                sub_legal_action_mask_fn = legal_action_mask_fns[0]
+                sub_apply_action_fn = apply_action_fns[0]
+                sub_shape = (1, self.game_info.board_size, self.num_directions)
+
+            else:
+                raise NotImplementedError("Combining multiple move types with FROM_TO action type not implemented yet!")
+
+            # Now check whether we need to inflate the legal mask to match the overall action space shape
+            # If it doesn't match the argument, we can assume that it is strictly smaller in the first dimension
+            if sub_shape != action_space_shape:
+                def legal_action_mask_fn(state):
+                    base_mask = sub_legal_action_mask_fn(state)
+                    inflated_mask = jnp.zeros(action_space_shape, dtype=jnp.int8)
+                    inflated_mask = inflated_mask.at[:sub_shape[0]].set(base_mask)
+                    return inflated_mask.flatten().astype(jnp.int8)
+     
+            # If it does match, we can just flatten and return
+            else:
+                def legal_action_mask_fn(state):
+                    base_mask = sub_legal_action_mask_fn(state)
+                    return base_mask.flatten().astype(jnp.int8)
+                
+            # We don't need to worry about exceeding the action space shape since those
+            # actions will already be illegal
+            apply_action_fn = sub_apply_action_fn
 
         return legal_action_mask_fn, apply_action_fn
 
@@ -831,7 +908,9 @@ class GameRuleParser(Transformer):
             def apply_action_fn(state, action):
                 move_type, start, direction = jnp.unravel_index(action, action_space_shape)
 
-                # Determine which priority level the action belongs to based on the legal action masks
+                # Determine which priority level the action belongs to based on the legal action masks,
+                # since we can assume that the action is legal if and only if it is legal under the highest
+                # priority mask that contains it
                 all_masks = collect_general(state)
                 prio_idx = all_masks[:, action].argmax()
 
@@ -843,7 +922,9 @@ class GameRuleParser(Transformer):
             apply_effects_fn = optional_args[0]
 
         # If necessary, compute the "can_move_again" result and add it to the end of the 
-        # by scanning over the can_move_again functions returned by each move
+        # apply_action_fn by scanning over the can_move_again functions returned by each move
+        # NOTE: if there are multiple move definitions for the same piece / move type, this
+        # will apply the *last* can_move_again function (overwriting previous calls)
         if "can_move_again" in self.game_info.game_state_attributes:
             _, _, _, _, can_move_again_fns, _ = zip(*move_infos)
 
@@ -866,7 +947,7 @@ class GameRuleParser(Transformer):
         '''
         This is the direct grammatical parent of the specific move types (defined below). It's responsible
         for adding optional tracking information to the apply_action_fn that gets used by later predicates,
-        like "can_move_again" in English Draughts
+        like "action_was" in English Draughts
         '''
 
         piece, move_type, legal_action_fn, apply_action_fn, can_move_again_fn, priority = children[0]
@@ -968,7 +1049,53 @@ class GameRuleParser(Transformer):
                     return state._replace(board=board, previous_actions=previous_actions)
                 
         else:
-            raise NotImplementedError("FROM_TO action type not implemented yet!")
+            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=jnp.int8), len(p1_direction_indices))
+
+            def legal_action_fn(state):
+                direction_indices = all_direction_indices[state.current_player]
+
+                occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+                hop_over_mask = hop_over_mask_fn(state)
+
+                step_indices = self.slide_lookup[direction_indices, :, 1].T
+
+                can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(jnp.int8)
+                hop_indices = self.slide_lookup[direction_indices, :, 2].T
+                valid_hops = jnp.where(
+                    can_hop,
+                    hop_indices,
+                    self.game_info.board_size + 1
+                )
+
+                valid_indices = jnp.stack([indices, valid_hops.flatten()], axis=1)
+                
+                mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
+                mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
+
+                # Keep only the rows corresponding to valid starting positions
+                piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+                mask = jnp.where(
+                    piece_mask[:, jnp.newaxis],
+                    mask, jnp.zeros_like(mask)
+                )
+
+                # Block moves to occupied squares
+                mask = jnp.where(
+                    occupied_mask[jnp.newaxis, :],
+                    jnp.zeros_like(mask),
+                    mask
+                )
+
+                return mask
+            
+            def apply_action_fn(state, action):
+                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+                
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+                
+                return state._replace(board=board, previous_actions=previous_actions)
         
         move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
         def can_move_again_fn(state):
@@ -1055,8 +1182,8 @@ class GameRuleParser(Transformer):
 
         # TODO: REFACTOR FOR NEW ACTION SPACES
         # TODO: ADD SUPPORT FOR CHECK_AGAIN (AND CAPTURE ?)
-
-        optional_args = self._parse_optional_args(children)
+        piece, *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
 
         priority = optional_args[OptionalArgs.PRIORITY]
 
@@ -1066,23 +1193,19 @@ class GameRuleParser(Transformer):
 
         direction = optional_args[OptionalArgs.DIRECTION]
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+        all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=jnp.int8)
         
-        # Restrict the slide lookup to only the specified distance
-        slide_lookup = utils._get_slide_lookup(self.game_info)
-        slide_lookup = slide_lookup[:, :, :distance+1]
+        if self.game_info.action_type != ActionTypes.FROM_TO:
+            raise ValueError("Slide moves require FROM_TO action type!")
 
         # Precompute the static indices used in the sliding logic
         actions = jnp.arange(self.game_info.board_size, dtype=jnp.int8)
-        general_indices = jnp.indices(slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int8)[2]
+        general_indices = jnp.indices(self.slide_lookup[p1_direction_indices, :, :].shape, dtype=jnp.int8)[2]
         ones_array = jnp.ones((len(p1_direction_indices), self.game_info.board_size, 1), dtype=jnp.int8)
 
         def _can_slide(state, from_, to_):
-            direction_indices = jax.lax.select(
-                state.current_player == P1,
-                p1_direction_indices,
-                p2_direction_indices
-            )
-            slide_indices = slide_lookup[direction_indices, from_, :]
+            direction_indices = all_direction_indices[state.current_player]
+            slide_indices = self.slide_lookup[direction_indices, from_, :]
 
             occupied_at_slide = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
             occupied_at_slide = occupied_at_slide.at[slide_indices].get(mode="fill", fill_value=1)
@@ -1097,12 +1220,73 @@ class GameRuleParser(Transformer):
             return can_slide
         
         indices = jnp.arange(self.game_info.board_size, dtype=jnp.int8)
-        def legal_slide_mask_fn(state):
+        def legal_action_fn_old(state):
             mask = jax.vmap(jax.vmap(_can_slide, in_axes=(None, None, 0)), in_axes=(None, 0, None))(state, indices, indices).astype(jnp.int8)
+            
+            # Pieces can't move onto their own positions
             mask = mask.at[indices, indices].set(0)
-            return mask
 
-        return legal_slide_mask_fn, priority
+            piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+            mask = jnp.where(
+                piece_mask[:, jnp.newaxis],
+                mask, jnp.zeros_like(mask)
+            )
+
+            return mask
+        
+        num_directions = len(p1_direction_indices)
+        general_indices = jnp.indices((self.game_info.board_size, num_directions, distance), dtype=jnp.int8)[2]
+        occupied_pad = jnp.ones((self.game_info.board_size, num_directions, 1), dtype=jnp.int8)
+        def legal_action_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+            slide_indices = self.slide_lookup[direction_indices, :, :distance].transpose(1, 0, 2) # shape (board_size, num_directions, distance)
+            occupied_at_slide = occupied_mask.at[slide_indices].get(mode="fill", fill_value=1)
+
+            # Temporarily set the source square to unoccupied so it doesn't trigger the argmax below
+            occupied_at_slide = occupied_at_slide.at[:, :, 0].set(0)
+
+            # Pad the edge of the board with "occupied" so pieces can slide fully across the board
+            occupied_at_slide = jnp.concatenate([occupied_at_slide, occupied_pad], axis=2)
+            slide_until_idx = jnp.argmax(occupied_at_slide, axis=2)
+
+            # Compute teh valid destinations from the slide indices and reshape to (board_size, num_directions*distance)
+            valid_destinations = jnp.where(
+                general_indices < slide_until_idx[:, :, jnp.newaxis],
+                slide_indices, self.game_info.board_size + 1
+            ).reshape(self.game_info.board_size, -1)
+            
+            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
+            mask = mask.at[actions[:, jnp.newaxis], valid_destinations].set(1)
+
+            # Pieces can't move onto their own positions
+            mask = mask.at[indices, indices].set(0)
+
+            # Filter to only the rows corresponding to pieces belonging to the current player
+            piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+            mask = jnp.where(
+                piece_mask[:, jnp.newaxis],
+                mask, jnp.zeros_like(mask)
+            )
+
+            return mask
+        
+        def apply_action_fn(state, action):
+            start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+            
+            board = state.board.at[piece, end_idx].set(state.current_player)
+            board = board.at[piece, start_idx].set(EMPTY)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+            
+            return state._replace(board=board, previous_actions=previous_actions)
+        
+        # TODO: can_move_again_fn
+        def can_move_again_fn(state):
+            return state
+
+
+        return piece, MoveTypes.SLIDE, legal_action_fn, apply_action_fn, can_move_again_fn, priority
     
     def move_step(self, children):
         '''
@@ -1125,9 +1309,6 @@ class GameRuleParser(Transformer):
         if self.game_info.action_type == ActionTypes.FROM_DIR:
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
-
-                # piece_idxs = jnp.argwhere(state.board[piece] == state.current_player, size=self.game_info.board_size, fill_value=-1).flatten()
-                # valid_starts = jnp.isin(jnp.arange(self.game_info.board_size, dtype=jnp.int8), piece_idxs).astype(jnp.int8)
                 piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
 
                 occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
@@ -1172,6 +1353,13 @@ class GameRuleParser(Transformer):
                 mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
                 mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
 
+                # Keep only the rows corresponding to pieces belonging to the current player (but keep the shape)
+                piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
+                mask = jnp.where(
+                    piece_mask[:, jnp.newaxis],
+                    mask, jnp.zeros_like(mask)
+                )
+
                 # Block moves to occupied squares
                 mask = jnp.where(
                     occupied_mask[jnp.newaxis, :],
@@ -1205,52 +1393,6 @@ class GameRuleParser(Transformer):
             return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(can_step))
         
         return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
-
-
-        def legal_step_mask_fn(state):
-            direction_indices = all_direction_indices[state.current_player]
-
-            # Shape is (board_size, num_directions) and contains the indices that are
-            # reachable by stepping in each direction from each board position (or a pad value)
-            step_indices = slide_lookup[direction_indices, :, 1].T
-
-            valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
-            
-            mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
-            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
-
-            return mask
-        
-        # WIP: a hard-coded implementation for Wolf and Sheep that has an action size of board_size * 4
-        # uses the fact that the slide_lookup has a value larger than the board size for invalid steps
-        def legal_step_mask_fn_wolf_sheep(state):
-            direction_indices = all_direction_indices[state.current_player]
-
-            # Shape is (board_size, num_directions) and contains the indices that are
-            # reachable by stepping in each direction from each board position (or a pad value)
-            step_indices = slide_lookup[direction_indices, :, 1].T
-
-            mask = (step_indices < self.game_info.board_size).astype(jnp.int8)
-            return mask
-        
-        def move_piece_fn_wolf_sheep(state, action):
-            start_idx = action // 4
-            direction_idx = action % 4
-
-            direction_indices = all_direction_indices[state.current_player]
-            step_indices = slide_lookup[direction_indices, :, 1].T
-
-            end_idx = step_indices[start_idx, direction_idx % len(direction_indices)]
-
-            board = state.board.at[:, end_idx].set(state.current_player)
-            board = board.at[:, start_idx].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
-
-            return state._replace(board=board, previous_actions=previous_actions)
-        
-        return legal_step_mask_fn_wolf_sheep, move_piece_fn_wolf_sheep, priority
-
-        return legal_step_mask_fn, priority
 
     def move_result_constraint(self, children):
         raise NotImplementedError("Move result constraints not implemented yet!")
