@@ -1928,7 +1928,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         corner_indices = utils._get_corner_indices(self.game_info)
-        direction_indices = utils._get_direction_indices(self.game_info, Directions.ORTHOGONAL)
+        direction_indices, _ = utils._get_direction_indices(self.game_info, Directions.ORTHOGONAL)
 
         local_lookup = self.adjacency_lookup[direction_indices].any(axis=0)
         outer_indices = []
