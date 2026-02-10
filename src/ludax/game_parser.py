@@ -832,6 +832,10 @@ class GameRuleParser(Transformer):
         '''
         move_infos, *optional_args = children
 
+        # Accommodate games with only one move type
+        if not isinstance(move_infos, list):
+            move_infos = [move_infos]
+
         action_space_shape = self._determine_action_space_shape(move_infos)
         action_size = jnp.prod(jnp.array(action_space_shape))
         if len(action_space_shape) == 3 and action_space_shape[0] == 1:
