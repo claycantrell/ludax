@@ -55,10 +55,6 @@ move_hop: "(" "hop" piece_reference direction_arg? piece_arg? hop_over_arg? capt
 move_slide: "(" "slide" piece_reference direction_arg? distance_arg? priority_arg? ")"
 move_step: "(" "step" piece_reference direction_arg? priority_arg? ")"
 
-move_source_constraint: "(" "source" super_mask ")"
-move_destination_constraint: "(" "destination" super_mask ")"
-move_result_constraint: "(" "result" super_predicate ")"
-
 // ---Effects---
 play_effects: "(" "effects" play_super_effect+ ")"
 play_super_effect: play_effect | play_conditional_effect

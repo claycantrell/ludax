@@ -1106,9 +1106,6 @@ class GameRuleParser(Transformer):
         
         return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
 
-    def move_result_constraint(self, children):
-        raise NotImplementedError("Move result constraints not implemented yet!")
-
     '''
     Play effects
     '''
@@ -1321,7 +1318,7 @@ class GameRuleParser(Transformer):
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             child_mask = child_mask_fn(updated_state)
-            occupied_mask = (updated_state.board == (original_player + offset) % 2).any(axis=0)
+            occupied_mask = (updated_state.board[promotee] == (original_player + offset) % 2)
 
             to_promote = jnp.argwhere(occupied_mask * child_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size+1).flatten()
             new_board = updated_state.board.at[:, to_promote].set(EMPTY)
@@ -2119,85 +2116,6 @@ class GameRuleParser(Transformer):
 
         return predicate_fn, info
 
-    # def predicate_can_hop(self, children):
-    #     '''
-    #     This is somewhat horrific, but the intent is to be able to check
-    #     whether there are any legal hop moves available starting from the
-    #     given mask (e.g. for games like checkers where an extra turn is only
-    #     granted if the capturing piece can continue hopping)
-
-    #     TODO: clean this up...
-    #     '''
-    #     (child_mask_fn, _), *optional_args = children
-    #     optional_args = self._parse_optional_args(optional_args)
-
-    #     piece = optional_args[OptionalArgs.PIECE]
-    #     if piece == PieceRefs.ANY:
-    #         filter_to_piece = lambda occ_mask: occ_mask.any(axis=0)
-    #     else:
-    #         filter_to_piece = lambda occ_mask: occ_mask[piece]
-
-    #     mover = optional_args[OptionalArgs.MOVER]
-    #     if mover == PlayerAndMoverRefs.BOTH:
-    #         def piece_match_fn(state):
-    #             occupied_mask = (state.board != EMPTY).astype(jnp.int8)
-    #             return filter_to_piece(occupied_mask)
-    #     elif mover == PlayerAndMoverRefs.MOVER:
-    #         def piece_match_fn(state):
-    #             occupied_mask = (state.board == state.current_player).astype(jnp.int8)
-    #             return filter_to_piece(occupied_mask)
-    #     elif mover == PlayerAndMoverRefs.OPPONENT:
-    #         def piece_match_fn(state):
-    #             occupied_mask = (state.board == (state.current_player + 1) % 2).astype(jnp.int8)
-    #             return filter_to_piece(occupied_mask)
-        
-
-    #     direction = optional_args[OptionalArgs.DIRECTION]
-    #     p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
-        
-    #     # Hopping is kind of like sliding a distance of 2 except that the middle position needs to be occupied
-    #     # by a specific piece and the end position needs to be empty
-    #     slide_lookup = utils._get_slide_lookup(self.game_info)
-    #     slide_lookup = slide_lookup[:, :, :3]
-
-    #     def legal_hop_mask_fn(state):
-    #         center_piece_mask = piece_match_fn(state).astype(jnp.int8)
-    #         occupied_mask = (state.board != EMPTY).any(axis=0).astype(jnp.int8)
-
-    #         direction_indices = jax.lax.select(
-    #             state.current_player == P1,
-    #             p1_direction_indices,
-    #             p2_direction_indices
-    #         )
-    #         slide_indices = slide_lookup[direction_indices, :, :]
-
-    #         start_indices = slide_indices[:, :, 0]
-    #         middle_indices = slide_indices[:, :, 1]
-    #         dest_indices = slide_indices[:, :, 2]
-
-    #         inner_match = (center_piece_mask[middle_indices] == 1)
-    #         dest_free = (occupied_mask[dest_indices] == 0)
-
-    #         legal_hop = inner_match & dest_free
-    #         start_positions = jnp.where(legal_hop, start_indices, self.game_info.board_size+1)
-    #         dest_positions = jnp.where(legal_hop, dest_indices, self.game_info.board_size+1)
-    #         mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=jnp.int8)
-    #         mask = mask.at[start_positions, dest_positions].set(1)
-
-    #         return mask
-        
-    #     def predicate_fn(state):
-    #         child_mask = child_mask_fn(state)
-    #         legal_hop_mask = legal_hop_mask_fn(state).any(axis=1)
-
-    #         # Check whether there are any legal hops starting from the given mask
-    #         masked_legal_hops = legal_hop_mask * child_mask
-    #         return masked_legal_hops.any()
-        
-    #     info = {}
-
-    #     return predicate_fn, info
-
     def predicate_exists(self, children):
         '''
         Return whether the given mask is active anywhere on the board
@@ -2402,13 +2320,16 @@ class GameRuleParser(Transformer):
 
         NOTE: to simplify syntax, it's possible to specify "multi-masks" (see above)
         instead of manually enumerating each of the target masks
+
+        TODO: in games where pieces can be removed, the connected components might
+        change in unexpected ways
         '''
         piece, (_, target_masks_infos), *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
         # Parse out the target mask functions
         target_mask_fns, _ = zip(*target_masks_infos)
-        num_targets = len(target_mask_fns)
+        collect_masks = utils._get_collect_values_fn(target_mask_fns)
 
         if optional_args[OptionalArgs.MOVER] == PlayerAndMoverRefs.MOVER:
             offset = 0
@@ -2417,7 +2338,7 @@ class GameRuleParser(Transformer):
 
         def function_fn(state):
             mover = (state.current_player + offset) % 2
-            target_masks = jax.vmap(lambda i: jax.lax.switch(i, target_mask_fns, state))(jnp.arange(num_targets))
+            target_masks = collect_masks(state)
 
             # The connected components are necessarily computed in the update_additional_info call
             set_val = state.previous_actions[mover] + 1

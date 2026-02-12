@@ -594,7 +594,7 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
 
     def get_connected_components_piece(state, action, piece_idx):
         cur_components = state.connected_components[piece_idx]
-        set_val = action + 1
+        set_val = (action + 1).astype(jnp.int8)
 
         board_occupant = state.board[piece_idx, action]
         cur_components = cur_components.at[action].set(set_val)
