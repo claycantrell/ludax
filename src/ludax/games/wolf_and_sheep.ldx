@@ -17,16 +17,10 @@
         )
         (play
             (repeat (P1 P2)
-                (or
-                    (move "wolf"
-                        (step direction:diagonal)
-                        (source (occupied mover)) 
-                        (destination empty)
-                    )
-                    (move "sheep"
-                        (step direction:(forward_left forward_right))
-                        (source (occupied mover)) 
-                        (destination empty)
+                (move
+                    (or
+                        (step "wolf" direction:diagonal)
+                        (step "sheep" direction:(forward_left forward_right))
                     )
                 )
             )

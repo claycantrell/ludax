@@ -17,41 +17,18 @@
         )
         (play
             (repeat (P1 P2)
-                (or
-                    (move "pawn"
-                        (
-                            (hop direction:(forward_left forward_right) mover:opponent priority:0)
-                            (slide direction:(forward_left forward_right) distance:1 priority:1)
-                        )
-                        (source (occupied mover)) 
-                        (destination empty)
-                        (effects
-                            (capture (hopped))
-                            (promote "king" (edge forward))
-                            (if (and
-                                    (exists (captured))
-                                    (or
-                                        (can_hop (prev_move mover) direction:(forward_left forward_right) mover:opponent)
-                                        (and (exists (promoted)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
-                                    )
-                                )
-                                (extra_turn mover same_piece:true)
-                            )
-                        )
+                (move
+                    (or
+                        (hop "pawn" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)
+                        (step "pawn" direction:(forward_left forward_right) priority:1)
+                        
+                        (hop "king" direction:diagonal hop_over:opponent capture:true priority:0)
+                        (step "king" direction:diagonal priority:1)
                     )
-
-                    (move "king"
-                        (
-                            (hop direction:diagonal mover:opponent priority:0)
-                            (slide direction:diagonal distance:1 priority:1)
-                        )
-                        (source (occupied mover)) 
-                        (destination empty)
-                        (effects
-                            (capture (hopped))
-                            (if (and (exists (captured)) (can_hop (prev_move mover) direction:diagonal mover:opponent))
-                                (extra_turn mover same_piece:true)
-                            )
+                    (effects
+                        (promote "pawn" "king" (edge forward))
+                        (if (and (action_was mover hop) (can_move_again hop))
+                            (extra_turn mover same_piece:true)
                         )
                     )
                 )

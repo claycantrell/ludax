@@ -9,7 +9,6 @@ connect_four = _read_game('connect_four')
 connect_six = _read_game('connect_six')
 dai_hasami_shogi = _read_game('dai_hasami_shogi')
 english_draughts = _read_game('english_draughts')
-english_draughts_alt = _read_game('english_draughts_alt')
 hasami_shogi = _read_game('hasami_shogi')
 hex = _read_game('hex')
 hop_through = _read_game('hop_through')
@@ -22,7 +21,6 @@ yavalax = _read_game('yavalax')
 test = _read_game('test')
 test_slide = _read_game('test_slide')
 wolf_and_sheep = _read_game('wolf_and_sheep')
-wolf_and_sheep_alt = _read_game('wolf_and_sheep_alt')
 
 # List of all games available in the package
 __all__ = [
@@ -30,7 +28,6 @@ __all__ = [
     "connect_six",
     "dai_hasami_shogi",
     "english_draughts",
-    "english_draughts_alt",
     "hasami_shogi",
     "hex",
     "hop_through",
@@ -43,5 +40,4 @@ __all__ = [
     "test",
     "test_slide",
     "wolf_and_sheep",
-    "wolf_and_sheep_alt",
 ]
