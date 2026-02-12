@@ -504,14 +504,19 @@ class GameRuleParser(Transformer):
                 
                 def sub_apply_action_fn(state, action):
 
+                    start, direction = action // self.num_directions, action % self.num_directions
+                    
                     # By construction, we know that the legal action mask computed above will be
                     # stored in the first dimension at the 0th index and that hops are stored first
-                    # TODO: can we avoid recomputing this mask here?
                     all_masks = collect_legal_masks(state)
-
-                    # Determine whether the action is a hop or a step based on the legal masks
-                    start, direction = action // self.num_directions, action % self.num_directions
                     is_hop = all_masks[0, start, direction] == 1
+
+                    # NOTE: An alternative possibility: Determine whether the action is a hop or a step based
+                    # on whether the board is occupied in the step direction. This won't necessarily work for
+                    # games in which you can capture with a step (since those steps would take you to an occupied
+                    # square) and doesn't empirically seem to be faster...
+                    # end_pos = self.slide_lookup[direction, start, 1]
+                    # is_hop = state.board[:, end_pos].any()
 
                     return jax.lax.cond(
                         is_hop,
