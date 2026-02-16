@@ -14,10 +14,8 @@
         )
         (play
             (repeat (P1 P2)
-                (move "token"
-                    (slide direction:orthogonal)
-                    (source (occupied mover)) 
-                    (destination empty)
+                (move 
+                    (slide "token" direction:orthogonal)
                     (effects 
                         (capture (or (custodial "token" 1 orientation:orthogonal) (corner_custodial "token")))
                     )
