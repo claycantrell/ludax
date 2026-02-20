@@ -2,29 +2,33 @@
     (players 2)
     (equipment 
         (board (square 9))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules
         (start
-            (place P1 ((row 7) (row 8)))
-            (place P2 ((row 0) (row 1)))
+            (place "token" P1 ((row 7) (row 8)))
+            (place "token" P2 ((row 0) (row 1)))
         )
         (play
             (repeat (P1 P2)
                 (move
-                    ((slide direction:orthogonal) (hop direction:orthogonal))
-                    (source (occupied mover)) 
-                    (destination empty)
+                    (or
+                        (slide "token" direction:orthogonal)
+                        (hop "token" direction:orthogonal)
+                    )
                     (effects 
-                        (capture (or (custodial 1 orientation:orthogonal) (corner_custodial)))
+                        (capture (or (custodial "token" 1 orientation:orthogonal) (corner_custodial "token")))
                     )
                 )
             )
         )
         
         (end 
-            (if (and (line 5 orientation:orthogonal exclude:((row 7) (row 8))) (mover_is P1)) (mover win))
-            (if (and (line 5 orientation:orthogonal exclude:((row 0) (row 1))) (mover_is P2)) (mover win))
+            (if (and (line "token" 5 orientation:orthogonal exclude:((row 7) (row 8))) (mover_is P1)) (mover win))
+            (if (and (line "token" 5 orientation:orthogonal exclude:((row 0) (row 1))) (mover_is P2)) (mover win))
         )
     )
 )

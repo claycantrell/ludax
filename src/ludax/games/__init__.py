@@ -8,6 +8,7 @@ def _read_game(game_name: str) -> str:
 connect_four = _read_game('connect_four')
 connect_six = _read_game('connect_six')
 dai_hasami_shogi = _read_game('dai_hasami_shogi')
+english_draughts = _read_game('english_draughts')
 hasami_shogi = _read_game('hasami_shogi')
 hex = _read_game('hex')
 hop_through = _read_game('hop_through')
@@ -17,13 +18,14 @@ reversi = _read_game('reversi')
 tic_tac_toe = _read_game('tic_tac_toe')
 yavalath = _read_game('yavalath')
 yavalax = _read_game('yavalax')
-test = _read_game('test')
+wolf_and_sheep = _read_game('wolf_and_sheep')
 
 # List of all games available in the package
 __all__ = [
     "connect_four",
     "connect_six",
     "dai_hasami_shogi",
+    "english_draughts",
     "hasami_shogi",
     "hex",
     "hop_through",
@@ -33,5 +35,5 @@ __all__ = [
     "tic_tac_toe",
     "yavalath",
     "yavalax",
-    "test",
+    "wolf_and_sheep",
 ]

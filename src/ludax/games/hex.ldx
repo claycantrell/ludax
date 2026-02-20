@@ -1,20 +1,23 @@
 (game "Hex"
-    (players 2)
+    (players 2
+        (set_forward (P1 up) (P2 right))
+    )
     (equipment 
         (board (hex_rectangle 11 11))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules 
         (play
             (repeat (P1 P2)
-                (place (destination empty))
+                (place "token" (destination empty))
             )
         )
         
-        (end 
-            (if (and (>= (connected ((edge top) (edge bottom))) 2) (mover_is P1)) (mover win))
-            (if (and (>= (connected ((edge left) (edge right))) 2) (mover_is P2)) (mover win))
-            (if (full_board) (draw))    
+        (end
+            (if (>= (connected "token" ((edge forward) (edge backward))) 2) (mover win))
         )
     )
 )

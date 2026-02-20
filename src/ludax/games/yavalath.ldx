@@ -2,17 +2,20 @@
     (players 2)
     (equipment 
         (board (hexagon 9))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules 
         (play 
             (repeat (P1 P2)
-                (place (destination empty))
+                (place "token" (destination empty))
             )
         )
         (end 
-            (if (line 4) (mover win))
-            (if (line 3) (mover lose))
+            (if (line "token" 4) (mover win))
+            (if (line "token" 3) (mover lose))
         )
     )
 )

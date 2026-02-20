@@ -18,10 +18,10 @@ PRNGKey = Any
 TRUE = jnp.bool_(True)
 FALSE = jnp.bool_(False)
 
-INVALID = jnp.int16(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
-EMPTY = jnp.int16(-1)
-P1 = jnp.int16(0)
-P2 = jnp.int16(1)
+INVALID = jnp.int8(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
+EMPTY = jnp.int8(-1)
+P1 = jnp.int8(0)
+P2 = jnp.int8(1)
 
 MAX_STEP_COUNT = 200
 
@@ -44,12 +44,17 @@ class State():
     game_state: type
     current_player: Array
     legal_action_mask: Array
-    winners: Array = EMPTY * jnp.ones(2, jnp.int16)
+    winners: Array = EMPTY * jnp.ones(2, jnp.int8)
     rewards: Array = jnp.float32([0.0, 0.0])
     mover_reward: Array = jnp.float32(0.0)
     terminated: Array = FALSE
     truncated: Array = FALSE
     global_step_count: Array = jnp.int16(0)
+
+class ActionTypes(StrEnum):
+    TO = 'action_to'
+    FROM_DIR = 'action_from_dir'
+    FROM_TO = 'action_from_to'
 
 class BoardShapes(StrEnum):
     SQUARE = 'board_square'
@@ -86,6 +91,14 @@ class Directions(StrEnum):
     UP_RIGHT = 'up_right'
     VERTICAL = 'vertical'
 
+class RelativeDirections(StrEnum):
+    FORWARD = 'forward'
+    BACKWARD = 'backward'
+    FORWARD_LEFT = 'forward_left'
+    FORWARD_RIGHT = 'forward_right'
+    BACKWARD_LEFT = 'backward_left'
+    BACKWARD_RIGHT = 'backward_right'
+
 class Orientations(StrEnum):
     ANY = 'any'
     BACK_DIAGONAL = 'back_diagonal'
@@ -94,6 +107,13 @@ class Orientations(StrEnum):
     HORIZONTAL = 'horizontal'
     ORTHOGONAL = 'orthogonal'
     VERTICAL = 'vertical'
+
+class PieceShapes(StrEnum):
+    CIRCLE = 'circle'
+    SQUARE = 'square'
+    TRIANGLE = 'triangle'
+    STAR = 'star'
+    DIAMOND = 'diamond'
 
 class PlayPhases(StrEnum):
     SPECIFIC_PLAYER = 'phase_specific_player'
@@ -132,33 +152,46 @@ class Masks(StrEnum):
     PATTERN = 'mask_pattern'
 
 class MoveTypes(StrEnum):
+    PLACE = 'move_place'
     HOP = 'move_hop'
     SLIDE = 'move_slide'
-    PLACE = 'move_place'
+    STEP = 'move_step'
+
+# A bit odd, but pieces are either "any" or are defined by name elsewhere
+class PieceRefs(StrEnum):
+    ANY = 'any'
 
 class PlayEffects(StrEnum):
     CAPTURE = 'effect_capture'
+    EXTRA_TURN = 'effect_extra_turn'
     FLIP = 'effect_flip'
+    PROMOTE = 'effect_promote'
 
 class Predicates(StrEnum):
+    CAN_HOP = 'predicate_can_hop'
     EXISTS = 'predicate_exists'
 
 class OptionalArgs(StrEnum):
+    CAPTURE = 'capture_arg'
     DIRECTION = 'direction_arg'
     DISTANCE = 'distance_arg'
     EXACT = 'exact_arg'
     EXCLUDE = 'exclude_arg'
+    HOP_OVER = 'hop_over_arg'
     INCREMENT_SCORE = 'increment_score_arg'
     ORIENTATION = 'orientation_arg'
     MOVER = 'mover_arg'
     MULTI_MASK = 'multi_mask_arg'
     PATTERN = 'pattern_arg'
+    PIECE = 'piece_arg'
     PLAYER = 'player_arg'
+    PRIORITY = 'priority_arg'
     ROTATE = 'rotate_arg'
+    SAME_PIECE = 'same_piece_arg'
 
 DEFAULT_ARGUMENTS = {
-    Functions.CONNECTED: {OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
+    Functions.CONNECTED: {OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
 
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CORNER_CUSTODIAL: {OptionalArgs.MOVER: 'mover'},
@@ -167,11 +200,16 @@ DEFAULT_ARGUMENTS = {
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
     Masks.PATTERN: {OptionalArgs.ROTATE: False},
 
-    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any'},
-    MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None},
+    MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
+    MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
+    MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
+    PlayEffects.EXTRA_TURN: {OptionalArgs.SAME_PIECE: False},
     PlayEffects.FLIP: {OptionalArgs.MOVER: 'opponent'},
+    PlayEffects.PROMOTE: {OptionalArgs.MOVER: 'mover'},
+
+    Predicates.CAN_HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'both'},
 }
 
 

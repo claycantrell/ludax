@@ -1,27 +1,27 @@
 (game "HopThrough" 
-    (players 2)
+    (players 2
+        (set_forward (P1 up) (P2 down))
+    )
     (equipment 
         (board (square 8))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules
         (start
-            (place P1 ((row 0) (row 1)))
-            (place P2 ((row 6) (row 7)))
+            (place "token" P1 ((row 6) (row 7)))
+            (place "token" P2 ((row 0) (row 1)))
         )
         (play
             (repeat (P1 P2)
-                (move
-                    (hop direction:any)
-                    (source (occupied mover)) 
-                    (destination empty)
-                )
+                (move (hop "token" direction:any))
             )
         )
         
-        (end 
-            (if (and (exists (and (occupied mover) (row 7))) (mover_is P1)) (mover win))
-            (if (and (exists (and (occupied mover) (row 0))) (mover_is P2)) (mover win))
+        (end
+            (if (exists (and (occupied mover) (edge forward))) (mover win))
         )
     )
 )

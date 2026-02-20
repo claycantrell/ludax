@@ -2,24 +2,27 @@
     (players 2)
     (equipment 
         (board (square 8))
+        (pieces
+            ("token" both)
+        )
     ) 
     
     (rules
         (start
-            (place P1 (28 35))
-            (place P2 (27 36))
+            (place "token" P1 (28 35))
+            (place "token" P2 (27 36))
         )
         (play
             (repeat (P1 P2)
-                (place 
+                (place "token"
                     (destination empty)
                     (result 
                         (exists
-                            (custodial any)
+                            (custodial "token" any)
                         )
                     )
                     (effects 
-                        (flip (custodial any))
+                        (flip (custodial "token" any))
                         (set_score mover (count (occupied mover)))
                         (set_score opponent (count (occupied opponent)))
                     )
