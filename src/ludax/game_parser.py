@@ -2083,7 +2083,7 @@ class GameRuleParser(Transformer):
         move_type_idx = list(MoveTypes).index(f"move_{move_type}")
 
         def predicate_fn(state):
-            piece = state.board[state.previous_actions[state.current_player]].argmax()
+            piece = state.board[:, state.previous_actions[state.current_player]].argmax()
             return state.can_move_again[state.current_player, piece, move_type_idx]
         
         return predicate_fn, {}
