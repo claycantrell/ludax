@@ -8,9 +8,7 @@ Largely inspired by: https://github.com/chrisgrimm/muzero/blob/main/networks/mct
 from typing import NamedTuple, Tuple
 
 import jax
-import jax.ops
 import jax.numpy as jnp
-import numpy as np
 
 from ludax import LudaxEnvironment
 from ludax.config import State
@@ -100,7 +98,6 @@ def is_valid_node(mcts_params: MCTSParams, node_idx: int, action: int) -> bool:
     '''
     Returns whether the given action is valid at the given node (i.e. whether the child node has already been expanded)
     '''
-    # return mcts_params.transitions[node_idx, action] != -1 & mcts_params.legal_actions[node_idx, action]
     return mcts_params.transitions[node_idx, action] != -1
 
 def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PRNGKey, c: float = 1.41) -> int:
@@ -119,7 +116,6 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PR
     legal_actions = mcts_params.legal_actions[node_idx]
 
     # The rewards need to be flipped if the player to play at this node is not the root player
-    # jax.debug.print("Current player is root? {}", mcts_params.to_play[node_idx] == mcts_params.player_idx)
     rewards = jax.lax.select(
         mcts_params.to_play[node_idx] == mcts_params.player_idx,
         mcts_params.rewards[node_idx],
@@ -128,7 +124,6 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PR
     '''
     rewards = rewards if (player := root_player) else -rewards
     '''
-    # rewards = mcts_params.rewards[node_idx]
     
     total_visits = jnp.sum(visits)
     
@@ -139,15 +134,10 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PR
         jnp.inf
     )
 
-    # ucb_values = rewards / (visits + 1e-6) + c * jnp.sqrt(jnp.log(total_visits + 1) / (visits + 1e-6))
-
     ucb_values = jnp.where(legal_actions, ucb_values, -jnp.inf)
-    # max_action = jnp.argmax(ucb_values)
 
     logits = jnp.where(ucb_values == ucb_values.max(), 0.0, -jnp.inf)
     max_action = jax.random.categorical(key, logits=logits, axis=0).astype(jnp.int16)
-
-    # jax.debug.print("Selecting action {} at node {}, to_play {}, root_player {}", max_action, node_idx, mcts_params.to_play[node_idx], mcts_params.player_idx)
 
     return max_action, ucb_values
 
@@ -184,7 +174,6 @@ def traverse_to_leaf(mcts_params: MCTSParams, max_depth: int, key: jax.random.PR
 
     # Initialize the scan with the root node and an initial action
     node_idx, (action, _) = 0, select_action_ucb(mcts_params, 0, key)
-    # jax.debug.print("\nStarting rollout from node {}, action {}", node_idx, action)
     init_carry = (node_idx, action, True, key)
     (_, _, _, key), (nodes, actions, valid) = jax.lax.scan(body_fn, init_carry, jnp.arange(max_depth))
 
@@ -209,22 +198,14 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
     last_valid_step = jnp.argmax(jnp.where(traversal.valid, jnp.arange(num_steps), 0))
     node_idx, action = traversal.nodes[last_valid_step], traversal.actions[last_valid_step]
 
-    # jax.debug.print(" - Expanding leaf at depth {}, node {}, action {}", last_valid_step, node_idx, action)
-    # jax.debug.print(" - Expanding leaf at depth {}, node {}, actions {}", last_valid_step, node_idx, rollout.actions)
     leaf_state = jax.tree_util.tree_map(lambda x: x[node_idx], mcts_params.states)
     next_state = step_fn(leaf_state, action.astype(jnp.int16))
-    # jax.debug.print(" - Next state board: {}", next_state.game_state.board)
     reward, key = evaluate_state(mcts_params, next_state, step_fn, key)
 
     # If the leaf was terminal, then we use the actual reward instead of a rollout reward
     # leaf_reward = (leaf_state.rewards[mcts_params.player_idx] + 1) / 2
     leaf_reward = leaf_state.rewards[mcts_params.player_idx] * REWARD_SCALE
     reward = jax.lax.select(leaf_state.terminated | leaf_state.truncated, leaf_reward, reward)
-
-    # jax.debug.callback(logging_callback, "leaf idx: {} -- leaf term. {} -- leaf reward: {:.3f} -- next term. {} -- next reward: {:.3f} -- reward: {}", node_idx, leaf_state.terminated, leaf_reward, next_state.terminated, next_state.rewards[mcts_params.player_idx], reward)
-
-    # jax.debug.print(" - Leaf state was terminated: {}, truncated: {}, leaf reward: {}", leaf_state.terminated, leaf_state.truncated, leaf_reward)
-    # jax.debug.print(" - Evaluated leaf state with reward {}", reward)
 
     expansion_node_idx = mcts_params.node_num + 1
 
@@ -238,12 +219,6 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
     # Increment the visit counts and rewards along the path (including the newly expanded node)
     updated_visits = mcts_params.visits.at[valid_node_idxs, valid_actions].add(1)
     updated_rewards = mcts_params.rewards.at[valid_node_idxs, valid_actions].add(reward)
-
-    # Update 9/11/2025 -- this seems to be duplicating the last valid node idx
-    # updated_visits = updated_visits.at[node_idx, action].add(1)
-    # updated_rewards = updated_rewards.at[node_idx, action].add(reward)
-
-    # jax.debug.print("Valid node idxs: {}, node idx: {}", valid_node_idxs, node_idx)
 
     mcts_params = mcts_params._replace(
         visits=updated_visits,
@@ -268,8 +243,6 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
         mcts_params
     )
 
-    # jax.debug.callback(logging_callback, "expanding? {} -- exp idx: {} -- terminated at exp: {}", ~(leaf_state.terminated | leaf_state.truncated), expansion_node_idx, next_state.terminated)
-
     return mcts_params, key
 
 def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key: jax.random.PRNGKey) -> float:
@@ -293,10 +266,6 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
 
     # Return the reward for the player to play at the root, r \in [-1, 0, 1]
     reward = final_state.rewards[mcts_params.player_idx]
-
-    # Scale [-1, 1] to [0, 1]
-    # reward = (reward + 1) / 2
-
     reward *= REWARD_SCALE
 
     return reward, key
