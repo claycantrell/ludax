@@ -207,7 +207,7 @@ increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
-pattern_arg: "(" positive_int+ ")"
+pattern_arg: "(" nonnegative_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
 piece_arg: "piece:" piece_reference
 priority_arg: "priority:" nonnegative_int

@@ -245,44 +245,96 @@ def _get_slide_lookup(game_info: GameInfo):
     '''
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     num_board_positions = game_info.board_size
-    n_rows, n_cols = game_info.board_dims
     num_line_positions = max(game_info.board_dims) if game_info.board_shape != BoardShapes.HEXAGON else game_info.hex_diameter
+
+    mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
+    dummy_board = mask_to_board(jnp.zeros(num_board_positions, dtype=jnp.int8))
+    n_rows, n_cols = dummy_board.shape
 
     slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=jnp.int8)
 
     for channel_idx, direction in enumerate(directions):
         for i in range(num_board_positions):
-            row, col = jnp.unravel_index(i, game_info.board_dims)
+            row, col = idx_to_pos(i)
 
+            # For hex-rectangle boards, the "up-left" and "down-right" directions are just straight up and down, so we have to handle those differently
+            # NOTE: this behavior is visually intuitive but somewhat mechanically unintuitive, since it means certain "diagonal" moves only displace
+            # a piece in one axis instead of two
             if direction == Directions.UP_LEFT:
-                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, -1, -1))]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((r, c), dummy_board.shape) for r, c in zip(range(row, -1, -1), range(col, -1, -1))]
+                
+                elif game_info.board_shape == BoardShapes.HEX_RECTANGLE:
+                    indices = [jnp.ravel_multi_index((r, col), dummy_board.shape) for r in range(row, -1, -1)]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    board_indices = jnp.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, -1, -1))], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
             elif direction == Directions.UP:
                 indices = [jnp.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, -1, -1)]
 
             elif direction == Directions.UP_RIGHT:
-                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, n_cols))]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE, BoardShapes.HEX_RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, n_cols))]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    board_indices = jnp.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, n_cols))], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
             elif direction == Directions.LEFT:
-                indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, -1, -1)]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE, BoardShapes.HEX_RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, -1, -1)]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    start_col = abs((n_rows // 2) - row) - 1
+                    board_indices = jnp.array([[row, c] for c in range(col, start_col, -2)], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
             elif direction == Directions.RIGHT:
-                indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, n_cols)]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE, BoardShapes.HEX_RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((row, c), game_info.board_dims) for c in range(col, n_cols)]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    end_col = n_cols - abs((n_rows // 2) - row) + 1
+                    board_indices = jnp.array([[row, c] for c in range(col, end_col, 2)], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
+
 
             elif direction == Directions.DOWN_LEFT:
-                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, -1, -1))]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE, BoardShapes.HEX_RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, -1, -1))]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    board_indices = jnp.array([[r, c] for r, c in zip(range(row, n_rows), range(col, -1, -1))], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
 
             elif direction == Directions.DOWN:
                 indices = [jnp.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, n_rows)]
 
+            # See note above about hex-rectangle boards
             elif direction == Directions.DOWN_RIGHT:
-                indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, n_cols))]
+                if game_info.board_shape in [BoardShapes.SQUARE, BoardShapes.RECTANGLE]:
+                    indices = [jnp.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, n_cols))]
+                
+                elif game_info.board_shape == BoardShapes.HEX_RECTANGLE:
+                    indices = [jnp.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, n_rows)]
+                
+                elif game_info.board_shape == BoardShapes.HEXAGON:
+                    board_indices = jnp.array([[r, c] for r, c in zip(range(row, n_rows), range(col, n_cols))], dtype=jnp.int8)
+                    occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
+                    indices = jnp.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
 
             # Pad the indices with num_board_positions+1 to ensure that the resulting array has the correct shape
             indices = jnp.array(indices + [num_board_positions + 1] * (num_line_positions - len(indices)), dtype=jnp.int8)
-
+            
             slide_lookup = slide_lookup.at[channel_idx, i].set(indices)
-
+    
     return slide_lookup
 
 def _get_mask_board_conversion_fns(game_info: GameInfo):

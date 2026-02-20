@@ -1,0 +1,46 @@
+(game "English Draughts" 
+    (players 2
+        (set_forward (P1 up) (P2 down))
+    )
+    (equipment 
+        (board (hexagon 9))
+        (pieces
+            ("pawn" both)
+            ("king" both)
+        )
+    ) 
+    
+    (rules
+        (start
+            (place "pawn" P1 (50 52 54 56 58 60))
+            (place "pawn" P2 (0 2 4 6 8 10))
+        )
+        (play
+            (repeat (P1 P2)
+                (move
+                    (or
+                        (hop "pawn" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)
+                        (step "pawn" direction:(forward_left forward_right) priority:1)
+                        
+                        (hop "king" direction:diagonal hop_over:opponent capture:true priority:0)
+                        (step "king" direction:diagonal priority:1)
+                    )
+                    (effects
+                        (promote "pawn" "king" (edge forward))
+                        (if (and (action_was mover hop) (can_move_again hop))
+                            (extra_turn mover same_piece:true)
+                        )
+                    )
+                )
+            )
+        )
+        
+        (end
+            (if (no_legal_actions) (mover win))
+        )
+    )
+    (rendering
+        (color P1 black)
+        (color P2 white)
+    )
+)
