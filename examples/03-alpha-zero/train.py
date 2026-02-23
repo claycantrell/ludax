@@ -50,7 +50,7 @@ devices = jax.local_devices()
 num_devices = len(devices)
 
 class Config(BaseModel):
-    env_id: str = "reversi" # other supported games are "tic_tac_toe", "hex", "connect_four", "reversi", ...
+    env_id: str = "tic_tac_toe" # other supported games are "tic_tac_toe", "hex", "connect_four", "reversi", ...
     env_type: str = "ldx"
     seed: int = 0
     max_num_iters: int = 1000
@@ -135,9 +135,8 @@ def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state: pgx.St
     del rng_key
     model_params, model_state = model
 
-    current_player = state.current_player if config.env_type=="pgx" else state.game_state.current_player
     if not config.env_type == "pgx":
-        action = action.astype(jnp.int16)
+        action = action.astype(jnp.int8)
     state = jax.vmap(env.step)(state, action)
 
     (logits, value), _ = forward.apply(model_params, model_state, observe(env, state), is_eval=True)
@@ -146,7 +145,7 @@ def recurrent_fn(model, rng_key: jnp.ndarray, action: jnp.ndarray, state: pgx.St
     logits = jnp.where(state.legal_action_mask, logits, jnp.finfo(logits.dtype).min)
 
     rewards = state.rewards
-    reward = rewards[jnp.arange(rewards.shape[0]), current_player]
+    reward = rewards[jnp.arange(rewards.shape[0]), state.current_player]
     value = jnp.where(state.terminated, 0.0, value)
     discount = -1.0 * jnp.ones_like(value)
     discount = jnp.where(state.terminated, 0.0, discount)
@@ -193,11 +192,11 @@ def selfplay(model, rng_key: jnp.ndarray) -> SelfplayOutput:
             gumbel_scale=1.0,
         )
 
-        actor = state.current_player if config.env_type=="pgx" else state.game_state.current_player
+        actor = state.current_player
         keys = jax.random.split(key2, batch_size)
         action = policy_output.action
         if not config.env_type == "pgx":
-            action = action.astype(jnp.int16)
+            action = action.astype(jnp.int8)
         state = jax.vmap(auto_reset(env.step, env.init))(state, action, keys)
         discount = -1.0 * jnp.ones_like(value)
         discount = jnp.where(state.terminated, 0.0, discount)
@@ -302,15 +301,14 @@ def evaluate(rng_key, my_model, my_player: int):
             my_model_params, my_model_state, observe(env, state), is_eval=True
         )
         opp_logits = baseline(state)
-        current_player = state.current_player if config.env_type=="pgx" else state.game_state.current_player
-        is_my_turn = (current_player == my_player).reshape((-1, 1))
+        is_my_turn = (state.current_player == my_player).reshape((-1, 1))
         logits = jnp.where(is_my_turn, my_logits, opp_logits)
         logits = jnp.where(state.legal_action_mask, logits, jnp.finfo(my_logits.dtype).min)
         key, subkey = jax.random.split(key)
         action = jax.random.categorical(subkey, logits, axis=-1)
 
         if not config.env_type == "pgx":
-            action = action.astype(jnp.int16)
+            action = action.astype(jnp.int8)
 
         state = jax.vmap(env.step)(state, action)
         rewards = state.rewards

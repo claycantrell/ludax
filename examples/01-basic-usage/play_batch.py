@@ -33,7 +33,7 @@ def _run_batch(state, key):
 
 run_batch = jax.jit(_run_batch)
 
-key = jax.random.PRNGKey(42)
+key = jax.random.PRNGKey(0)
 key, subkey = jax.random.split(key)
 keys = jax.random.split(subkey, BATCH_SIZE)
 

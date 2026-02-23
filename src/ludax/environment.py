@@ -188,10 +188,10 @@ class LudaxEnvironment():
         observation[:, :, 0] == True  → squares occupied by the current player (black or white)
         observation[:, :, 1] == True  → squares occupied by the other player (black or white)
         """
-        board = state.game_state.board
+        board_layer = state.game_state.board[..., 0, :]
         observation_shape = self.game_info.observation_shape
 
-        board2d = board.reshape(*board.shape[:-1], observation_shape[-3], observation_shape[-2])
+        board2d = board_layer.reshape(*board_layer.shape[:-1], observation_shape[-3], observation_shape[-2])
         player_id = player_id[..., None, None]
 
         obs = jnp.stack((board2d == player_id, board2d == jnp.abs(1 - player_id)), axis=-1)
