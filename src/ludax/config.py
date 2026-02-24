@@ -57,10 +57,10 @@ class ActionTypes(StrEnum):
     FROM_TO = 'action_from_to'
 
 class BoardShapes(StrEnum):
-    SQUARE = 'board_square'
-    RECTANGLE = 'board_rectangle'
-    HEXAGON = 'board_hexagon'
-    HEX_RECTANGLE = 'board_hex_rectangle'
+    SQUARE = 'square'
+    RECTANGLE = 'rectangle'
+    HEXAGON = 'hexagon'
+    HEX_RECTANGLE = 'hex_rectangle'
 
 class EdgeTypes(StrEnum):
     TOP = 'top'
@@ -141,6 +141,7 @@ class GameResult(StrEnum):
 class Functions(StrEnum):
     CONNECTED = 'function_connected'
     LINE = 'function_line'
+    PATTERN = 'function_pattern'
 
 class Masks(StrEnum):
     ADJACENT = 'mask_adjacent'
@@ -149,7 +150,6 @@ class Masks(StrEnum):
     EMPTY = 'mask_empty'
     LOOP = 'mask_loop'
     OCCUPIED = 'mask_occupied'
-    PATTERN = 'mask_pattern'
 
 class MoveTypes(StrEnum):
     PLACE = 'move_place'
@@ -188,17 +188,18 @@ class OptionalArgs(StrEnum):
     PRIORITY = 'priority_arg'
     ROTATE = 'rotate_arg'
     SAME_PIECE = 'same_piece_arg'
+    SHAPE = 'shape_arg'
 
 DEFAULT_ARGUMENTS = {
     Functions.CONNECTED: {OptionalArgs.PIECE: 'any', OptionalArgs.MOVER: 'mover', OptionalArgs.DIRECTION: 'any'},
-    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
+    Functions.LINE: {OptionalArgs.ORIENTATION: 'any', OptionalArgs.EXACT: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
+    Functions.PATTERN: {OptionalArgs.ROTATE: False, OptionalArgs.PLAYER: 'mover', OptionalArgs.EXCLUDE: None},
 
     Masks.ADJACENT: {OptionalArgs.DIRECTION: 'any'},
     Masks.CORNER_CUSTODIAL: {OptionalArgs.MOVER: 'mover'},
     Masks.CUSTODIAL: {OptionalArgs.MOVER: 'mover', OptionalArgs.ORIENTATION: 'any'},
     Masks.LOOP: {OptionalArgs.MOVER: 'mover'},
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
-    Masks.PATTERN: {OptionalArgs.ROTATE: False},
 
     MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},

@@ -796,6 +796,79 @@ def _get_custodial_indices(game_info: GameInfo, inner_n: int, orientation: Orien
 
     return inner_indices, outer_indices
 
+def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rotate: bool = False):
+    '''
+    Like _get_line_indices, this function returns the indices of the board corresponding to a particular
+    pattern, defined either by manually listing local indices with respect to a "width" parameter or by
+    specifying a particular shape (e.g. 2x2 square)
+    '''
+
+    # Manual pattern specification
+    if arg_type == OptionalArgs.PATTERN:
+        pattern_width, indices = pattern
+
+        # Determine the *actual* dimensions of the pattern (which might be smaller than the provided width if the pattern is irregular)
+        pattern_height = (max(indices) // pattern_width) + 1
+        max_pattern_width  = max([idx % pattern_width for idx in indices]) + 1
+
+        # Convert the pattern indices to local (row, col) coordinates
+        local_pattern = [(idx // pattern_width, idx % pattern_width) for idx in indices]
+
+    # Shape-based pattern specification (e.g. square, rectangle, ...)
+    elif arg_type == OptionalArgs.SHAPE:
+        raise NotImplementedError("Shape-based pattern specification not implemented yet!")
+
+    else:
+        raise ValueError(f"Invalid argument type for pattern indices: {arg_type}")
+    
+    # Compute the rotated versions of the pattern if necessary
+    if rotate:
+        cur_pattern = local_pattern[:]
+        rotated_patterns = [cur_pattern]
+        for _ in range(3):
+            rotated_pattern = [(c, pattern_height - 1 - r) for r, c in cur_pattern]
+
+            # Shift negative coordinates to ensure the pattern is in the top-left quadrant
+            min_row = min(r for r, c in rotated_pattern)
+            min_col = min(c for r, c in rotated_pattern)
+            rotated_pattern = [(r - min_row, c - min_col) for r, c in rotated_pattern]
+
+            rotated_patterns.append(rotated_pattern)
+            cur_pattern = rotated_pattern
+
+    if game_info.board_shape == BoardShapes.SQUARE or game_info.board_shape == BoardShapes.RECTANGLE:
+        board_height, board_width = game_info.board_dims
+        indices = []
+
+        for row in range(board_height):
+            for col in range(board_width):
+                start = row * board_width + col
+
+                # Check if the pattern can fit at this position
+                can_fit = (row + pattern_height <= board_height) and (col + max_pattern_width <= board_width)
+                if can_fit:    
+                    transformed_indices = [start + (r * board_width) + c for r, c in local_pattern]
+                    indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
+
+                if rotate:
+                    # Add the 180 degree rotation of the pattern (rotated[2])
+                    if can_fit:
+                        transformed_indices_180 = [start + (r * board_width) + c for r, c in rotated_patterns[2]]
+                        indices.append(jnp.array(transformed_indices_180, dtype=jnp.int16))
+
+                    # Check if the rotated pattern can fit at this position
+                    can_fit_rotated = (row + max_pattern_width <= board_height) and (col + pattern_height <= board_width)
+                    if can_fit_rotated:
+                        transformed_indices_90 = [start + (r * board_width) + c for r, c in rotated_patterns[1]]
+                        transformed_indices_270 = [start + (r * board_width) + c for r, c in rotated_patterns[3]]
+                        indices.append(jnp.array(transformed_indices_90, dtype=jnp.int16))
+                        indices.append(jnp.array(transformed_indices_270, dtype=jnp.int16))
+
+    else:
+        raise NotImplementedError(f"Pattern-based indices not implemented yet for board shape {game_info.board_shape}")
+    
+    return jnp.array(indices, dtype=jnp.int16)
+
 def _get_collect_values_fn(outer_children, vmap=False):
     '''
     This returns a function which will collect the values of each of the children

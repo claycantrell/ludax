@@ -1019,6 +1019,7 @@ class GameRuleParser(Transformer):
         # The legal action function and apply action function depend on the action space structure
         # Case 1: action space is (board_size, num_directions)
         if self.game_info.action_type == ActionTypes.FROM_DIR:
+            
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
                 piece_mask = (state.board[piece] == state.current_player).astype(jnp.int8)
@@ -1866,7 +1867,7 @@ class GameRuleParser(Transformer):
             return (state.board == ((state.current_player + offset)%2)).any(axis=0).astype(jnp.int8)
         
         return mask_fn, {}
-    
+
     def mask_prev_move(self, children):
         '''
         Returns a mask that is only active at the position of the current player's
@@ -2371,7 +2372,8 @@ class GameRuleParser(Transformer):
         NOTE: 'line' is also the only "mask-like" function, which means it also returns a
         "mask_fn" in its info dict. This is mostly useful for game rules that refer to an
         action that forms a line (e.g. "go again if you form a line of 4"), since that can't
-        be read from only the function value
+        be read from only the function value, but we can check that the last move is part of
+        the relevant mask
         '''
         piece, n, *optional_args = children
 
@@ -2410,7 +2412,8 @@ class GameRuleParser(Transformer):
 
             # If there are no valid lines of this length / orientation, then always return 0
             if line_indices.size == 0:
-                return lambda state: 0, {}
+                return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8),
+                                         "mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8)}
 
             overshoot_line_indices = utils._get_line_indices(self.game_info, n+1, orientation)
 
@@ -2456,7 +2459,8 @@ class GameRuleParser(Transformer):
 
             # If there are no valid lines of this length / orientation, then always return 0
             if line_indices.size == 0:
-                return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8)}
+                return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8),
+                                         "mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8)}
 
             def function_fn(state):
                 occupied_mask = get_occupied_mask(state)
@@ -2510,6 +2514,55 @@ class GameRuleParser(Transformer):
             
         return function_fn, {}
     
+    def function_pattern(self, children):
+        piece, (pattern_arg_type, pattern), *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
+
+        player = optional_args[OptionalArgs.PLAYER]
+        exclude = optional_args[OptionalArgs.EXCLUDE]
+        rotate = optional_args[OptionalArgs.ROTATE]
+
+        # Get the basic "occupied" mask function for the specified piece / player, which might
+        # be composed with an "exclude" mask to remove certain positions from consideration
+        base_mask_fn = utils._get_occupied_mask_fn(piece, player)
+        
+        if exclude is not None:
+            _, exclude_mask_info = exclude
+
+            # Case where there's only one mask function (it will be a tuple of (fn, info))
+            if isinstance(exclude_mask_info, tuple):
+                exclude_mask_fns = [exclude_mask_info[0]]
+            else:
+                exclude_mask_fns, _ = list(zip(*exclude_mask_info))
+            
+            collect_values = utils._get_collect_values_fn(exclude_mask_fns)
+
+            def get_occupied_mask(state):
+                occupied_mask = base_mask_fn(state)
+                exclude_mask = collect_values(state).any(axis=0).astype(jnp.int8)
+                return occupied_mask & ~exclude_mask
+            
+        else:
+            def get_occupied_mask(state):
+                return base_mask_fn(state)
+            
+        # Precompute the pattern indices
+        pattern_indices = utils._get_pattern_indices(self.game_info, pattern_arg_type, pattern, rotate)
+
+        # If there are no pattern placements, then always return 0
+        if pattern_indices.size == 0:
+            return lambda state: 0, {"lookahead_mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8),
+                                     "mask_fn": lambda state: jnp.zeros(self.game_info.board_size, dtype=jnp.int8)}
+
+        def function_fn(state):
+            occupied_mask = get_occupied_mask(state)
+            line_matches = (occupied_mask[pattern_indices] == 1).all(axis=1)
+            return line_matches.sum()
+        
+        # TODO: mask_fn and lookahead_mask_fn
+
+        return function_fn, {}
+
     def function_score(self, children):
         '''
         Return the score of the specified player

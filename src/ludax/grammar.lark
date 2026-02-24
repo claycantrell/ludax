@@ -10,10 +10,10 @@ p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 // ---Equipment---
 equipment: "(" "equipment" board pieces ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
-board_square: "(" "square" number ")"
-board_rectangle: "(" "rectangle" number number ")"
-board_hexagon: "(" "hexagon"  number ")"
-board_hex_rectangle: "(" "hex_rectangle" number number ")"
+?board_square: square
+?board_rectangle: rectangle
+?board_hexagon: hexagon
+?board_hex_rectangle: hex_rectangle
 
 // ---Pieces---
 pieces: "(" "pieces" piece_definition+ ")"
@@ -85,6 +85,7 @@ function: function_add
         | function_count
         | function_line
         | function_multiply
+        | function_pattern
         | function_score
         | function_subtract
 
@@ -94,6 +95,7 @@ function_constant: positive_int
 function_count: "(" "count" super_mask ")"
 function_line: "(" "line" piece_reference positive_int orientation_arg? exact_arg? player_arg? exclude_arg? ")"
 function_multiply: "(" "multiply" function+ ")"
+function_pattern: "(" "pattern" piece_reference (pattern_arg | shape_arg) rotate_arg? player_arg? exclude_arg? ")"
 function_score: "(" "score" mover_reference ")"
 function_subtract: "(" "subtract" function function ")"
 
@@ -125,7 +127,6 @@ mask: mask_adjacent
     | mask_empty
     | mask_hopped
     | mask_occupied
-    | mask_pattern
     | mask_prev_move
     | mask_promoted
     | mask_row
@@ -142,7 +143,6 @@ mask_empty: "empty"
 mask_hopped: "(" "hopped" ")"
 // TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
-mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
@@ -197,7 +197,6 @@ predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 // Additional (potentially optional) arguments for predicates
 capture_arg: "capture:" boolean
 custodial_length_arg: ANY | positive_int
-dimensions_arg: "(" positive_int positive_int ")"
 direction_arg: "direction:" (direction | multi_direction)
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
@@ -207,12 +206,25 @@ increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
-pattern_arg: "(" nonnegative_int+ ")"
+pattern_arg: "(" positive_int indices ")" // The positive int is the "width" of the pattern and the indices are the positions within the pattern
+indices: "(" nonnegative_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
 piece_arg: "piece:" piece_reference
 priority_arg: "priority:" nonnegative_int
 rotate_arg: "rotate:" boolean
 same_piece_arg: "same_piece:" boolean
+shape_arg: "(" shape_definition ")"
+
+// Shapes
+shape_definition: hexagon
+                | hex_rectangle
+                | rectangle
+                | square
+
+hexagon: "(" "hexagon" positive_int ")"
+hex_rectangle: "(" "hex_rectangle" positive_int positive_int ")"
+rectangle: "(" "rectangle" positive_int positive_int ")"
+square: "(" "square" positive_int ")"
 
 // Optional rendering details
 rendering: "(" "rendering" rendering_detail+ ")"
