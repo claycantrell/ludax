@@ -4,7 +4,7 @@ import re
 import svgwrite
 from svgwrite import cm, mm
 
-from ..config import BoardShapes, PieceShapes, P1, P2, RENDER_CONFIG
+from ..config import Shapes, PieceShapes, P1, P2, RENDER_CONFIG
 
 
 class InteractiveBoardHandler():
@@ -26,7 +26,7 @@ class InteractiveBoardHandler():
         self.animation_snippet = '<animate attributeName="opacity" values="1;0.33;1" dur="1s" calcMode="paced" fill="freeze" />'
         
 
-        if self.game_info.board_shape == BoardShapes.SQUARE or self.game_info.board_shape == BoardShapes.RECTANGLE:
+        if self.game_info.board_shape == Shapes.SQUARE or self.game_info.board_shape == Shapes.RECTANGLE:
             self.cell_size *= 2
             height, width = self.game_info.board_dims
             self.action_indices = [(y, x) for y in range(height) for x in range(width)]
@@ -38,7 +38,7 @@ class InteractiveBoardHandler():
             self.total_width = width * self.cell_size
             self.total_height = height * self.cell_size
         
-        elif self.game_info.board_shape == BoardShapes.HEXAGON:
+        elif self.game_info.board_shape == Shapes.HEXAGON:
             self.orientation = render_config['hexagon_orientation']
 
             # Compute the ordered sequence or (q, r, s) indices that correspond to horizontal scans over the board
@@ -70,7 +70,7 @@ class InteractiveBoardHandler():
                 self.total_width = hex_width * diameter
                 self.total_height = (hex_height * full_cells_across) + (hex_height * half_cells_across / 2)
 
-        elif self.game_info.board_shape == BoardShapes.HEX_RECTANGLE:
+        elif self.game_info.board_shape == Shapes.HEX_RECTANGLE:
             # The canonical 'hex rectangle' is always 'pointy'
             self.orientation = 'pointy'
             height, width = self.game_info.board_dims

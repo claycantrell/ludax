@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import ActionTypes, BoardShapes, PieceShapes, PlayerAndMoverRefs, MoveTypes
+from .config import ActionTypes, Shapes, PieceShapes, PlayerAndMoverRefs, MoveTypes
 
 @dataclass
 class GameInfo:
@@ -113,21 +113,21 @@ class GameInfoExtractor(Visitor):
         board_shape = str(shape_tree.data)
         self.game_info.board_shape = board_shape
 
-        if board_shape == BoardShapes.SQUARE:
+        if board_shape == Shapes.SQUARE:
             size = int(shape_tree.children[0])
             self.game_info.observation_shape = (size, size, 2)
             self.game_info.board_dims = (size, size)
             self.game_info.board_size = size ** 2
             self.game_info.num_directions = 8
 
-        elif board_shape == BoardShapes.RECTANGLE:
+        elif board_shape == Shapes.RECTANGLE:
             width, height = map(int, shape_tree.children)
             self.game_info.observation_shape = (width, height, 2)
             self.game_info.board_dims = (width, height)
             self.game_info.board_size = width * height
             self.game_info.num_directions = 8
 
-        elif board_shape == BoardShapes.HEXAGON:
+        elif board_shape == Shapes.HEXAGON:
             diameter = int(shape_tree.children[0])
             assert diameter % 2 == 1, "Hexagon board diameter must be odd!"
 
@@ -140,7 +140,7 @@ class GameInfoExtractor(Visitor):
             self.game_info.board_size = 1 + sum([(i * 6) for i in range(1, diameter//2 + 1)])
             self.game_info.num_directions = 6
 
-        elif board_shape == BoardShapes.HEX_RECTANGLE:
+        elif board_shape == Shapes.HEX_RECTANGLE:
             width, height = map(int, shape_tree.children)
             self.game_info.observation_shape = (width, height, 2)
             self.game_info.board_dims = (width, height)
@@ -270,8 +270,7 @@ class GameInfoExtractor(Visitor):
         if "can_move_again" not in self.game_state_attributes:
             self.game_state_attributes.append("can_move_again")
             
-            # The "can_move_again" array tracks for each player,
-            # piece type, and move type
+            # The "can_move_again" array tracks for each player, piece type, and move type
             num_move_types = len(MoveTypes)
             self.defaults.append(jnp.zeros((2, self.game_info.num_piece_types, num_move_types), dtype=jnp.bool_))
 

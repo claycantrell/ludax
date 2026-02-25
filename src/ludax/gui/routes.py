@@ -8,7 +8,7 @@ from markupsafe import Markup
 import numpy as np
 
 from .. import environment, utils
-from ..config import ActionTypes, BoardShapes, RENDER_CONFIG
+from ..config import ActionTypes, Shapes, RENDER_CONFIG
 
 from . import app
 from .render import InteractiveBoardHandler
@@ -41,7 +41,7 @@ def cube_round(q, r, s):
 def display_board(state, env):
 
     # Display the board
-    if env.game_info.board_shape != BoardShapes.HEXAGON:
+    if env.game_info.board_shape != Shapes.HEXAGON:
         shaped_board = state.game_state.board.reshape(env.obs_shape[:2])
         for row in shaped_board:
             pretty_row = ' '.join(str(cell) for cell in row + 1)

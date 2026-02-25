@@ -30,9 +30,12 @@ class GameRuleParser(Transformer):
         else:
             to_return = children
 
-        # In order to handle optional arguments, they need
-        # to return their name along with their value
+        # In order to handle optional arguments, they need to return their name along with their value
         if data.endswith("_arg"):
+            return str(data), to_return
+        
+        # Special case for shapes (return the shape information along with the dimensions)
+        if data.endswith("_shape"):
             return str(data), to_return
         
         return to_return

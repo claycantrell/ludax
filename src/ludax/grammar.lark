@@ -10,10 +10,10 @@ p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 // ---Equipment---
 equipment: "(" "equipment" board pieces ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
-?board_square: square
-?board_rectangle: rectangle
-?board_hexagon: hexagon
-?board_hex_rectangle: hex_rectangle
+?board_square: square_shape
+?board_rectangle: rectangle_shape
+?board_hexagon: hexagon_shape
+?board_hex_rectangle: hex_rectangle_shape
 
 // ---Pieces---
 pieces: "(" "pieces" piece_definition+ ")"
@@ -213,18 +213,18 @@ piece_arg: "piece:" piece_reference
 priority_arg: "priority:" nonnegative_int
 rotate_arg: "rotate:" boolean
 same_piece_arg: "same_piece:" boolean
-shape_arg: "(" shape_definition ")"
+shape_arg: shape_definition
 
-// Shapes
-shape_definition: hexagon
-                | hex_rectangle
-                | rectangle
-                | square
+// Shapes referring to board configurations (e.g. for the "pattern" function), distinct from piece shapes for rendering
+shape_definition: hexagon_shape
+                | hex_rectangle_shape
+                | rectangle_shape
+                | square_shape
 
-hexagon: "(" "hexagon" positive_int ")"
-hex_rectangle: "(" "hex_rectangle" positive_int positive_int ")"
-rectangle: "(" "rectangle" positive_int positive_int ")"
-square: "(" "square" positive_int ")"
+hexagon_shape: "(" "hexagon" positive_int ")"
+hex_rectangle_shape: "(" "hex_rectangle" positive_int positive_int ")"
+rectangle_shape: "(" "rectangle" positive_int positive_int ")"
+square_shape: "(" "square" positive_int ")"
 
 // Optional rendering details
 rendering: "(" "rendering" rendering_detail+ ")"
@@ -232,7 +232,7 @@ rendering_detail: color_assignment
                 | piece_shape_assignment
 
 color_assignment: "(" "color" player_reference color ")"
-piece_shape_assignment: "(" "shape" piece_reference shape ")"
+piece_shape_assignment: "(" "shape" piece_reference piece_shape ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
@@ -247,7 +247,7 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 ?relative_direction: FORWARD | BACKWARD | FORWARD_LEFT | FORWARD_RIGHT | BACKWARD_LEFT | BACKWARD_RIGHT
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?color: WHITE | BLACK
-?shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
+?piece_shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
 // ----------------------------
 
 ?player_reference: P1 | P2

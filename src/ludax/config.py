@@ -56,11 +56,11 @@ class ActionTypes(StrEnum):
     FROM_DIR = 'action_from_dir'
     FROM_TO = 'action_from_to'
 
-class BoardShapes(StrEnum):
-    SQUARE = 'square'
-    RECTANGLE = 'rectangle'
-    HEXAGON = 'hexagon'
-    HEX_RECTANGLE = 'hex_rectangle'
+class Shapes(StrEnum):
+    SQUARE = 'square_shape'
+    RECTANGLE = 'rectangle_shape'
+    HEXAGON = 'hexagon_shape'
+    HEX_RECTANGLE = 'hex_rectangle_shape'
 
 class EdgeTypes(StrEnum):
     TOP = 'top'
