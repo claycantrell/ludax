@@ -36,7 +36,10 @@ num_devices = len(devices)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+# python examples/03-alpha-zero/train.py env_id=reversi     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
 # python examples/03-alpha-zero/train.py env_id=hex     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
+# python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
+# python examples/03-alpha-zero/train.py env_id=checkers     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
 class Config(BaseModel):
     env_id: str = "reversi"
     env_type: str = "ldx"
@@ -68,6 +71,23 @@ print(config)
 
 
 # ---------------------------------------------------------------------------
+# Environment setup (must happen before network definition)
+# ---------------------------------------------------------------------------
+
+if config.env_id == "othello":
+    config.env_id = "reversi"
+
+env = (
+    pgx.make(config.env_id if config.env_id != "reversi" else "othello")
+    if config.env_type == "pgx"
+    else LudaxEnvironment(game_str=getattr(games, config.env_id))
+)
+
+# Materialize as a concrete Python int so Haiku shape checks don't trace.
+num_actions = int(env.num_actions)
+
+
+# ---------------------------------------------------------------------------
 # Environment helpers
 # ---------------------------------------------------------------------------
 
@@ -85,7 +105,7 @@ def observe(env, state: pgx.State) -> jnp.ndarray:
 
 def forward_fn(x, is_eval=False):
     net = AZNet(
-        num_actions=env.num_actions,
+        num_actions=num_actions,
         num_channels=config.num_channels,
         num_blocks=config.num_layers,
         resnet_v2=config.resnet_v2,
@@ -321,16 +341,6 @@ def play_match(rng_key, model_a, model_b, num_games: int) -> Tuple[int, int, int
 # ===========================================================================
 
 if __name__ == "__main__":
-
-    # -- Environment setup ------------------------------------------------
-    if config.env_id == "othello":
-        config.env_id = "reversi"
-
-    env = (
-        pgx.make(config.env_id if config.env_id != "reversi" else "othello")
-        if config.env_type == "pgx"
-        else LudaxEnvironment(game_str=getattr(games, config.env_id))
-    )
 
     # -- Model init -------------------------------------------------------
     wandb.init(project="pgx-az", config=config.model_dump())

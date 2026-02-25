@@ -11,16 +11,14 @@ Key design decisions:
     full sweep through all pairs, the order is reshuffled. Elo ratings are
     updated after every single pairing, so later pairings always use the
     freshest ratings.
-  - Wandb plots and leaderboards are logged every `--log_interval` pairings
-    (default: once per full sweep).
+  - Matplotlib plots are saved (overwritten) every `--log_interval` pairings.
   - Checkpoints on the x-axis are ordered by iteration number within each run.
 
 Usage:
     python tournament.py \\
         --dirs checkpoints/run1 checkpoints/run2 \\
         --env_id reversi --env_type ldx \\
-        --games_per_pair 32 \\
-        --wandb_project pgx-az-tournament
+        --games_per_pair 32
 
 All flags:
     --dirs            List of checkpoint directories (one per training run)
@@ -28,12 +26,11 @@ All flags:
     --env_type        pgx or ldx (default: read from first checkpoint)
     --games_per_pair  Games per pair per side, so total = 2x this
     --log_interval    Log every N pairings (default: num_pairs, i.e. once per sweep)
-    --wandb_project   Wandb project name
+    --plot_path       Path to save the Elo plot (default: elo_ratings.png)
     --seed            RNG seed
 
-python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_20260225025721 checkpoints/reversi_pgx_20260225040246 --env_id reversi --env_type pgx --games_per_pair 64 --wandb_project pgx-az-tournament
-python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_test checkpoints/reversi_pgx_test --env_id reversi --env_type pgx --games_per_pair 64 --wandb_project pgx-az-tournament
-
+python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_20260225025721 checkpoints/reversi_pgx_20260225040246 --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100
+python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_test checkpoints/reversi_pgx_test --env_id reversi --env_type pgx --games_per_pair 64
 """
 
 import argparse
@@ -49,8 +46,8 @@ from typing import Any, Dict, List, NamedTuple, Tuple
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import numpy as np
-import wandb
 from tqdm import tqdm
 
 import pgx
@@ -259,28 +256,31 @@ def play_match(
 
 
 # ---------------------------------------------------------------------------
-# Wandb plotting
+# Matplotlib plotting
 # ---------------------------------------------------------------------------
 
-def log_elo_plot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int):
-    """Log a wandb plot: x = iteration, y = Elo, grouped by run."""
-    table = wandb.Table(columns=["checkpoint", "iteration", "run", "elo"])
+def save_elo_plot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int, plot_path: str):
+    """Save a matplotlib plot: x = iteration, y = Elo, grouped by run."""
+    runs: Dict[str, Tuple[List[int], List[float]]] = {}
     for ckpt in checkpoints:
-        table.add_data(ckpt.label, ckpt.iteration, ckpt.run_name, elos[ckpt.label])
+        if ckpt.run_name not in runs:
+            runs[ckpt.run_name] = ([], [])
+        runs[ckpt.run_name][0].append(ckpt.iteration)
+        runs[ckpt.run_name][1].append(elos[ckpt.label])
 
-    plot = wandb.plot.line(
-        table, x="iteration", y="elo", stroke="run",
-        title=f"Elo Ratings (sweep {sweep}, step {step})",
-    )
-    wandb.log({"elo_chart": plot, "step": step, "sweep": sweep})
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for run_name, (iters, elo_vals) in runs.items():
+        ax.plot(iters, elo_vals, marker="o", markersize=4, label=run_name)
 
-    for ckpt in checkpoints:
-        wandb.log({
-            f"elo/{ckpt.label}": elos[ckpt.label],
-            "step": step,
-            "sweep": sweep,
-        }, commit=False)
-    wandb.log({"step": step, "sweep": sweep})
+    ax.set_xlabel("Training Iteration")
+    ax.set_ylabel("Elo Rating")
+    ax.set_title(f"Elo Ratings (sweep {sweep}, step {step})")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(plot_path)
+    plt.close(fig)
+    print(f"  Plot saved to {plot_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ def main():
     parser.add_argument("--env_type", type=str, default=None, help="pgx or ldx (auto-detected if omitted)")
     parser.add_argument("--games_per_pair", type=int, default=32, help="Games per pair per side")
     parser.add_argument("--log_interval", type=int, default=None, help="Log every N pairings (default: num_pairs)")
-    parser.add_argument("--wandb_project", type=str, default="pgx-az-tournament")
+    parser.add_argument("--plot_path", type=str, default="elo_ratings.pdf", help="Path to save the Elo plot")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -332,18 +332,6 @@ def main():
 
     forward = build_forward(env, first_config)
     play_batch_fn = make_play_fn(env, forward, env_type)
-
-    # -- Init wandb -------------------------------------------------------
-    wandb.init(
-        project=args.wandb_project,
-        config={
-            "env_id": env_id,
-            "env_type": env_type,
-            "num_checkpoints": n,
-            "games_per_pair": args.games_per_pair,
-            "dirs": args.dirs,
-        },
-    )
 
     # -- Init Elo ratings -------------------------------------------------
     elos: Dict[str, float] = {c.label: INITIAL_ELO for c in checkpoints}
@@ -400,7 +388,7 @@ def main():
                     max_delta = max(abs(elos[c.label] - snapshot_elos[c.label]) for c in checkpoints)
                     mean_delta = np.mean([abs(elos[c.label] - snapshot_elos[c.label]) for c in checkpoints])
 
-                    log_elo_plot(elos, checkpoints, step, sweep)
+                    save_elo_plot(elos, checkpoints, step, sweep, args.plot_path)
 
                     print(f"\n=== Step {step} (sweep {sweep}) | max Δ={max_delta:.1f} | mean Δ={mean_delta:.1f} ===")
                     ranked = sorted(checkpoints, key=lambda c: elos[c.label], reverse=True)
@@ -422,8 +410,7 @@ def main():
     for rank, c in enumerate(ranked, 1):
         print(f"  {rank:3d}. {c.label:40s}  Elo={elos[c.label]:7.1f}")
 
-    log_elo_plot(elos, checkpoints, step, sweep)
-    wandb.finish()
+    save_elo_plot(elos, checkpoints, step, sweep, args.plot_path)
     print("Done.")
 
 
