@@ -221,7 +221,7 @@ shape_definition: hexagon_shape
                 | rectangle_shape
                 | square_shape
 
-hexagon_shape: "(" "hexagon" positive_int ")"
+hexagon_shape: "(" "hexagon" odd_int ")"
 hex_rectangle_shape: "(" "hex_rectangle" positive_int positive_int ")"
 rectangle_shape: "(" "rectangle" positive_int positive_int ")"
 square_shape: "(" "square" positive_int ")"
@@ -238,6 +238,7 @@ piece_shape_assignment: "(" "shape" piece_reference piece_shape ")"
 ?number: SIGNED_NUMBER
 ?nonnegative_int: /(0|[1-9][0-9]*)/
 ?positive_int: /[1-9][0-9]*/
+?odd_int: /[0-9]*[13579]/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: true_direction | relative_direction

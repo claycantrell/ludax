@@ -240,8 +240,6 @@ def _get_slide_lookup(game_info: GameInfo):
     shape [C, M, N] where C is the number of channels (8 for rectangular boards, 6 for
     hexagonal boards), M is the number of positions on the board, and N is the maximum
     number of positions in a line in that direction.
-
-    TODO: work for hexagonal boards
     '''
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     num_board_positions = game_info.board_size
@@ -825,17 +823,41 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
         if (shape in [Shapes.HEXAGON, Shapes.HEX_RECTANGLE]) and (game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE]):
             return jnp.array([], dtype=jnp.int16)
         
-        
         if shape == Shapes.SQUARE:
-            pattern_width = shape_dims[0]
+            pattern_width = shape_dims
             max_pattern_width = pattern_width
-            pattern_height = shape_dims[0]
+            pattern_height = shape_dims
             local_pattern = [(r, c) for r in range(pattern_height) for c in range(pattern_width)]
 
         elif shape == Shapes.RECTANGLE:
             pattern_width, pattern_height = shape_dims
             max_pattern_width = pattern_width
             local_pattern = [(r, c) for r in range(pattern_height) for c in range(pattern_width)]
+
+        elif shape == Shapes.HEX_RECTANGLE:
+            pattern_width, pattern_height = shape_dims
+            max_pattern_width = pattern_width
+            local_pattern = [(r, c) for r in range(pattern_height) for c in range(pattern_width)]
+
+        elif shape == Shapes.HEXAGON:
+            # By grammar construction, the diameter of the hexagon is odd
+            diameter = shape_dims
+
+            row_widths = [diameter + x for x in range(-diameter//2 + 1, 0)] + [diameter + x for x in range(-diameter//2 + 1, 1)][::-1]
+
+            local_pattern = []
+            for r, width in enumerate(row_widths):
+                # If the row is above the diameter, the offset is towards the right
+                if r < diameter // 2:
+                    offset = diameter - row_widths[r]
+                    for c in range(offset, width + offset):
+                        local_pattern.append((r, c))
+                else:
+                    for c in range(width):
+                        local_pattern.append((r, c))
+            
+            pattern_height = diameter
+            max_pattern_width = diameter
 
         else:
             raise NotImplementedError(f"Shape {shape} not implemented yet for shape-based pattern specification!")
@@ -858,7 +880,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
             rotated_patterns.append(rotated_pattern)
             cur_pattern = rotated_pattern
 
-    if game_info.board_shape == Shapes.SQUARE or game_info.board_shape == Shapes.RECTANGLE:
+    if game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE, Shapes.HEX_RECTANGLE]:
         board_height, board_width = game_info.board_dims
         indices = []
 
