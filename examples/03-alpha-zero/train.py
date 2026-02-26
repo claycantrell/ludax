@@ -37,9 +37,9 @@ num_devices = len(devices)
 # Configuration
 # ---------------------------------------------------------------------------
 # python examples/03-alpha-zero/train.py env_id=reversi     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
-# python examples/03-alpha-zero/train.py env_id=hex     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
+# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
 # python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
-# python examples/03-alpha-zero/train.py env_id=checkers     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
+# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
 class Config(BaseModel):
     env_id: str = "reversi"
     env_type: str = "ldx"
@@ -94,9 +94,9 @@ num_actions = int(env.num_actions)
 @partial(jax.jit, static_argnums=0)
 def observe(env, state: pgx.State) -> jnp.ndarray:
     if config.env_type == "pgx":
-        return state.observation
+        return state.observation.astype(jnp.float32)
     else:
-        return env.observe(state, state.current_player)
+        return env.observe(state, state.current_player).astype(jnp.float32)
 
 
 # ---------------------------------------------------------------------------

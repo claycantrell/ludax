@@ -26,11 +26,13 @@ All flags:
     --env_type        pgx or ldx (default: read from first checkpoint)
     --games_per_pair  Games per pair per side, so total = 2x this
     --log_interval    Log every N pairings (default: num_pairs, i.e. once per sweep)
-    --plot_path       Path to save the Elo plot (default: elo_ratings.png)
+    --output_path       Path to save the Elo plot (default: elo_ratings.png)
     --seed            RNG seed
 
-python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_20260225025721 checkpoints/reversi_pgx_20260225040246 --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100
-python examples/03-alpha-zero/tournament.py --dirs checkpoints/reversi_ldx_test checkpoints/reversi_pgx_test --env_id reversi --env_type pgx --games_per_pair 64
+python examples/03-alpha-zero/tournament.py --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_reversi.pkl --dirs /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260225025721 /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260226070512 /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260226081042 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260225040246 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260226060055 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260226101344
+python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226034608 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226060249 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226091126 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
+python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
+
 """
 
 import argparse
@@ -259,28 +261,22 @@ def play_match(
 # Matplotlib plotting
 # ---------------------------------------------------------------------------
 
-def save_elo_plot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int, plot_path: str):
-    """Save a matplotlib plot: x = iteration, y = Elo, grouped by run."""
-    runs: Dict[str, Tuple[List[int], List[float]]] = {}
-    for ckpt in checkpoints:
-        if ckpt.run_name not in runs:
-            runs[ckpt.run_name] = ([], [])
-        runs[ckpt.run_name][0].append(ckpt.iteration)
-        runs[ckpt.run_name][1].append(elos[ckpt.label])
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    for run_name, (iters, elo_vals) in runs.items():
-        ax.plot(iters, elo_vals, marker="o", markersize=4, label=run_name)
-
-    ax.set_xlabel("Training Iteration")
-    ax.set_ylabel("Elo Rating")
-    ax.set_title(f"Elo Ratings (sweep {sweep}, step {step})")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(plot_path)
-    plt.close(fig)
-    print(f"  Plot saved to {plot_path}")
+def save_elo_snapshot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int, output_path: str):
+    """Pickle the current Elo state to disk (replaces the matplotlib plot)."""
+    # Derive snapshot path from output_path (swap extension)
+    snapshot_path = os.path.splitext(output_path)[0] + ".pkl"
+    payload = {
+        "step": step,
+        "sweep": sweep,
+        "elos": dict(elos),
+        "checkpoints": [
+            {"label": c.label, "run_name": c.run_name, "iteration": c.iteration, "path": c.path}
+            for c in checkpoints
+        ],
+    }
+    with open(snapshot_path, "wb") as f:
+        pickle.dump(payload, f)
+    print(f"  Elo snapshot saved to {snapshot_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +290,7 @@ def main():
     parser.add_argument("--env_type", type=str, default=None, help="pgx or ldx (auto-detected if omitted)")
     parser.add_argument("--games_per_pair", type=int, default=32, help="Games per pair per side")
     parser.add_argument("--log_interval", type=int, default=None, help="Log every N pairings (default: num_pairs)")
-    parser.add_argument("--plot_path", type=str, default="elo_ratings.pdf", help="Path to save the Elo plot")
+    parser.add_argument("--output_path", type=str, default="elo_ratings.pkl", help="Path to save the Elo plot")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -307,8 +303,6 @@ def main():
         return
 
     print(f"Loaded {n} checkpoints from {len(set(c.run_name for c in checkpoints))} runs:")
-    for c in checkpoints:
-        print(f"  {c.label}")
 
     # -- Detect env config from first checkpoint --------------------------
     with open(checkpoints[0].path, "rb") as f:
@@ -388,13 +382,9 @@ def main():
                     max_delta = max(abs(elos[c.label] - snapshot_elos[c.label]) for c in checkpoints)
                     mean_delta = np.mean([abs(elos[c.label] - snapshot_elos[c.label]) for c in checkpoints])
 
-                    save_elo_plot(elos, checkpoints, step, sweep, args.plot_path)
+                    save_elo_snapshot(elos, checkpoints, step, sweep, args.output_path)
 
                     print(f"\n=== Step {step} (sweep {sweep}) | max Δ={max_delta:.1f} | mean Δ={mean_delta:.1f} ===")
-                    ranked = sorted(checkpoints, key=lambda c: elos[c.label], reverse=True)
-                    for rank, c in enumerate(ranked, 1):
-                        delta = elos[c.label] - snapshot_elos[c.label]
-                        print(f"  {rank:3d}. {c.label:40s}  Elo={elos[c.label]:7.1f}  (Δ={delta:+.1f})")
                     print(f"\nPress Ctrl-C to stop.\n")
 
                     snapshot_elos = dict(elos)
@@ -410,7 +400,7 @@ def main():
     for rank, c in enumerate(ranked, 1):
         print(f"  {rank:3d}. {c.label:40s}  Elo={elos[c.label]:7.1f}")
 
-    save_elo_plot(elos, checkpoints, step, sweep, args.plot_path)
+    save_elo_snapshot(elos, checkpoints, step, sweep, args.output_path)
     print("Done.")
 
 
