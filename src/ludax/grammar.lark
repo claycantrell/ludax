@@ -10,10 +10,10 @@ p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 // ---Equipment---
 equipment: "(" "equipment" board pieces ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
-board_square: "(" "square" number ")"
-board_rectangle: "(" "rectangle" number number ")"
-board_hexagon: "(" "hexagon"  number ")"
-board_hex_rectangle: "(" "hex_rectangle" number number ")"
+?board_square: square_shape
+?board_rectangle: rectangle_shape
+?board_hexagon: hexagon_shape
+?board_hex_rectangle: hex_rectangle_shape
 
 // ---Pieces---
 pieces: "(" "pieces" piece_definition+ ")"
@@ -85,6 +85,7 @@ function: function_add
         | function_count
         | function_line
         | function_multiply
+        | function_pattern
         | function_score
         | function_subtract
 
@@ -94,6 +95,7 @@ function_constant: positive_int
 function_count: "(" "count" super_mask ")"
 function_line: "(" "line" piece_reference positive_int orientation_arg? exact_arg? player_arg? exclude_arg? ")"
 function_multiply: "(" "multiply" function+ ")"
+function_pattern: "(" "pattern" piece_reference (pattern_arg | shape_arg) rotate_arg? player_arg? exclude_arg? ")"
 function_score: "(" "score" mover_reference ")"
 function_subtract: "(" "subtract" function function ")"
 
@@ -125,7 +127,6 @@ mask: mask_adjacent
     | mask_empty
     | mask_hopped
     | mask_occupied
-    | mask_pattern
     | mask_prev_move
     | mask_promoted
     | mask_row
@@ -142,7 +143,6 @@ mask_empty: "empty"
 mask_hopped: "(" "hopped" ")"
 // TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
 mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
-mask_pattern: "(" "pattern" dimensions_arg pattern_arg rotate_arg? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
@@ -197,7 +197,6 @@ predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 // Additional (potentially optional) arguments for predicates
 capture_arg: "capture:" boolean
 custodial_length_arg: ANY | positive_int
-dimensions_arg: "(" positive_int positive_int ")"
 direction_arg: "direction:" (direction | multi_direction)
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
@@ -207,12 +206,25 @@ increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
-pattern_arg: "(" nonnegative_int+ ")"
+pattern_arg: "(" positive_int indices ")" // The positive int is the "width" of the pattern and the indices are the positions within the pattern
+indices: "(" nonnegative_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
 piece_arg: "piece:" piece_reference
 priority_arg: "priority:" nonnegative_int
 rotate_arg: "rotate:" boolean
 same_piece_arg: "same_piece:" boolean
+shape_arg: shape_definition
+
+// Shapes referring to board configurations (e.g. for the "pattern" function), distinct from piece shapes for rendering
+shape_definition: hexagon_shape
+                | hex_rectangle_shape
+                | rectangle_shape
+                | square_shape
+
+hexagon_shape: "(" "hexagon" odd_int ")"
+hex_rectangle_shape: "(" "hex_rectangle" positive_int positive_int ")"
+rectangle_shape: "(" "rectangle" positive_int positive_int ")"
+square_shape: "(" "square" positive_int ")"
 
 // Optional rendering details
 rendering: "(" "rendering" rendering_detail+ ")"
@@ -220,12 +232,13 @@ rendering_detail: color_assignment
                 | piece_shape_assignment
 
 color_assignment: "(" "color" player_reference color ")"
-piece_shape_assignment: "(" "shape" piece_reference shape ")"
+piece_shape_assignment: "(" "shape" piece_reference piece_shape ")"
 
 // General-purpose definitions
 ?number: SIGNED_NUMBER
 ?nonnegative_int: /(0|[1-9][0-9]*)/
 ?positive_int: /[1-9][0-9]*/
+?odd_int: /[0-9]*[13579]/
 ?boolean: TRUE | FALSE
 ?edge: TOP | BOTTOM | LEFT | RIGHT | TOP_LEFT | TOP_RIGHT | BOTTOM_LEFT | BOTTOM_RIGHT
 ?direction: true_direction | relative_direction
@@ -235,7 +248,7 @@ piece_shape_assignment: "(" "shape" piece_reference shape ")"
 ?relative_direction: FORWARD | BACKWARD | FORWARD_LEFT | FORWARD_RIGHT | BACKWARD_LEFT | BACKWARD_RIGHT
 ?orientation: VERTICAL | HORIZONTAL | ORTHOGONAL | DIAGONAL | BACK_DIAGONAL | FORWARD_DIAGONAL | ANY
 ?color: WHITE | BLACK
-?shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
+?piece_shape: CIRCLE | SQUARE | TRIANGLE | STAR | DIAMOND
 // ----------------------------
 
 ?player_reference: P1 | P2

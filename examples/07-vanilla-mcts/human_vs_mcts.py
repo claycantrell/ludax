@@ -2,7 +2,7 @@
 import jax
 import jax.numpy as jnp
 from ludax import LudaxEnvironment
-from ludax.config import BoardShapes
+from ludax.config import Shapes
 from ludax.games import connect_four
 
 from ludax.policies import uct_mcts_policy
