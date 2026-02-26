@@ -1,4 +1,5 @@
 from functools import partial
+import logging
 import typing
 
 import jax
@@ -804,6 +805,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
     # Manual pattern specification
     if arg_type == OptionalArgs.PATTERN:
         pattern_width, indices = pattern
+        shape = None
 
         # Determine the *actual* dimensions of the pattern (which might be smaller than the provided width if the pattern is irregular)
         pattern_height = (max(indices) // pattern_width) + 1
@@ -811,6 +813,9 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
 
         # Convert the pattern indices to local (row, col) coordinates
         local_pattern = [(idx // pattern_width, idx % pattern_width) for idx in indices]
+
+        if game_info.board_shape == Shapes.HEXAGON:
+            logging.warning("Manual pattern specification works with hexagonal boards, but the resulting patterns may not be visually intuitive due to the changing row widths.")
 
     # Shape-based pattern specification (e.g. square, rectangle, ...)
     elif arg_type == OptionalArgs.SHAPE:
@@ -866,7 +871,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
         raise ValueError(f"Invalid argument type for pattern indices: {arg_type}")
     
     # Compute the rotated versions of the pattern if necessary
-    if rotate:
+    if rotate and shape not in [Shapes.HEXAGON]:
         cur_pattern = local_pattern[:]
         rotated_patterns = [cur_pattern]
         for _ in range(3):
@@ -894,7 +899,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
                     transformed_indices = [start + (r * board_width) + c for r, c in local_pattern]
                     indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
 
-                if rotate:
+                if rotate and shape not in [Shapes.HEXAGON]:
                     # Add the 180 degree rotation of the pattern (rotated[2])
                     if can_fit:
                         transformed_indices_180 = [start + (r * board_width) + c for r, c in rotated_patterns[2]]
@@ -907,6 +912,42 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
                         transformed_indices_270 = [start + (r * board_width) + c for r, c in rotated_patterns[3]]
                         indices.append(jnp.array(transformed_indices_90, dtype=jnp.int16))
                         indices.append(jnp.array(transformed_indices_270, dtype=jnp.int16))
+
+    elif game_info.board_shape == Shapes.HEXAGON:
+        indices = []
+        board_diameter = game_info.hex_diameter
+        board_row_widths = [board_diameter + x for x in range(-board_diameter//2 + 1, 0)] + [board_diameter + x for x in range(-board_diameter//2 + 1, 1)][::-1]
+        row_starts = [0] + np.cumsum(board_row_widths)[:-1].tolist()
+
+        def check_fit(row, col, pattern):
+            for r, c in pattern:
+                board_r = row + r
+                board_c = col + c
+                if (board_r >= board_diameter) or (board_c < 0) or (board_c >= board_row_widths[board_r]):
+                    return False
+            return True
+        
+        def get_exceeded_width(start_row, local_row):
+            return sum([board_row_widths[start_row + i] + (1 if start_row + i < board_diameter // 2 else 0) for i in range(local_row)])
+
+        for row in range(board_diameter):
+            for col in range(board_row_widths[row]):
+                start = row_starts[row] + col
+
+                if rotate and shape not in [Shapes.HEXAGON]:
+                    for p in rotated_patterns:
+                        can_fit = check_fit(row, col, p)
+                        if can_fit:
+                            transformed_indices = [start + get_exceeded_width(row, r) + c for r, c in p]
+                            indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
+
+                else:
+                    # Check if the pattern can fit at this position
+                    can_fit = check_fit(row, col, local_pattern)
+                    
+                    if can_fit:
+                        transformed_indices = [start + get_exceeded_width(row, r) + c for r, c in local_pattern]
+                        indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
 
     else:
         raise NotImplementedError(f"Pattern-based indices not implemented yet for board shape {game_info.board_shape}")
