@@ -111,9 +111,14 @@
 </head>
 <body>
     <h1>Game Rendering</h1>  
-    <div id="svg_container">
-        {{ game_svg }}
-    </div>  
+    <div style="display: flex; align-items: flex-start; gap: 20px;">
+        <div id="svg_container">
+            {{ game_svg }}
+        </div>
+        <div id="legend_container">
+            {{ region_legend }}
+        </div>
+    </div>
     <div id="error_message"></div>
     <h2 id="cur_player">Current player: Player 1</h2>
     <h2 id="p1_score">Player 1 score: 0</h2>

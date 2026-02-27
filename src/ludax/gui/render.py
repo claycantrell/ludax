@@ -4,7 +4,10 @@ import re
 import svgwrite
 from svgwrite import cm, mm
 
-from ..config import Shapes, PieceShapes, P1, P2, RENDER_CONFIG
+import jax.numpy as jnp
+import numpy as np
+
+from ..config import Shapes, PieceShapes, P1, P2, EMPTY, RENDER_CONFIG
 
 
 class InteractiveBoardHandler():
@@ -104,7 +107,86 @@ class InteractiveBoardHandler():
             PieceShapes.STAR: self._draw_star,
             PieceShapes.DIAMOND: self._draw_diamond,
         }
-    
+
+        # Compute region masks using a dummy initial state
+        self.region_masks = {}
+        self._compute_region_masks()
+
+    def _compute_region_masks(self):
+        """
+        Compute region masks by running each region_mask_fn on a dummy initial state.
+        Stores the resulting masks indexed by region name.
+        """
+        if self.game_info.region_mask_fns is None or self.game_info.num_regions == 0:
+            return
+        
+        # Create a dummy state with an empty board to evaluate region mask functions
+        # Most region functions just need the board shape, not actual piece positions
+        from collections import namedtuple
+        
+        # Create a minimal dummy state with required attributes
+        DummyState = namedtuple('DummyState', ['board', 'current_player'])
+        dummy_board = jnp.ones((self.game_info.num_piece_types, self.game_info.board_size), dtype=jnp.int8) * EMPTY
+        dummy_state = DummyState(board=dummy_board, current_player=jnp.int8(0))
+        
+        # Evaluate each region mask function and store the result
+        region_colors = self.render_config.get('region_colors', [])
+        for idx, (region_name, mask_fn) in enumerate(zip(self.game_info.region_names, self.game_info.region_mask_fns)):
+            try:
+                mask = mask_fn(dummy_state)
+                # Convert to numpy array for easier indexing during rendering
+                mask_array = np.array(mask).astype(bool)
+                color = region_colors[idx % len(region_colors)] if region_colors else self.render_config['light_blue']
+                self.region_masks[region_name] = {
+                    'mask': mask_array,
+                    'color': color
+                }
+            except Exception as e:
+                # If evaluation fails (e.g., mask depends on game state), skip this region
+                print(f"Warning: Could not compute region mask for '{region_name}': {e}")
+                continue
+
+    def _get_cell_fill_color(self, cell_index):
+        """
+        Determine the fill color for a cell based on which regions it belongs to.
+        Returns the color of the first matching region, or the default light_blue.
+        """
+        for region_name, region_info in self.region_masks.items():
+            if cell_index < len(region_info['mask']) and region_info['mask'][cell_index]:
+                return region_info['color']
+        return self.render_config["light_blue"]
+
+    def render_legend(self):
+        """
+        Generate an HTML legend showing region names and their colors.
+        Returns an HTML string that can be inserted into the page.
+        """
+        if not self.region_masks:
+            return ""
+        
+        legend_items = []
+        for region_name, region_info in self.region_masks.items():
+            color = region_info['color']
+            formatted_name = region_name.replace('"', '').replace('_', ' ').title()
+
+            # Create a colored box and region name
+            item = f'''
+            <div style="display: flex; align-items: center; margin: 5px 0;">
+                <div style="width: 20px; height: 20px; background-color: {color}; 
+                            border: 1px solid #666; margin-right: 10px;"></div>
+                <span>{formatted_name}</span>
+            </div>
+            '''
+            legend_items.append(item)
+        
+        legend_html = f'''
+        <div style="margin-top: 15px; padding: 10px; border: 1px solid #ccc; 
+                    border-radius: 5px; background-color: #f9f9f9;">
+            <h3 style="margin: 0 0 10px 0; font-size: 20px;">Regions</h3>
+            {''.join(legend_items)}
+        </div>
+        '''
+        return legend_html
 
     def _grid_to_pixel(self, grid_point):
         '''
@@ -326,7 +408,8 @@ class InteractiveBoardHandler():
 
                 # Draw the cell only in the first sub-board (to avoid overdrawing)
                 if piece_id == 0:
-                    drawing.add(drawing.polygon(vertices, fill=self.render_config["light_blue"], stroke=self.render_config["light_grey"], stroke_width=1))
+                    cell_fill = self._get_cell_fill_color(i)
+                    drawing.add(drawing.polygon(vertices, fill=cell_fill, stroke=self.render_config["light_grey"], stroke_width=1))
 
                 if last_action is not None and i == last_action:
                     cls = "last-action"

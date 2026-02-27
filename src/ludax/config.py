@@ -229,6 +229,15 @@ RENDER_CONFIG = {
     "dark_grey": "#a6a6a6",
     "purple": "#8a7af0",
 
+    # Region colors (cycled through for multiple regions)
+    "region_colors": [
+        "#ffe4b5",  # light orange
+        "#e4ffb5",  # light lime
+        "#ffb5e4",  # light pink
+        "#b5ffb5",  # light green
+        "#e4b5ff",  # light purple
+    ],
+
     # SVG Style information
     "svg_style": """
         <style>

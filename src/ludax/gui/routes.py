@@ -134,7 +134,10 @@ def render_game(id):
         
     time.sleep(0.1)
 
-    return render_template('game.html', game_svg=Markup(HANDLER.rendered_svg))
+    # Generate region legend
+    region_legend = HANDLER.render_legend()
+
+    return render_template('game.html', game_svg=Markup(HANDLER.rendered_svg), region_legend=Markup(region_legend))
 
 @app.route('/step', methods=['POST'])
 def step():
