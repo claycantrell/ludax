@@ -804,7 +804,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
 
     # Manual pattern specification
     if arg_type == OptionalArgs.PATTERN:
-        pattern_width, indices = pattern
+        pattern_width, (_, indices) = pattern
         shape = None
 
         # Determine the *actual* dimensions of the pattern (which might be smaller than the provided width if the pattern is irregular)

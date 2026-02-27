@@ -139,7 +139,7 @@ class GameRuleParser(Transformer):
         elif player_ref == PlayerAndMoverRefs.P2:
             player = P2
 
-        if place_arg_type == OptionalArgs.PATTERN:
+        if place_arg_type == OptionalArgs.INDICES:
             pattern = jnp.array(place_arg_info, dtype=jnp.int8)
 
             def start_fn(state):
@@ -326,6 +326,52 @@ class GameRuleParser(Transformer):
             raise SyntaxError(f"Piece '{piece_ref}' not defined in game pieces: {self.game_info.piece_names}")
         
         return self.game_info.piece_names.index(piece_ref)
+
+    '''
+    Regions
+    '''
+    def region_definition(self, children):
+        name, (region_arg_type, region_arg_info) = children
+        region_idx = self.game_info.region_names.index(name)
+
+        if region_arg_type == OptionalArgs.INDICES:
+            pattern = jnp.array(region_arg_info, dtype=jnp.int8)
+            def region_fn(state):
+                mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int8)
+                mask = mask.at[pattern].set(1)
+                return mask
+            
+        elif region_arg_type == OptionalArgs.MULTI_MASK:
+
+            # Case where there's only one mask function (it will be a tuple of (fn, info))
+            if isinstance(region_arg_info, tuple):
+                region_mask_fns = [region_arg_info[0]]
+            else:
+                region_mask_fns, _ = list(zip(*region_arg_info))
+            
+            collect_values = utils._get_collect_values_fn(region_mask_fns)
+
+            def region_fn(state):
+                all_masks = collect_values(state)
+                mask = all_masks.any(axis=0).astype(jnp.int8)
+                return mask
+
+        else:
+            raise NotImplementedError(f"Region argument type {region_arg_type} not implemented yet!")
+        
+        self.game_info.region_mask_fns[region_idx] = region_fn
+
+    def region_reference(self, children):
+        '''
+        Throwing a syntax error here makes the language not context-free, but it's necessary
+        to ensure the game is actually playable
+        '''
+        region_ref = children[0]
+
+        if region_ref not in self.game_info.region_names:
+            raise SyntaxError(f"Region '{region_ref}' not defined in game regions: {self.game_info.region_names}")
+        
+        return self.game_info.region_names.index(region_ref)
 
     '''
     Place rules

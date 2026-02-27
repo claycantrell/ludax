@@ -8,7 +8,7 @@ p1_assignment: "(" P1 (UP | DOWN | LEFT | RIGHT) ")"
 p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 
 // ---Equipment---
-equipment: "(" "equipment" board pieces ")"
+equipment: "(" "equipment" board pieces regions? ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
 ?board_square: square_shape
 ?board_rectangle: rectangle_shape
@@ -20,13 +20,18 @@ pieces: "(" "pieces" piece_definition+ ")"
 piece_definition: "(" name (player_reference | BOTH) ")"
 piece_reference: name
 
+// ---Regions---
+regions: "(" "regions" region_definition+ ")"
+region_definition: "(" name (indices_arg | multi_mask_arg) ")"
+region_reference: name
+
 // ---Rules---
 rules: "(" "rules" start_rules? play_rules end_rules ")"
 
 // ---Start rules---
 start_rules: "(" "start" start_rule+ ")"
 start_rule: start_place
-start_place: "(" "place" piece_reference player_reference (pattern_arg | multi_mask_arg) ")"
+start_place: "(" "place" piece_reference player_reference (indices_arg | multi_mask_arg) ")"
 
 // ---Play rules---
 play_rules: "(" "play" play_phase+ ")"
@@ -206,8 +211,8 @@ increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"
 orientation_arg: "orientation:" orientation
-pattern_arg: "(" positive_int indices ")" // The positive int is the "width" of the pattern and the indices are the positions within the pattern
-indices: "(" nonnegative_int+ ")"
+pattern_arg: "(" positive_int indices_arg ")" // The positive int is the "width" of the pattern and the indices are the positions within the pattern
+indices_arg: "(" nonnegative_int+ ")"
 player_arg: "player:" (player_reference | mover_reference)
 piece_arg: "piece:" piece_reference
 priority_arg: "priority:" nonnegative_int

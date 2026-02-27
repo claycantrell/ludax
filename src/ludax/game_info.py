@@ -28,6 +28,10 @@ class GameInfo:
     piece_owners: tuple[str] = ()
     disjoint_asymmetric: bool = False
 
+    num_regions: int = None
+    region_names: tuple[str] = ()
+    region_mask_fns: list[callable] = None
+
     forward_directions: tuple[str] = ()
 
     def __repr__(self):
@@ -169,6 +173,17 @@ class GameInfoExtractor(Visitor):
         if list(sorted(piece_owners)) == [PlayerAndMoverRefs.P1, PlayerAndMoverRefs.P2]:
             self.game_info.disjoint_asymmetric = True
     
+    def regions(self, tree):
+        region_names = [self._nav(child, 0) for child in tree.children]
+        if len(set(region_names)) != len(region_names):
+            raise SyntaxError(f"Region names must be unique: {region_names}")
+        
+        self.game_info.num_regions = len(region_names)
+        self.game_info.region_names = tuple(region_names)
+
+        # Create a dummy set of region mask functions
+        self.game_info.region_mask_fns = [lambda state: jnp.zeros_like(state.board[0], dtype=jnp.bool_) for _ in range(self.game_info.num_regions)]
+
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:
             self.game_state_attributes.append("passed")

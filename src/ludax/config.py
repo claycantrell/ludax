@@ -179,6 +179,7 @@ class OptionalArgs(StrEnum):
     EXCLUDE = 'exclude_arg'
     HOP_OVER = 'hop_over_arg'
     INCREMENT_SCORE = 'increment_score_arg'
+    INDICES = 'indices_arg'
     ORIENTATION = 'orientation_arg'
     MOVER = 'mover_arg'
     MULTI_MASK = 'multi_mask_arg'
