@@ -186,8 +186,7 @@ class LudaxEnvironment():
         board[..., p, i] == 0   → square occupied by white's piece of type `p`
         board[..., p, i] == 1   → square occupied by black's piece of type `p`
         
-        The resulting channels are grouped: all of the current player's pieces, 
-        followed by all of the opponent's pieces.
+        The resulting channels are grouped: all of the current player's pieces, followed by all of the opponent's pieces.
         """
         board = state.game_state.board
         

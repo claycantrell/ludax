@@ -4,6 +4,7 @@
 # Based on the PGX AlphaZero training script:
 # https://github.com/sotetsuk/pgx/blob/18799f81a03651e7de8fb9dc79daee9090e2e695/examples/alphazero/train.py
 
+import random
 import datetime
 import os
 import pickle
@@ -36,14 +37,14 @@ num_devices = len(devices)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-# python examples/03-alpha-zero/train.py env_id=reversi     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=reversi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=256     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 # python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=512     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=512     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=1024     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 class Config(BaseModel):
     env_id: str = "reversi"
     env_type: str = "ldx"
-    seed: int = 0
+    seed: int = -1
     max_num_iters: int = 1000
     # network params
     num_channels: int = 128
@@ -157,6 +158,7 @@ class SelfplayOutput(NamedTuple):
     terminated: jnp.ndarray
     action_weights: jnp.ndarray
     discount: jnp.ndarray
+    current_player: jnp.ndarray  # actor at each step
 
 
 @jax.pmap
@@ -200,6 +202,7 @@ def selfplay(model, rng_key: jnp.ndarray) -> SelfplayOutput:
             reward=rewards[jnp.arange(rewards.shape[0]), actor],
             terminated=state.terminated,
             discount=discount,
+            current_player=actor,
         )
 
     rng_key, sub_key = jax.random.split(rng_key)
@@ -342,6 +345,10 @@ def play_match(rng_key, model_a, model_b, num_games: int) -> Tuple[int, int, int
 
 if __name__ == "__main__":
 
+    config.seed = config.seed if config.seed != -1 else random.randint(0, 99999)
+    print(f"Using random seed: {config.seed}")
+
+
     # -- Model init -------------------------------------------------------
     wandb.init(project="pgx-az", config=config.model_dump())
 
@@ -398,15 +405,23 @@ if __name__ == "__main__":
         # sp_data shapes: (max_num_steps, num_devices, batch_per_device)
         sp_reward = sp_data.reward.reshape(config.max_num_steps, -1)
         sp_terminated = sp_data.terminated.reshape(config.max_num_steps, -1)
+        sp_player = sp_data.current_player.reshape(config.max_num_steps, -1)
 
-        # Mean absolute reward per step (non-zero iff games finish)
-        log["selfplay/mean_abs_reward"] = float(jnp.abs(sp_reward).mean())
-        log["selfplay/mean_reward"] = float(sp_reward.mean())
-        log["selfplay/frac_nonzero_reward"] = float((sp_reward != 0).mean())
+        # Mean reward split by player
+        p0_mask = (sp_player == 0)
+        p1_mask = (sp_player == 1)
+        sp_reward_jnp = jnp.array(sp_reward)
+        log["selfplay/mean_reward_p0"] = float(
+            (sp_reward_jnp * p0_mask).sum() / jnp.maximum(p0_mask.sum(), 1)
+        )
+        log["selfplay/mean_reward_p1"] = float(
+            (sp_reward_jnp * p1_mask).sum() / jnp.maximum(p1_mask.sum(), 1)
+        )
+        log["selfplay/frac_nonzero_reward"] = float((sp_reward_jnp != 0).mean())
 
         # Game length: step of first termination per episode
-        first_term = jnp.argmax(sp_terminated, axis=0)  # (num_games,)
-        never_terminated = ~sp_terminated.any(axis=0)
+        first_term = jnp.argmax(jnp.array(sp_terminated), axis=0)  # (num_games,)
+        never_terminated = ~jnp.array(sp_terminated).any(axis=0)
         first_term = jnp.where(never_terminated, config.max_num_steps, first_term + 1)
         log["selfplay/mean_game_length"] = float(first_term.mean())
         log["selfplay/min_game_length"] = int(first_term.min())
@@ -495,11 +510,11 @@ if __name__ == "__main__":
         wandb.log(log)
         pbar.update(1)
         pbar.set_postfix(
-            ploss=f"{avg_policy_loss:.4f}",
-            vloss=f"{avg_value_loss:.4f}",
-            avg_len=f"{log['selfplay/mean_game_length']:.0f}",
-            no_term=f"{log['selfplay/frac_never_terminated']:.2f}",
-            abs_rew=f"{log['selfplay/mean_abs_reward']:.4f}",
+            loss_p=f"{avg_policy_loss:.4f}",
+            loss_v=f"{avg_value_loss:.4f}",
+            len=f"{log['selfplay/mean_game_length']:.0f}",
+            term=f"{1-log['selfplay/frac_never_terminated']:.2f}",
+            r_p0=f"{log['selfplay/mean_reward_p0']:.4f}",
         )
 
     pbar.close()
