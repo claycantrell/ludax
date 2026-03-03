@@ -1,0 +1,28 @@
+(game "Test" 
+    (players 2)
+    (equipment 
+        (board (hexagon 7))
+        (pieces
+            ("token" both)
+        )
+        (regions
+            ("home" (1 2 4))
+            ("corners" corners)
+            ("away" (10 20 30))
+        )
+    ) 
+    
+    (rules 
+        (play
+            (repeat (P1 P2)
+                (place "token" (destination empty))
+            )
+        )
+        
+        (end 
+            (if (pattern "token" (2 (0 1 2)) rotate:true) (mover win))
+            (if (>= (connected "token" ((region "home") (region "away"))) 2) (mover win))
+            (if (full_board) (draw))    
+        )
+    )
+)

@@ -16,6 +16,7 @@ hop_through = _read_game('hop_through')
 gomoku = _read_game('gomoku')
 pente = _read_game('pente')
 reversi = _read_game('reversi')
+test = _read_game('test')
 tic_tac_toe = _read_game('tic_tac_toe')
 yavalath = _read_game('yavalath')
 yavalax = _read_game('yavalax')
@@ -34,6 +35,7 @@ __all__ = [
     "gomoku",
     "pente",
     "reversi",
+    "test",
     "tic_tac_toe",
     "yavalath",
     "yavalax",

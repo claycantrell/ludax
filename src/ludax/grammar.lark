@@ -135,6 +135,7 @@ mask: mask_adjacent
     | mask_prev_move
     | mask_promoted
     | mask_row
+    | mask_region
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
 mask_captured: "(" "captured" ")"
@@ -151,6 +152,7 @@ mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optio
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
+mask_region: "(" "region" region_reference ")"
 
 // "Mask-like" functions are special functions that also support returning a mask. Currently this is only
 // used for "line", but it might include other functions in the future

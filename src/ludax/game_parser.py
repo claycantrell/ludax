@@ -1960,6 +1960,15 @@ class GameRuleParser(Transformer):
             return mask
         
         return mask_fn, {}
+    
+    def mask_region(self, children):
+        '''
+        Return a mask that's true for all positions in the specified region
+        '''
+        region_idx = children[0]
+        region_mask_fn = self.game_info.region_mask_fns[region_idx]
+
+        return region_mask_fn, {}
 
     '''
     ==========Multi-masks==========
