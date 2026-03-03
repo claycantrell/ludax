@@ -7,7 +7,7 @@
         )
         (regions
             ("home" (1 2 4))
-            ("corners" corners)
+            ("corners" (corners))
             ("away" (10 20 30))
         )
     ) 
@@ -15,7 +15,7 @@
     (rules 
         (play
             (repeat (P1 P2)
-                (place "token" (destination empty))
+                (place "token" (destination (empty)))
             )
         )
         

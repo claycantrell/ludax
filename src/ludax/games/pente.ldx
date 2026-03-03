@@ -10,11 +10,11 @@
     (rules 
         (play
             (once_through (P1)
-                (place "token" (destination center))
+                (place "token" (destination (center)))
             )
             (repeat (P2 P1)
                 (place "token"
-                    (destination empty)
+                    (destination (empty))
                     (effects 
                         (capture (custodial "token" 2) increment_score:true)
                     )

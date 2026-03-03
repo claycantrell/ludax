@@ -10,7 +10,7 @@
     (rules 
         (play
             (repeat (P1 P2)
-                (place "token" (destination (and empty (or (edge bottom) (adjacent occupied direction:up)))))
+                (place "token" (destination (and (empty) (or (edge bottom) (adjacent occupied direction:up)))))
             )
         )
         

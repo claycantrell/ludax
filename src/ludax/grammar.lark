@@ -139,16 +139,16 @@ mask: mask_adjacent
 
 mask_adjacent: "(" "adjacent" super_mask direction_arg? ")"
 mask_captured: "(" "captured" ")"
-mask_center: "center"
+mask_center: "(" "center" ")"
 mask_column: "(" "column" nonnegative_int ")"
-mask_corners: "corners"
+mask_corners: "(" "corners" ")"
 mask_corner_custodial: "(" "corner_custodial" piece_reference mover_arg? ")"
 mask_custodial: "(" "custodial" piece_reference custodial_length_arg mover_arg? orientation_arg? ")"
 mask_edge: "(" "edge" (edge | FORWARD | BACKWARD) ")"
-mask_empty: "empty"
+mask_empty: "(" "empty" ")"
 mask_hopped: "(" "hopped" ")"
 // TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
-mask_occupied: "occupied" | "(" "occupied" mover_reference ")" // atypical optional syntax (without parens) to match "empty"
+mask_occupied: "(" "occupied" mover_reference? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
@@ -165,9 +165,9 @@ multi_mask: multi_mask_corners
           | multi_mask_edges
           | multi_mask_edges_no_corners
 
-multi_mask_corners: "corners"
-multi_mask_edges: "edges"
-multi_mask_edges_no_corners: "edgesNoCorners"
+multi_mask_corners: "(" "corners" ")"
+multi_mask_edges: "(" "edges" ")"
+multi_mask_edges_no_corners: "(" "edgesNoCorners" ")"
 
 // ---Predicate definitions---
 super_predicate: predicate | super_predicate_and | super_predicate_or | super_predicate_not

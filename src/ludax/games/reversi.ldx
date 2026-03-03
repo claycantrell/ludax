@@ -15,7 +15,7 @@
         (play
             (repeat (P1 P2)
                 (place "token"
-                    (destination empty)
+                    (destination (empty))
                     (result 
                         (exists
                             (custodial "token" any)
