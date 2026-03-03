@@ -107,7 +107,8 @@ def render_game(id):
     print(f"Loading the following game:\n{getattr(games, id)}")
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
-    SLIDE_LOOKUP = utils._get_slide_lookup(ENV.game_info)
+    if ENV.game_info.uses_slide_logic:
+        SLIDE_LOOKUP = utils._get_slide_lookup(ENV.game_info)
 
     # NOTE: there's currently a rendering bug where "rendering info" is not properly cleared when switching games
     # in the brower.

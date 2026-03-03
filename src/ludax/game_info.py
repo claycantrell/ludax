@@ -27,6 +27,7 @@ class GameInfo:
     piece_names: tuple[str] = ()
     piece_owners: tuple[str] = ()
     disjoint_asymmetric: bool = False
+    uses_slide_logic: bool = False
 
     num_regions: int = None
     region_names: tuple[str] = ()
@@ -211,8 +212,11 @@ class GameInfoExtractor(Visitor):
         
         if child.data == "play_place":
             self.game_info.move_type = "place"
-        elif child.data == "play_move" or child.data == "play_multi_move":
+       
+        elif child.data == "play_move":
             self.game_info.move_type = "move"
+            self.game_info.uses_slide_logic = True
+
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")
 
