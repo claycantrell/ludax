@@ -23,7 +23,7 @@ EMPTY = jnp.int8(-1)
 P1 = jnp.int8(0)
 P2 = jnp.int8(1)
 
-MAX_STEP_COUNT = 200
+MAX_STEP_COUNT = 2000
 
 @dataclass
 class State():

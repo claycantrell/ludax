@@ -179,22 +179,47 @@ class LudaxEnvironment():
 
         return state
     
-    def observe(self, state: State, player_id: Array) -> Array:
+    def observe(self, state: State, player_id: jax.Array) -> jax.Array:
         """
-        Convert a flat board with values in {-1, 0, 1} symbolizing the current piece type into a boolean (rows, cols, 2) tensor
-        board[i] == -1  → empty square
-        board[i] == 0   → square occupied by white (current player or not)
-        board[i] == 1   → square occupied by black (current player or not)
-        observation[:, :, 0] == True  → squares occupied by the current player (black or white)
-        observation[:, :, 1] == True  → squares occupied by the other player (black or white)
+        Convert a multi-piece board into a boolean (..., width, height, 2 * num_pieces) tensor.
+        board[..., p, i] == -1  → empty square
+        board[..., p, i] == 0   → square occupied by white's piece of type `p`
+        board[..., p, i] == 1   → square occupied by black's piece of type `p`
+        
+        The resulting channels are grouped: all of the current player's pieces, 
+        followed by all of the opponent's pieces.
         """
-        board_layer = state.game_state.board[..., 0, :]
-        observation_shape = self.game_info.observation_shape
+        board = state.game_state.board
+        
+        # Assuming observation_shape is updated to (width, height, 2 * num_pieces)
+        width, height = self.game_info.observation_shape[0], self.game_info.observation_shape[1]
+        
+        # Extract num_pieces from the board's shape: (..., num_pieces, width * height)
+        num_pieces = board.shape[-2] 
 
-        board2d = board_layer.reshape(*board_layer.shape[:-1], observation_shape[-3], observation_shape[-2])
-        player_id = player_id[..., None, None]
+        # 1. Reshape the flat spatial dimension to 2D
+        # Resulting shape: (..., num_pieces, width, height)
+        board2d = board.reshape(*board.shape[:-1], width, height)
 
-        obs = jnp.stack((board2d == player_id, board2d == jnp.abs(1 - player_id)), axis=-1)
+        # 2. Expand player_id for broadcasting against the 4 trailing dimensions
+        # Shape becomes (..., 1, 1, 1) to broadcast over (num_pieces, width, height)
+        p_id = player_id[..., None, None, None]
+
+        # 3. Create boolean masks
+        # Both will have shape: (..., num_pieces, width, height)
+        # Empty squares (-1) resolve to False automatically since p_id is always 0 or 1
+        my_pieces = (board2d == p_id)
+        op_pieces = (board2d == jnp.abs(1 - p_id))
+
+        # 4. Move the `num_pieces` axis to the end to act as channels
+        # Using -3 ensures this works seamlessly whether the input is batched or unbatched
+        # Resulting shape: (..., width, height, num_pieces)
+        my_pieces_channels = jnp.moveaxis(my_pieces, -3, -1)
+        op_pieces_channels = jnp.moveaxis(op_pieces, -3, -1)
+
+        # 5. Concatenate along the channel dimension
+        # Resulting shape: (..., width, height, 2 * num_pieces)
+        obs = jnp.concatenate((my_pieces_channels, op_pieces_channels), axis=-1)
 
         return jax.lax.stop_gradient(obs)  # Taken from PGX
 

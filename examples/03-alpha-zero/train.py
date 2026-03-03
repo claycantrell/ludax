@@ -36,10 +36,10 @@ num_devices = len(devices)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-# python examples/03-alpha-zero/train.py env_id=reversi     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
-# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
-# python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
-# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128
+# python examples/03-alpha-zero/train.py env_id=reversi     env_type=pgx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=512     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=512     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 class Config(BaseModel):
     env_id: str = "reversi"
     env_type: str = "ldx"
@@ -94,9 +94,9 @@ num_actions = int(env.num_actions)
 @partial(jax.jit, static_argnums=0)
 def observe(env, state: pgx.State) -> jnp.ndarray:
     if config.env_type == "pgx":
-        return state.observation.astype(jnp.float32)
+        return state.observation
     else:
-        return env.observe(state, state.current_player).astype(jnp.float32)
+        return env.observe(state, state.current_player)
 
 
 # ---------------------------------------------------------------------------
@@ -352,12 +352,13 @@ if __name__ == "__main__":
     model, opt_state = jax.device_put_replicated((model, opt_state), devices)
 
     # -- Checkpoint dir ---------------------------------------------------
+    base_dir = "checkpoints"
     if config.ckpt_dir:
-        ckpt_dir = config.ckpt_dir
-    else:
-        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
-        now = now.strftime("%Y%m%d%H%M%S")
-        ckpt_dir = os.path.join("checkpoints", f"{config.env_id}_{config.env_type}_{now}")
+        base_dir = config.ckpt_dir
+        
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+    now = now.strftime("%Y%m%d%H%M%S")
+    ckpt_dir = os.path.join(base_dir, f"{config.env_id}_{config.env_type}_{now}")
     os.makedirs(ckpt_dir, exist_ok=True)
     print(f"Checkpoints will be saved to: {ckpt_dir}")
 
@@ -391,6 +392,26 @@ if __name__ == "__main__":
         keys = jax.random.split(subkey, num_devices)
         data: SelfplayOutput = selfplay(model, keys)
         samples: Sample = compute_loss_input(data)
+
+        # ---- Log selfplay reward / game-length stats ----
+        sp_data = jax.device_get(data)
+        # sp_data shapes: (max_num_steps, num_devices, batch_per_device)
+        sp_reward = sp_data.reward.reshape(config.max_num_steps, -1)
+        sp_terminated = sp_data.terminated.reshape(config.max_num_steps, -1)
+
+        # Mean absolute reward per step (non-zero iff games finish)
+        log["selfplay/mean_abs_reward"] = float(jnp.abs(sp_reward).mean())
+        log["selfplay/mean_reward"] = float(sp_reward.mean())
+        log["selfplay/frac_nonzero_reward"] = float((sp_reward != 0).mean())
+
+        # Game length: step of first termination per episode
+        first_term = jnp.argmax(sp_terminated, axis=0)  # (num_games,)
+        never_terminated = ~sp_terminated.any(axis=0)
+        first_term = jnp.where(never_terminated, config.max_num_steps, first_term + 1)
+        log["selfplay/mean_game_length"] = float(first_term.mean())
+        log["selfplay/min_game_length"] = int(first_term.min())
+        log["selfplay/max_game_length"] = int(first_term.max())
+        log["selfplay/frac_never_terminated"] = float(never_terminated.mean())
 
         # ---- Shuffle & minibatch ----
         samples = jax.device_get(samples)
@@ -473,7 +494,13 @@ if __name__ == "__main__":
 
         wandb.log(log)
         pbar.update(1)
-        pbar.set_postfix(ploss=f"{avg_policy_loss:.4f}", vloss=f"{avg_value_loss:.4f}")
+        pbar.set_postfix(
+            ploss=f"{avg_policy_loss:.4f}",
+            vloss=f"{avg_value_loss:.4f}",
+            avg_len=f"{log['selfplay/mean_game_length']:.0f}",
+            no_term=f"{log['selfplay/frac_never_terminated']:.2f}",
+            abs_rew=f"{log['selfplay/mean_abs_reward']:.4f}",
+        )
 
     pbar.close()
     print(f"\nTraining complete. Checkpoints saved to: {ckpt_dir}")
