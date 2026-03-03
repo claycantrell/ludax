@@ -7,7 +7,7 @@ import pickle
 import re
 
 GAMES_PER_BATCH = 4096
-GAME_NAME = "reversi"  # "hex"
+GAME_NAME = "connect_four" # "reversi"  # "hex"
 SMOOTH_WINDOW = 5  # frames to smooth over for mean/var plot
 
 
