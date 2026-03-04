@@ -1,13 +1,7 @@
 """
-python examples/03-alpha-zero/tournament.py --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_reversi.pkl --dirs /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260225025721 /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260226070512 /users/alexpadula/store/ludax/checkpoints/reversi_ldx_20260226081042 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260225040246 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260226060055 /users/alexpadula/store/ludax/checkpoints/reversi_pgx_20260226101344
-python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226034608 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226060249 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226091126 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
-python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
-
-
-python examples/03-alpha-zero/tournament.py --env_id connect_four --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_connect_four.pkl --dirs /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304024212 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304033105 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304042200 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304051112 /users/alexpadula/store/ludax/checkpoints/connect_four_pgx_20260304030817 /users/alexpadula/store/ludax/checkpoints/connect_four_pgx_20260304035853 /users/alexpadula/store/ludax/checkpoints/connect_four_pgx_20260304044823 /users/alexpadula/store/ludax/checkpoints/connect_four_pgx_20260304053930
-python examples/03-alpha-zero/tournament.py --env_id connect_four --env_type ldx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_connect_four.pkl --dirs /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304024212 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304033105 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304042200 /users/alexpadula/store/ludax/checkpoints/connect_four_ldx_20260304051112
+python examples/03-alpha-zero/tournament_hex.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226034608 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226060249 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226091126 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
+python examples/03-alpha-zero/tournament_hex.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
 """
-
 """
 Tournament Elo evaluation for AlphaZero checkpoints.
 
@@ -25,9 +19,9 @@ Key design decisions:
   - Checkpoints on the x-axis are ordered by iteration number within each run.
 
 Usage:
-    python tournament.py \\
-        --dirs checkpoints/run1 checkpoints/run2 \\
-        --env_id reversi --env_type ldx \\
+    python tournament_hex.py \
+        --dirs checkpoints/run1 checkpoints/run2 \
+        --env_id hex --env_type pgx \
         --games_per_pair 32
 
 All flags:
@@ -36,10 +30,8 @@ All flags:
     --env_type        pgx or ldx (default: read from first checkpoint)
     --games_per_pair  Games per pair per side, so total = 2x this
     --log_interval    Log every N pairings (default: num_pairs, i.e. once per sweep)
-    --output_path       Path to save the Elo plot (default: elo_ratings.png)
+    --output_path       Path to save the Elo plot (default: elo_ratings.pkl)
     --seed            RNG seed
-
-
 
 """
 
@@ -70,8 +62,8 @@ from pydantic import BaseModel
 
 
 class Config(BaseModel):
-    env_id: str = "reversi"
-    env_type: str = "ldx"
+    env_id: str = "hex"
+    env_type: str = "pgx"
     seed: int = 0
     max_num_iters: int = 1000
     # network params
@@ -138,6 +130,7 @@ class Checkpoint(NamedTuple):
     path: str           # full path to .ckpt file
     model: Any          # (params, state) tuple
     label: str          # short display label
+    is_ldx_hex: bool = False  # <-- HACK: flag for trimming logic
 
 
 def load_checkpoints(dirs: List[str]) -> List[Checkpoint]:
@@ -170,11 +163,12 @@ def load_checkpoints(dirs: List[str]) -> List[Checkpoint]:
 # Game-playing infrastructure (no MCTS, sampling from policy)
 # ---------------------------------------------------------------------------
 
-def build_forward(env, config_from_ckpt):
+def build_forward(config_from_ckpt):
     """Build the forward function from a checkpoint's config."""
-    def forward_fn(x, is_eval=False):
+    # HACK: Pass num_actions dynamically so Haiku maps weights correctly
+    def forward_fn(x, num_actions, is_eval=False):
         net = AZNet(
-            num_actions=env.num_actions,
+            num_actions=num_actions,
             num_channels=config_from_ckpt.num_channels,
             num_blocks=config_from_ckpt.num_layers,
             resnet_v2=config_from_ckpt.resnet_v2,
@@ -199,16 +193,36 @@ def make_play_fn(env, forward, env_type):
     def _init(key):
         return env.init(key)
 
-    @partial(jax.pmap, static_broadcasted_argnums=[4])
-    def play_batch(rng_key, model_a, model_b, init_keys, player_a_side: int):
+    # HACK: add 5 and 6 to static argnums for the is_ldx_hex flags
+    @partial(jax.pmap, static_broadcasted_argnums=[4, 5, 6])
+    def play_batch(rng_key, model_a, model_b, init_keys, player_a_side: int, is_ldx_hex_a: bool, is_ldx_hex_b: bool):
         params_a, state_a = model_a
         params_b, state_b = model_b
         batch_size = init_keys.shape[0]
         state = jax.vmap(_init)(init_keys)
 
-        def get_action(model_params, model_state, obs, legal_mask, key):
-            (logits, _), _ = forward.apply(model_params, model_state, obs, is_eval=True)
-            logits = jnp.where(legal_mask, logits, jnp.finfo(logits.dtype).min)
+        def get_action(model_params, model_state, obs, legal_mask, key, is_ldx_hex):
+            # HACK: trim observation and mask if model expects ldx hex
+            if is_ldx_hex:
+                obs_in = obs[..., :2]
+                legal_in = legal_mask[..., :121]
+                n_act = 121
+            else:
+                obs_in = obs
+                legal_in = legal_mask
+                n_act = env.num_actions
+
+            (logits, _), _ = forward.apply(model_params, model_state, obs_in, n_act, is_eval=True)
+            
+            # Mask out illegal moves
+            logits = jnp.where(legal_in, logits, jnp.finfo(logits.dtype).min)
+
+            # Pad logits back to the env size (e.g., 122 for pgx) with -inf to align with other agents
+            if is_ldx_hex and logits.shape[-1] < legal_mask.shape[-1]:
+                pad_len = legal_mask.shape[-1] - logits.shape[-1]
+                pad_val = jnp.full(logits.shape[:-1] + (pad_len,), jnp.finfo(logits.dtype).min)
+                logits = jnp.concatenate([logits, pad_val], axis=-1)
+
             return jax.random.categorical(key, logits, axis=-1)
 
         def body_fn(val):
@@ -218,8 +232,9 @@ def make_play_fn(env, forward, env_type):
             legal = st.legal_action_mask
 
             key, k1, k2 = jax.random.split(key, 3)
-            action_a = get_action(params_a, state_a, obs, legal, k1)
-            action_b = get_action(params_b, state_b, obs, legal, k2)
+            # Pass the respective boolean flags
+            action_a = get_action(params_a, state_a, obs, legal, k1, is_ldx_hex_a)
+            action_b = get_action(params_b, state_b, obs, legal, k2, is_ldx_hex_b)
             action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
             if env_type != "pgx":
@@ -241,7 +256,7 @@ def make_play_fn(env, forward, env_type):
 
 
 def play_match(
-    rng_key, model_a, model_b, num_games: int, play_batch_fn
+    rng_key, model_a, model_b, num_games: int, play_batch_fn, is_ldx_hex_a: bool, is_ldx_hex_b: bool
 ) -> Tuple[int, int, int]:
     """Play num_games as each side. Returns (wins_a, draws, wins_b)."""
     games_per_device = max(1, num_games // num_devices)
@@ -256,7 +271,7 @@ def play_match(
         init_keys = all_keys.reshape(num_devices, games_per_device, 2)
         rng_keys = jax.random.split(rng_key, num_devices)
 
-        R = play_batch_fn(rng_keys, rep_a, rep_b, init_keys, side)
+        R = play_batch_fn(rng_keys, rep_a, rep_b, init_keys, side, is_ldx_hex_a, is_ldx_hex_b)
         R = R.reshape(-1)
         total_wins_a += int((R > 0.5).sum())
         total_draws += int((jnp.abs(R) < 0.5).sum())
@@ -271,7 +286,6 @@ def play_match(
 
 def save_elo_snapshot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int, output_path: str):
     """Pickle the current Elo state to disk (replaces the matplotlib plot)."""
-    # Derive snapshot path from output_path (swap extension)
     snapshot_path = os.path.splitext(output_path)[0] + ".pkl"
     payload = {
         "step": step,
@@ -322,8 +336,15 @@ def main():
 
     if env_id == "othello":
         env_id = "reversi"
-
+        
     print(f"Environment: {env_id} ({env_type})")
+
+    # HACK: Iterate back over the checkpoints and set the is_ldx_hex flag
+    is_hex = "hex" in env_id.lower()
+    checkpoints = [
+        c._replace(is_ldx_hex=(is_hex and "ldx" in c.path.lower()))
+        for c in checkpoints
+    ]
 
     # -- Setup environment and network ------------------------------------
     if env_type == "pgx":
@@ -332,7 +353,8 @@ def main():
         from ludax import LudaxEnvironment, games as ludax_games
         env = LudaxEnvironment(game_str=getattr(ludax_games, env_id))
 
-    forward = build_forward(env, first_config)
+    # Removed env parameter since it handles dynamic num_actions now
+    forward = build_forward(first_config) 
     play_batch_fn = make_play_fn(env, forward, env_type)
 
     # -- Init Elo ratings -------------------------------------------------
@@ -372,6 +394,7 @@ def main():
                 wins_a, draws, wins_b = play_match(
                     subkey, ca.model, cb.model,
                     args.games_per_pair, play_batch_fn,
+                    ca.is_ldx_hex, cb.is_ldx_hex  # Passed the flags down
                 )
 
                 elos[ca.label], elos[cb.label] = update_elo(

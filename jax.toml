@@ -1,8 +1,8 @@
-image = "nvcr.io/nvidia/jax:24.04-py3"
+image = "nvcr.io/nvidia/jax:26.01-py3"
 
 mounts = ["/capstor", "/iopsstor", "/users"]
 workdir = "/users/alexpadula/projects/ludax"
 
 [annotations]
 com.hooks.aws_ofi_nccl.enabled = "true"
-com.hooks.aws_ofi_nccl.variant = "cuda12"
+com.hooks.aws_ofi_nccl.variant = "cuda13"

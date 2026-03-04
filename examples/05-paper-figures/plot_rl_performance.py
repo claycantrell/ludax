@@ -7,7 +7,7 @@ import pickle
 import re
 
 GAMES_PER_BATCH = 4096
-GAME_NAME = "connect_four" # "reversi"  # "hex"
+GAME_NAME = "hex" # "connect_four" # "reversi"  # 
 SMOOTH_WINDOW = 5  # frames to smooth over for mean/var plot
 
 
@@ -15,7 +15,7 @@ SMOOTH_WINDOW = 5  # frames to smooth over for mean/var plot
 # Load and parse tournament data
 # ---------------------------------------------------------------------------
 
-data = pickle.load(open(f"./data/rl_runs/elo_{GAME_NAME}.pkl", "rb"))
+data = pickle.load(open(f"examples/05-paper-figures/data/rl_runs/elo_{GAME_NAME}.pkl", "rb"))
 
 # data["elos"]        : dict  label -> float  (final Elo for every checkpoint)
 # data["checkpoints"] : list of dicts with keys: label, run_name, iteration, path
@@ -149,8 +149,8 @@ ax.set_xlabel("Millions of frames")
 ax.set_ylabel("Elo")
 ax.set_title(f"$\\bf{{{GAME_NAME.capitalize()}}}:$ Individual Runs")
 ax.legend(handles=handles, loc="lower right", framealpha=0.9)
-fig.savefig(f"./data/rl_runs/{GAME_NAME}_elo_raw_runs_frames.pdf", bbox_inches="tight")
-fig.savefig(f"./data/rl_runs/{GAME_NAME}_elo_raw_runs_frames.png", bbox_inches="tight", dpi=300)
+fig.savefig(f"examples/05-paper-figures/data/rl_runs/{GAME_NAME}_elo_raw_runs_frames.pdf", bbox_inches="tight")
+fig.savefig(f"examples/05-paper-figures/data/rl_runs/{GAME_NAME}_elo_raw_runs_frames.png", bbox_inches="tight", dpi=300)
 
 
 # ---------------------------------------------------------------------------
@@ -184,5 +184,5 @@ ax.set_xlabel("Millions of frames")
 ax.set_ylabel("         ")
 ax.set_title("Mean and Variance")
 ax.legend(loc="lower right", framealpha=0.9)
-fig.savefig(f"./data/rl_runs/{GAME_NAME}_elo_mean_frames.pdf", bbox_inches="tight")
-fig.savefig(f"./data/rl_runs/{GAME_NAME}_elo_mean_frames.png", bbox_inches="tight", dpi=300)
+fig.savefig(f"examples/05-paper-figures/data/rl_runs/{GAME_NAME}_elo_mean_frames.pdf", bbox_inches="tight")
+fig.savefig(f"examples/05-paper-figures/data/rl_runs/{GAME_NAME}_elo_mean_frames.png", bbox_inches="tight", dpi=300)

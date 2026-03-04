@@ -15,4 +15,3 @@ optax
 wandb
 omegaconf
 pydantic
-numpy<2.0
