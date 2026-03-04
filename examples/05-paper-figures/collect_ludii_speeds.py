@@ -16,7 +16,7 @@ GAMES = [
     "English Draughts",
     "Gomoku",
     "Havannah",
-    "HopThrough"
+    "HopThrough",
     "Hex",
     "Pente",
     "Reversi",
