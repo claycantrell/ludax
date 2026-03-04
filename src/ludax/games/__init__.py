@@ -10,6 +10,7 @@ connect_six = _read_game('connect_six')
 dai_hasami_shogi = _read_game('dai_hasami_shogi')
 english_draughts = _read_game('english_draughts')
 english_draughts_hex = _read_game('english_draughts_hex')
+gridworld = _read_game('gridworld')
 hasami_shogi = _read_game('hasami_shogi')
 hex = _read_game('hex')
 hop_through = _read_game('hop_through')
@@ -29,6 +30,7 @@ __all__ = [
     "dai_hasami_shogi",
     "english_draughts",
     "english_draughts_hex",
+    "gridworld",
     "hasami_shogi",
     "hex",
     "hop_through",
