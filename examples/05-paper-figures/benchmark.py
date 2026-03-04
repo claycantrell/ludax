@@ -132,6 +132,7 @@ def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_s
 
         print(f"  → {playouts_per_second:.2f} games/sec ({formatted_playouts}) ({formatted_tensor_playouts} vs tensor playouts)")
         print(f"  → {moves_per_second:.2f} moves/sec ({formatted_moves}) ({formatted_tensor_moves} vs tensor moves)")
+        print(f"  → {np.mean(total_steps[i] / batch_sizes[i])} average steps per game")
 
     return times, warmup_times, total_steps
 

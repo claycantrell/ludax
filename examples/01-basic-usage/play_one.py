@@ -1,10 +1,10 @@
 from ludax import LudaxEnvironment
-from ludax.games import tic_tac_toe
+from ludax.games import tic_tac_toe, english_draughts
 import jax
 import jax.numpy as jnp
 import random
 
-env = LudaxEnvironment(game_str=tic_tac_toe)
+env = LudaxEnvironment(game_str=english_draughts)
 init = jax.jit(env.init)
 step = jax.jit(env.step)
 
@@ -18,7 +18,7 @@ print(f"Playing with seed {seed}...")
 i = 0
 while not bool(state.terminated):
     i += 1
-    print(f"Step {i}")
+    print(f"---Step {i}---")
 
     # Sample an action from legal moves
     key, subkey = jax.random.split(key)
@@ -29,5 +29,5 @@ while not bool(state.terminated):
     state = step(state, action)
 
 print("Game over!")
-
 print(f"Winner (0: first player, 1: second player, -1: draw): {state.winners}")
+print(f"Number of steps: {state.global_step_count}")
