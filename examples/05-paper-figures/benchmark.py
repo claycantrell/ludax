@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument('--batch_size_step', type=int, default=2, help='Multiplier for batch size between runs')
     parser.add_argument('--num_batch_sizes', type=int, default=11, help='Number of batch sizes to evaluate')
     parser.add_argument('--starting_power', type=int, default=0, help='Starting batch size is 2^starting_power')
-    parser.add_argument('--ludii_cache_prefix', type=str, default='yaldabaoth')
+    parser.add_argument('--ludii_cache_prefix', type=str, default='ludii', help='Prefix for Ludii cache files')
     parser.add_argument('--ludii_thread_nums', type=int, nargs='+', default=[1, 16, 32], help='Number of threads to use for Ludii')
     parser.add_argument('--cache', type=bool, default=False, help='Load cached results if available')
     return parser.parse_args()
@@ -55,23 +55,39 @@ def run_batch(state, step, key):
 
 
 def retrieve_ludii(args):
-    ludii_caches = [pd.read_csv(f"{current_dir}/data/{args.ludii_cache_prefix}_speeds_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
+    '''
+    Retrieve the Ludii benchmark speeds using both regular and tensor playouts based on the closest matching game name
+    in the benchmark CSV files
+    '''
+
+    ludii_caches = [pd.read_csv(f"{current_dir}/data/{args.ludii_cache_prefix}_speeds_regular_playouts_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
+    ludii_tensor_caches = [pd.read_csv(f"{current_dir}/data/{args.ludii_cache_prefix}_speeds_tensor_playouts_{num_threads}_threads.csv") for num_threads in args.ludii_thread_nums]
+
     game_names = ludii_caches[0]['Name'].unique()
     closest_game = process.extractOne(args.game, game_names, scorer=process.fuzz.ratio)[0]
 
     playouts_per_second = [cache[cache['Name'] == closest_game]['p/s'].values[0] for cache in ludii_caches]
     moves_per_second = [cache[cache['Name'] == closest_game]['m/s'].values[0] for cache in ludii_caches]
+
+    tensor_playouts_per_second = [cache[cache['Name'] == closest_game]['p/s'].values[0] for cache in ludii_tensor_caches]
+    tensor_moves_per_second = [cache[cache['Name'] == closest_game]['m/s'].values[0] for cache in ludii_tensor_caches]
     
-    formatted_playouts = " | ".join([f"{ps:.2f}" for ps in playouts_per_second])
-    formatted_moves = " | ".join([f"{ms:.2f}" for ms in moves_per_second])
     formatted_threads = " | ".join([f"{num_threads}" for num_threads in args.ludii_thread_nums])
 
+    formatted_playouts = " | ".join([f"{ps:.2f}" for ps in playouts_per_second])
+    formatted_moves = " | ".join([f"{ms:.2f}" for ms in moves_per_second])
+    formatted_tensor_playouts = " | ".join([f"{ps:.2f}" for ps in tensor_playouts_per_second])
+    formatted_tensor_moves = " | ".join([f"{ms:.2f}" for ms in tensor_moves_per_second])
+
     print(f"Closest Ludii game: '{closest_game}' @ ({formatted_playouts}) games/sec and ({formatted_moves}) moves/sec ({formatted_threads} threads)")
+    print(f" [tensor playouts]:                    ({formatted_tensor_playouts}) games/sec and ({formatted_tensor_moves}) moves/sec ({formatted_threads} threads)")
 
-    return playouts_per_second, moves_per_second
+    return playouts_per_second, moves_per_second, tensor_playouts_per_second, tensor_moves_per_second
 
 
-def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_second, ludii_moves_per_second):
+def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_second, ludii_moves_per_second,
+             tensor_playouts_per_second, tensor_moves_per_second):
+    
     times = np.zeros((len(batch_sizes), num_games))
     total_steps = np.zeros((len(batch_sizes), num_games))
     warmup_times = np.zeros((len(batch_sizes), num_warmup_games))
@@ -111,8 +127,11 @@ def evaluate(env, num_games, num_warmup_games, batch_sizes, ludii_playouts_per_s
         formatted_playouts = " | ".join([f"{playouts_per_second / ludii_ps:.2f}×" for ludii_ps in ludii_playouts_per_second])
         formatted_moves = " | ".join([f"{moves_per_second / ludii_ms:.2f}×" for ludii_ms in ludii_moves_per_second])
 
-        print(f"  → {playouts_per_second:.2f} games/sec ({formatted_playouts})")
-        print(f"  → {moves_per_second:.2f} moves/sec ({formatted_moves})")
+        formatted_tensor_playouts = " | ".join([f"{playouts_per_second / tensor_ps:.2f}×" for tensor_ps in tensor_playouts_per_second])
+        formatted_tensor_moves = " | ".join([f"{moves_per_second / tensor_ms:.2f}×" for tensor_ms in tensor_moves_per_second])
+
+        print(f"  → {playouts_per_second:.2f} games/sec ({formatted_playouts}) ({formatted_tensor_playouts} vs tensor playouts)")
+        print(f"  → {moves_per_second:.2f} moves/sec ({formatted_moves}) ({formatted_tensor_moves} vs tensor moves)")
 
     return times, warmup_times, total_steps
 
@@ -143,9 +162,13 @@ def cached_eval(args):
                 pgx_total_steps=cache['pgx_total_steps']
             )
     else:
-        ludii_playouts_per_second, ludii_moves_per_second = retrieve_ludii(args)
+        ludii_playouts_per_second, ludii_moves_per_second, tensor_playouts_per_second, tensor_moves_per_second = retrieve_ludii(args)
 
-        eval_args = args.num_games, args.num_warmup_games, batch_sizes, ludii_playouts_per_second, ludii_moves_per_second
+        eval_args = (
+            args.num_games, args.num_warmup_games, batch_sizes,
+            ludii_playouts_per_second, ludii_moves_per_second,
+            tensor_playouts_per_second, tensor_moves_per_second
+        )
 
         print(f"=========================EVALUATING LUDII-JAX on '{args.game}'=========================")
         try:
