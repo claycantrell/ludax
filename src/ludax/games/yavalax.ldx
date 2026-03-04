@@ -10,11 +10,11 @@
     (rules 
         (play
             (once_through (P1)
-                (place "token" (destination empty))
+                (place "token" (destination (empty)))
             )
             (repeat (P2 P2 P1 P1)
                 (place "token"
-                    (destination empty)
+                    (destination (empty))
                     (result 
                         (and 
                             (not (line "token" 5))

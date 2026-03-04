@@ -12,7 +12,7 @@
     (rules 
         (play
             (repeat (P1 P2)
-                (place "token" (destination empty))
+                (place "token" (destination (empty)))
             )
         )
         

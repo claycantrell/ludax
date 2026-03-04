@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, MoveTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, MoveTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs, Shapes
 from .game_info import GameInfo
 from . import utils
 
@@ -13,12 +13,11 @@ class GameRuleParser(Transformer):
         self.game_info = game_info
         self.end_rule_info = []
         self.adjacency_lookup = utils._get_adjacency_lookup(self.game_info)
-        self.slide_lookup = utils._get_slide_lookup(self.game_info)
-        self.num_directions = self.slide_lookup.shape[0]
-        
-        # TODO: remove if unneeded
+        if self.game_info.uses_slide_logic:
+            self.slide_lookup = utils._get_slide_lookup(self.game_info)
+
+        self.num_directions = 8 if self.game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE] else 6
         self.action_space_shape = None
-        self.legal_action_mask_fn = None
 
         # Optional attributes
         if "extra_turn_fn_idx" in self.game_info.game_state_attributes:
@@ -214,8 +213,6 @@ class GameRuleParser(Transformer):
             'next_phase_fn': next_phase_fn,
             'next_player_fn': next_player_fn
         }
-
-        self.legal_action_mask_fn = legal_action_mask_fn
 
         return play_rule_dict
 
@@ -1963,6 +1960,15 @@ class GameRuleParser(Transformer):
             return mask
         
         return mask_fn, {}
+    
+    def mask_region(self, children):
+        '''
+        Return a mask that's true for all positions in the specified region
+        '''
+        region_idx = children[0]
+        region_mask_fn = self.game_info.region_mask_fns[region_idx]
+
+        return region_mask_fn, {}
 
     '''
     ==========Multi-masks==========

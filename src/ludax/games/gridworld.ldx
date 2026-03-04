@@ -1,0 +1,33 @@
+(game "Gridworld" 
+    (players 2)
+    (equipment 
+        (board (square 5))
+        (pieces
+            ("player" P1)
+            ("wall" both)
+        )
+        (regions
+            ("danger" (21))
+            ("target" (20))
+        )
+    ) 
+    
+    (rules
+        (start
+            (place "player" P1 (0))
+            (place "wall" P2 (5 6 7 8 13 16 18))
+        )
+        (play
+            (repeat (P1)
+                (move 
+                    (step "player" direction:orthogonal)
+                )
+            )
+        )
+        
+        (end
+            (if (exists (and (occupied mover) (region "danger"))) (mover lose)) 
+            (if (exists (and (occupied mover) (region "target"))) (mover win)) 
+        )
+    )
+)
