@@ -17,26 +17,17 @@ SMOOTH_WINDOW = 5  # frames to smooth over for mean/var plot
 
 data = pickle.load(open(f"examples/05-paper-figures/data/rl_runs/elo_{GAME_NAME}.pkl", "rb"))
 
-# data["elos"]        : dict  label -> float  (final Elo for every checkpoint)
-# data["checkpoints"] : list of dicts with keys: label, run_name, iteration, path
-#
-# label format: "{run_name}/{iteration:06d}"
-# run_name format: "{game}_{env_type}_{timestamp}"  e.g. reversi_ldx_20260225025721
-
-
 def grouped_elo(data):
     """
     Parse tournament pickle into two DataFrames (ldx and pgx), one column per run.
-
-    Each DataFrame is indexed by iteration number; values are Elo ratings.
-    Runs are identified by their timestamp suffix so multiple runs of the same
-    type become separate columns.
+    Also extracts the baseline Elo if it exists in the checkpoint list.
     """
     elos = data["elos"]
     checkpoints = data["checkpoints"]
 
     ldx_records = {}
     pgx_records = {}
+    baseline_elo = None
 
     for ckpt in checkpoints:
         label = ckpt["label"]
@@ -44,8 +35,12 @@ def grouped_elo(data):
         iteration = ckpt["iteration"]
         elo = elos[label]
 
+        # Extract baseline Elo separately and skip standard run parsing
+        if run_name == "pgx_baseline":
+            baseline_elo = elo
+            continue
+
         # Parse env_type from run_name: "{game}_{env_type}_{timestamp}"
-        # Use a regex that matches the known env types
         m = re.search(r"_(ldx|pgx)_(\d+)$", run_name)
         if m is None:
             print(f"Warning: could not parse env_type from run_name '{run_name}', skipping.")
@@ -69,21 +64,19 @@ def grouped_elo(data):
         df.sort_index(inplace=True)
         return df
 
-    return records_to_df(ldx_records), records_to_df(pgx_records)
+    return records_to_df(ldx_records), records_to_df(pgx_records), baseline_elo
 
 
-ldx_elo_df, pgx_elo_df = grouped_elo(data)
+ldx_elo_df, pgx_elo_df, baseline_elo = grouped_elo(data)
 
 # ---------------------------------------------------------------------------
 # Derive frame count from iteration index.
-# Each iteration processes GAMES_PER_BATCH games; frame count = iteration * GAMES_PER_BATCH.
-# The x-axis unit is millions of frames, so we divide by 1e6.
 # ---------------------------------------------------------------------------
 FRAME_MULTIPLE = GAMES_PER_BATCH  # frames per iteration step
 
 
 # ---------------------------------------------------------------------------
-# General configuration (unchanged)
+# General configuration
 # ---------------------------------------------------------------------------
 
 mpl.rcParams.update({
@@ -110,7 +103,6 @@ mpl.rcParams.update({
 })
 
 colors = ['#3599BF', '#CE6661', '#64B268', '#3298BE', '#E68656']
-markers = ['o', 's', '^', 'D', 'x']
 
 
 def setup_neurips_plot(width=3.5, height=None):
@@ -138,10 +130,17 @@ for df, label, color in zip([ldx_elo_df, pgx_elo_df], ["Ludax", "PGX"], colors[:
             alpha=1, color=color, linestyle="-", linewidth=0.6,
         )
 
+# Base legend lines
 raw_legend_lines = [
     Line2D([0], [0], color=colors[0], linewidth=1, linestyle="-", alpha=1, label="Ludax runs"),
     Line2D([0], [0], color=colors[1], linewidth=1, linestyle="-", alpha=1, label="PGX runs"),
 ]
+
+# Add baseline if available
+if baseline_elo is not None:
+    ax.axhline(y=baseline_elo, color='gray', linestyle='--', linewidth=1.2, zorder=0)
+    raw_legend_lines.append(Line2D([0], [0], color='gray', linewidth=1.2, linestyle='--', label="Pgx Baseline"))
+
 handles, _ = ax.get_legend_handles_labels()
 handles.extend(raw_legend_lines)
 
@@ -164,6 +163,9 @@ for elo_df, label, color in zip(
     ["Ludax", "PGX"],
     colors[:2],
 ):
+    if elo_df.empty:
+        continue
+        
     mean_raw    = elo_df.mean(axis=1)
     var_raw     = elo_df.var(axis=1)
     mean_smooth = mean_raw.rolling(window=SMOOTH_WINDOW, min_periods=1, center=True).mean()
@@ -179,6 +181,10 @@ for elo_df, label, color in zip(
         color=color, alpha=0.07,
         label="  ±1σ",
     )
+
+# Add baseline if available
+if baseline_elo is not None:
+    ax.axhline(y=baseline_elo, color='gray', linestyle='--', linewidth=1.2, label="Pgx Baseline", zorder=0)
 
 ax.set_xlabel("Millions of frames")
 ax.set_ylabel("         ")
