@@ -1,13 +1,13 @@
 import jax
 import jax.numpy as jnp
 
-from ludax.games import tic_tac_toe
+from ludax.games import tic_tac_toe, english_draughts
 from ludax import LudaxEnvironment
 
 
-BATCH_SIZE = 128
+BATCH_SIZE = 1
 
-env = LudaxEnvironment(game_str=tic_tac_toe)
+env = LudaxEnvironment(game_str=english_draughts)
 init = jax.jit(jax.vmap(env.init))
 step = jax.jit(jax.vmap(env.step))
 

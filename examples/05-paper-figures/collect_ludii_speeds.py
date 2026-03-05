@@ -16,7 +16,7 @@ GAMES = [
     "English Draughts",
     "Gomoku",
     "Havannah",
-    "HopThrough"
+    "HopThrough",
     "Hex",
     "Pente",
     "Reversi",
@@ -38,9 +38,7 @@ else:
 
 game_list_str = ' '.join([f'"/{game}.lud"' for game in GAMES])
 
-# Get current day and month and include in output path
-now = datetime.datetime.now()
-output_path = f"data/ludii_speeds_{playout_str}_{args.num_threads}_threads_{now.month}-{now.day}.csv"
+output_path = f"data/ludii_speeds_{playout_str}_{args.num_threads}_threads.csv"
 command = f"java -jar Ludii.jar {time_command} --num-threads {args.num_threads} --game-names {game_list_str} --export-csv {output_path} --playout-action-cap {args.action_cap} "
 
 print(f'Running command: "{command}"')
