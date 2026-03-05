@@ -1,4 +1,9 @@
 """
+python examples/03-alpha-zero/tournament.py --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_reversi.pkl --baseline=othello_v0 --dirs /users/alexpadula/store/ludax/checkpoints/reversi2/*
+python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex2/*
+"""
+
+"""
 Tournament Elo evaluation for AlphaZero checkpoints.
 
 Takes a list of checkpoint directories (each from a different training run)
@@ -269,6 +274,7 @@ def main():
     parser.add_argument("--dirs", nargs="+", required=True, help="Checkpoint directories")
     parser.add_argument("--env_id", type=str, default=None, help="Game id (auto-detected if omitted)")
     parser.add_argument("--env_type", type=str, default=None, help="pgx or ldx (auto-detected if omitted)")
+    parser.add_argument("--baseline", type=str, default=None, help="Optional Pgx baseline model id (e.g. 'othello_v0')")
     parser.add_argument("--games_per_pair", type=int, default=32, help="Games per pair per side")
     parser.add_argument("--log_interval", type=int, default=None, help="Log every N pairings (default: num_pairs)")
     parser.add_argument("--output_path", type=str, default="elo_ratings.pkl", help="Path to save the Elo plot")
@@ -309,19 +315,21 @@ def main():
     has_baseline = False
     baseline_fn = None
     try:
-        baseline_id = f"{env_id}_v0" if env_id != "reversi" else "othello_v0"
-        baseline_fn = pgx.make_baseline_model(baseline_id)
-        
-        baseline_ckpt = Checkpoint(
-            run_name="pgx_baseline",
-            iteration=0,
-            path="network_download",
-            model=jnp.empty(0), # Dummy PyTree array for jax.device_put_replicated
-            label=f"baseline/{baseline_id}"
-        )
-        checkpoints.append(baseline_ckpt)
-        has_baseline = True
-        print(f"Successfully loaded Pgx baseline: {baseline_id}")
+        if args.baseline:
+            baseline_id = args.baseline
+            # baseline_id = f"{env_id}_v0" if env_id != "reversi" else "othello_v0"
+            baseline_fn = pgx.make_baseline_model(baseline_id)
+            
+            baseline_ckpt = Checkpoint(
+                run_name="pgx_baseline",
+                iteration=0,
+                path="network_download",
+                model=jnp.empty(0), # Dummy PyTree array for jax.device_put_replicated
+                label=f"baseline/{baseline_id}"
+            )
+            checkpoints.append(baseline_ckpt)
+            has_baseline = True
+            print(f"Successfully loaded Pgx baseline: {baseline_id}")
     except Exception as e:
         print(f"Note: Could not load Pgx baseline for '{env_id}' ({e}). Proceeding without it.")
 

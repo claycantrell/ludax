@@ -37,12 +37,15 @@ num_devices = len(devices)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-# python examples/03-alpha-zero/train.py env_id=reversi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
+# python examples/03-alpha-zero/train.py env_id=reversi     env_type=ldx     seed=0     max_num_iters=800     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.005     eval_interval=50     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 # python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=256     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 # python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=1024     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 # python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=42     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/english_draughts/"
 # python examples/03-alpha-zero/train.py env_id=wolf_and_sheep     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/wolf_and_sheep/"
 
+# python examples/03-alpha-zero/train.py env_id=hop_through     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/hop_through/"
+# python examples/03-alpha-zero/train.py env_id=pente    env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/pente/"
+# python examples/03-alpha-zero/train.py env_id=gomoku    env_type=ldx     seed=1     max_num_iters=400     num_channels=128     num_layers=6     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=256     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/gomoku/"
 
 # python examples/03-alpha-zero/train.py env_id=connect_four     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
 class Config(BaseModel):
@@ -304,8 +307,8 @@ def _play_match_batch(rng_key, model_a, model_b, init_keys, player_a_side: int):
         action_b = _get_action(params_b, state_b, obs, legal, k2)
         action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
-        if config.env_type != "pgx":
-            action = action.astype(jnp.int8)
+        # if config.env_type != "pgx":
+        #     action = action.astype(jnp.int8)
 
         st = jax.vmap(env.step)(st, action)
         rewards = st.rewards
