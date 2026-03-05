@@ -1,5 +1,7 @@
-jax==0.4.26
-jaxlib==0.4.26
-flax==0.8.2
-transformer-engine==1.5.0+7430b16
-dm-haiku==0.0.12
+jax==0.8.1.dev20251212+6ab1fef24
+jax-cuda13-pjrt==0.8.1.dev20260121
+jax-cuda13-plugin==0.8.1.dev20260121
+jaxlib==0.8.1.dev20260121
+nsys-jax==0.1.dev1265+g1f4d5531e 
+transformer_engine==2.10.0+769ed7783
+fla==0.12.1

@@ -2,10 +2,10 @@ import jax
 import jax.numpy as jnp
 from ludax import LudaxEnvironment, games
 
-BATCH_SIZE = 128
+BATCH_SIZE = 16
 
-test_games = games.__all__
-# test_games = ["tic_tac_toe", "hex", "english_draughts", "reversi"]
+# test_games = games.__all__
+test_games = ["english_draughts", "reversi", "tic_tac_toe", "hex"]
 for game in test_games:
     jax.debug.print(f"\nGame: {game}")
     

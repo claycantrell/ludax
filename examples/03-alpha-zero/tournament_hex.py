@@ -1,15 +1,38 @@
 """
+python examples/03-alpha-zero/tournament_hex.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226034608 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226060249 /users/alexpadula/store/ludax/checkpoints/hex_ldx_20260226091126 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
+python examples/03-alpha-zero/tournament_hex.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226080742 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226045637 /users/alexpadula/store/ludax/checkpoints/hex_pgx_20260226070542
+"""
+"""
 Tournament Elo evaluation for AlphaZero checkpoints.
 
 Takes a list of checkpoint directories (each from a different training run)
 and evaluates relative Elo ratings across all checkpoints in a shared tournament.
-Now supports injecting a Pgx baseline model into the tournament if one exists.
 
 Key design decisions:
-  - No MCTS during evaluation — moves are sampled directly from the policy head.
-  - The tournament continuously iterates over shuffled pairings.
-  - Matches dynamically compile based on the opponent type (AZNet vs AZNet,
-    AZNet vs Baseline, etc.) and cache the compiled JAX functions.
+  - No MCTS during evaluation — moves are sampled directly from the policy head
+    for efficiency (same as the quick eval in train.py).
+  - The tournament continuously iterates over shuffled pairings. After each
+    full sweep through all pairs, the order is reshuffled. Elo ratings are
+    updated after every single pairing, so later pairings always use the
+    freshest ratings.
+  - Matplotlib plots are saved (overwritten) every `--log_interval` pairings.
+  - Checkpoints on the x-axis are ordered by iteration number within each run.
+
+Usage:
+    python tournament_hex.py \
+        --dirs checkpoints/run1 checkpoints/run2 \
+        --env_id hex --env_type pgx \
+        --games_per_pair 32
+
+All flags:
+    --dirs            List of checkpoint directories (one per training run)
+    --env_id          Game id (default: read from first checkpoint)
+    --env_type        pgx or ldx (default: read from first checkpoint)
+    --games_per_pair  Games per pair per side, so total = 2x this
+    --log_interval    Log every N pairings (default: num_pairs, i.e. once per sweep)
+    --output_path       Path to save the Elo plot (default: elo_ratings.pkl)
+    --seed            RNG seed
+
 """
 
 import argparse
@@ -18,6 +41,7 @@ import itertools
 import math
 import os
 import pickle
+import time
 from functools import partial
 from typing import Any, Dict, List, NamedTuple, Tuple
 
@@ -33,24 +57,30 @@ from pgx.experimental import auto_reset
 
 # Lazy imports that depend on the training code
 from network import AZNet
+
 from pydantic import BaseModel
 
 
 class Config(BaseModel):
-    env_id: str = "reversi"
-    env_type: str = "ldx"
+    env_id: str = "hex"
+    env_type: str = "pgx"
     seed: int = 0
     max_num_iters: int = 1000
+    # network params
     num_channels: int = 128
     num_layers: int = 6
     resnet_v2: bool = True
+    # selfplay params
     selfplay_batch_size: int = 1024
     num_simulations: int = 32
     max_num_steps: int = 256
+    # training params
     training_batch_size: int = 4096
     learning_rate: float = 0.001
+    # eval params
     eval_interval: int = 5
     eval_num_games: int = 128
+    # checkpoint params
     ckpt_dir: str = ""
 
     class Config:
@@ -98,8 +128,9 @@ class Checkpoint(NamedTuple):
     run_name: str       # directory basename (run identifier)
     iteration: int      # training iteration
     path: str           # full path to .ckpt file
-    model: Any          # (params, state) tuple or dummy array for baselines
+    model: Any          # (params, state) tuple
     label: str          # short display label
+    is_ldx_hex: bool = False  # <-- HACK: flag for trimming logic
 
 
 def load_checkpoints(dirs: List[str]) -> List[Checkpoint]:
@@ -129,14 +160,15 @@ def load_checkpoints(dirs: List[str]) -> List[Checkpoint]:
 
 
 # ---------------------------------------------------------------------------
-# Game-playing infrastructure (Heterogeneous)
+# Game-playing infrastructure (no MCTS, sampling from policy)
 # ---------------------------------------------------------------------------
 
-def build_forward(env, config_from_ckpt):
+def build_forward(config_from_ckpt):
     """Build the forward function from a checkpoint's config."""
-    def forward_fn(x, is_eval=False):
+    # HACK: Pass num_actions dynamically so Haiku maps weights correctly
+    def forward_fn(x, num_actions, is_eval=False):
         net = AZNet(
-            num_actions=env.num_actions,
+            num_actions=num_actions,
             num_channels=config_from_ckpt.num_channels,
             num_blocks=config_from_ckpt.num_layers,
             resnet_v2=config_from_ckpt.resnet_v2,
@@ -146,28 +178,9 @@ def build_forward(env, config_from_ckpt):
     return hk.without_apply_rng(hk.transform_with_state(forward_fn))
 
 
-def aznet_get_action(forward_fn):
-    """Action extraction for Haiku AZNet models."""
-    def _get_action(model_pytree, obs, legal_mask, key):
-        params, state = model_pytree
-        (logits, _), _ = forward_fn.apply(params, state, obs, is_eval=True)
-        logits = jnp.where(legal_mask, logits, jnp.finfo(logits.dtype).min)
-        return jax.random.categorical(key, logits, axis=-1)
-    return _get_action
+def make_play_fn(env, forward, env_type):
+    """Create the jit-compiled match-playing function."""
 
-
-def baseline_get_action(baseline_fn):
-    """Action extraction for Pgx Baseline models."""
-    def _get_action(dummy_pytree, obs, legal_mask, key):
-        # Baseline model encapsulates its own weights, so we ignore dummy_pytree
-        logits, _ = baseline_fn(obs)
-        logits = jnp.where(legal_mask, logits, jnp.finfo(logits.dtype).min)
-        return jax.random.categorical(key, logits, axis=-1)
-    return _get_action
-
-
-def make_heterogeneous_play_fn(env, env_type, get_action_a, get_action_b):
-    """Create the jit-compiled match-playing function between two arbitrary action functions."""
     def _observe(state):
         if env_type == "pgx":
             return state.observation
@@ -180,10 +193,37 @@ def make_heterogeneous_play_fn(env, env_type, get_action_a, get_action_b):
     def _init(key):
         return env.init(key)
 
-    @partial(jax.pmap, static_broadcasted_argnums=[4])
-    def play_batch(rng_key, model_a_pytree, model_b_pytree, init_keys, player_a_side: int):
+    # HACK: add 5 and 6 to static argnums for the is_ldx_hex flags
+    @partial(jax.pmap, static_broadcasted_argnums=[4, 5, 6])
+    def play_batch(rng_key, model_a, model_b, init_keys, player_a_side: int, is_ldx_hex_a: bool, is_ldx_hex_b: bool):
+        params_a, state_a = model_a
+        params_b, state_b = model_b
         batch_size = init_keys.shape[0]
         state = jax.vmap(_init)(init_keys)
+
+        def get_action(model_params, model_state, obs, legal_mask, key, is_ldx_hex):
+            # HACK: trim observation and mask if model expects ldx hex
+            if is_ldx_hex:
+                obs_in = obs[..., :2]
+                legal_in = legal_mask[..., :121]
+                n_act = 121
+            else:
+                obs_in = obs
+                legal_in = legal_mask
+                n_act = env.num_actions
+
+            (logits, _), _ = forward.apply(model_params, model_state, obs_in, n_act, is_eval=True)
+            
+            # Mask out illegal moves
+            logits = jnp.where(legal_in, logits, jnp.finfo(logits.dtype).min)
+
+            # Pad logits back to the env size (e.g., 122 for pgx) with -inf to align with other agents
+            if is_ldx_hex and logits.shape[-1] < legal_mask.shape[-1]:
+                pad_len = legal_mask.shape[-1] - logits.shape[-1]
+                pad_val = jnp.full(logits.shape[:-1] + (pad_len,), jnp.finfo(logits.dtype).min)
+                logits = jnp.concatenate([logits, pad_val], axis=-1)
+
+            return jax.random.categorical(key, logits, axis=-1)
 
         def body_fn(val):
             key, st, R = val
@@ -192,8 +232,9 @@ def make_heterogeneous_play_fn(env, env_type, get_action_a, get_action_b):
             legal = st.legal_action_mask
 
             key, k1, k2 = jax.random.split(key, 3)
-            action_a = get_action_a(model_a_pytree, obs, legal, k1)
-            action_b = get_action_b(model_b_pytree, obs, legal, k2)
+            # Pass the respective boolean flags
+            action_a = get_action(params_a, state_a, obs, legal, k1, is_ldx_hex_a)
+            action_b = get_action(params_b, state_b, obs, legal, k2, is_ldx_hex_b)
             action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
             if env_type != "pgx":
@@ -215,7 +256,7 @@ def make_heterogeneous_play_fn(env, env_type, get_action_a, get_action_b):
 
 
 def play_match(
-    rng_key, model_a, model_b, num_games: int, play_batch_fn
+    rng_key, model_a, model_b, num_games: int, play_batch_fn, is_ldx_hex_a: bool, is_ldx_hex_b: bool
 ) -> Tuple[int, int, int]:
     """Play num_games as each side. Returns (wins_a, draws, wins_b)."""
     games_per_device = max(1, num_games // num_devices)
@@ -230,7 +271,7 @@ def play_match(
         init_keys = all_keys.reshape(num_devices, games_per_device, 2)
         rng_keys = jax.random.split(rng_key, num_devices)
 
-        R = play_batch_fn(rng_keys, rep_a, rep_b, init_keys, side)
+        R = play_batch_fn(rng_keys, rep_a, rep_b, init_keys, side, is_ldx_hex_a, is_ldx_hex_b)
         R = R.reshape(-1)
         total_wins_a += int((R > 0.5).sum())
         total_draws += int((jnp.abs(R) < 0.5).sum())
@@ -240,11 +281,11 @@ def play_match(
 
 
 # ---------------------------------------------------------------------------
-# Snapshots
+# Matplotlib plotting
 # ---------------------------------------------------------------------------
 
 def save_elo_snapshot(elos: Dict[str, float], checkpoints: List[Checkpoint], step: int, sweep: int, output_path: str):
-    """Pickle the current Elo state to disk."""
+    """Pickle the current Elo state to disk (replaces the matplotlib plot)."""
     snapshot_path = os.path.splitext(output_path)[0] + ".pkl"
     payload = {
         "step": step,
@@ -278,10 +319,12 @@ def main():
     # -- Load checkpoints -------------------------------------------------
     print("Loading checkpoints...")
     checkpoints = load_checkpoints(args.dirs)
-    
-    if len(checkpoints) == 0:
-        print("No checkpoints found. Exiting.")
+    n = len(checkpoints)
+    if n < 2:
+        print(f"Need at least 2 checkpoints for a tournament, found {n}.")
         return
+
+    print(f"Loaded {n} checkpoints from {len(set(c.run_name for c in checkpoints))} runs:")
 
     # -- Detect env config from first checkpoint --------------------------
     with open(checkpoints[0].path, "rb") as f:
@@ -293,8 +336,15 @@ def main():
 
     if env_id == "othello":
         env_id = "reversi"
-
+        
     print(f"Environment: {env_id} ({env_type})")
+
+    # HACK: Iterate back over the checkpoints and set the is_ldx_hex flag
+    is_hex = "hex" in env_id.lower()
+    checkpoints = [
+        c._replace(is_ldx_hex=(is_hex and "ldx" in c.path.lower()))
+        for c in checkpoints
+    ]
 
     # -- Setup environment and network ------------------------------------
     if env_type == "pgx":
@@ -303,41 +353,9 @@ def main():
         from ludax import LudaxEnvironment, games as ludax_games
         env = LudaxEnvironment(game_str=getattr(ludax_games, env_id))
 
-    forward = build_forward(env, first_config)
-
-    # -- Attempt to load Pgx Baseline -------------------------------------
-    has_baseline = False
-    baseline_fn = None
-    try:
-        baseline_id = f"{env_id}_v0" if env_id != "reversi" else "othello_v0"
-        baseline_fn = pgx.make_baseline_model(baseline_id)
-        
-        baseline_ckpt = Checkpoint(
-            run_name="pgx_baseline",
-            iteration=0,
-            path="network_download",
-            model=jnp.empty(0), # Dummy PyTree array for jax.device_put_replicated
-            label=f"baseline/{baseline_id}"
-        )
-        checkpoints.append(baseline_ckpt)
-        has_baseline = True
-        print(f"Successfully loaded Pgx baseline: {baseline_id}")
-    except Exception as e:
-        print(f"Note: Could not load Pgx baseline for '{env_id}' ({e}). Proceeding without it.")
-
-    n = len(checkpoints)
-    if n < 2:
-        print(f"Need at least 2 agents for a tournament, found {n}.")
-        return
-
-    # -- Setup Action Functions & Cache -----------------------------------
-    action_fns = {
-        "aznet": aznet_get_action(forward)
-    }
-    if has_baseline:
-        action_fns["baseline"] = baseline_get_action(baseline_fn)
-        
-    compiled_play_fns = {} # Cache for compiled matchup functions
+    # Removed env parameter since it handles dynamic num_actions now
+    forward = build_forward(first_config) 
+    play_batch_fn = make_play_fn(env, forward, env_type)
 
     # -- Init Elo ratings -------------------------------------------------
     elos: Dict[str, float] = {c.label: INITIAL_ELO for c in checkpoints}
@@ -353,10 +371,11 @@ def main():
     np_rng = np.random.default_rng(args.seed)
     step = 0
     sweep = 0
-    snapshot_elos = dict(elos)  
+    snapshot_elos = dict(elos)  # snapshot for computing deltas at log time
 
     try:
         while True:
+            # Shuffle all pairs for this sweep
             sweep += 1
             order = np_rng.permutation(num_pairs)
 
@@ -371,22 +390,11 @@ def main():
                 i, j = pairs[idx]
                 ca, cb = checkpoints[i], checkpoints[j]
 
-                # Identify matchup type and fetch compiled fn
-                type_a = "baseline" if ca.run_name == "pgx_baseline" else "aznet"
-                type_b = "baseline" if cb.run_name == "pgx_baseline" else "aznet"
-                match_type = (type_a, type_b)
-
-                if match_type not in compiled_play_fns:
-                    compiled_play_fns[match_type] = make_heterogeneous_play_fn(
-                        env, env_type, action_fns[type_a], action_fns[type_b]
-                    )
-                
-                play_batch_fn = compiled_play_fns[match_type]
-
                 rng_key, subkey = jax.random.split(rng_key)
                 wins_a, draws, wins_b = play_match(
                     subkey, ca.model, cb.model,
                     args.games_per_pair, play_batch_fn,
+                    ca.is_ldx_hex, cb.is_ldx_hex  # Passed the flags down
                 )
 
                 elos[ca.label], elos[cb.label] = update_elo(
