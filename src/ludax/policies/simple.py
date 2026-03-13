@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 from . import BIG, SMALL, zero_heuristic
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 
 def random_policy():
@@ -13,8 +14,8 @@ def random_policy():
         :return: Selected action.
         """
         legal_action_mask = state_b.legal_action_mask
-        logits = jnp.log(legal_action_mask.astype(jnp.float32))
-        return jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+        logits = jnp.log(legal_action_mask.astype(REWARD_DTYPE))
+        return jax.random.categorical(key, logits=logits, axis=1).astype(ACTION_DTYPE)
 
     return jax.jit(random_policy_f)
 
@@ -35,7 +36,7 @@ def one_ply_policy(step_b, heuristic=zero_heuristic):
         state_flat = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
 
         # Step every (state, action) pair in one call
-        flat_next_state = step_b(state_flat, actions_flat.astype(jnp.int16))
+        flat_next_state = step_b(state_flat, actions_flat.astype(ACTION_DTYPE))
 
         # Sum the next_state.mover_reward with the heuristic
         # Note: even in games where the players always alternate, this is necessary since the terminal state doesn't
@@ -54,6 +55,6 @@ def one_ply_policy(step_b, heuristic=zero_heuristic):
         action_values = action_values_flat.reshape(batch_size, num_actions)
         action_values = jnp.where(state_b.legal_action_mask, action_values, -jnp.inf)
 
-        return jnp.argmax(action_values, axis=1).astype(jnp.int16)
+        return jnp.argmax(action_values, axis=1).astype(ACTION_DTYPE)
 
     return jax.jit(one_step_lookahead_f)

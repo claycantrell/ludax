@@ -1,5 +1,6 @@
 from ludax import LudaxEnvironment
 from ludax.games import tic_tac_toe, english_draughts
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 import jax
 import jax.numpy as jnp
 import random
@@ -22,8 +23,8 @@ while not bool(state.terminated):
 
     # Sample an action from legal moves
     key, subkey = jax.random.split(key)
-    logits = jnp.log(state.legal_action_mask.astype(jnp.float32))  # -inf for illegal
-    action = jax.random.categorical(subkey, logits=logits, axis=0).astype(jnp.int16)
+    logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))  # -inf for illegal
+    action = jax.random.categorical(subkey, logits=logits, axis=0).astype(ACTION_DTYPE)
 
     # Step the environment
     state = step(state, action)

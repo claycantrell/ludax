@@ -2,6 +2,7 @@ import functools
 import jax
 import jax.numpy as jnp
 from . import BIG, SMALL, zero_heuristic
+from ludax.config import ACTION_DTYPE
 
 def negamax_policy(step_b, depth: int, heuristic=zero_heuristic):
     """
@@ -22,7 +23,7 @@ def negamax_policy(step_b, depth: int, heuristic=zero_heuristic):
         batch_size, num_actions = state_b.legal_action_mask.shape
 
         # Repeat states and enumerate actions
-        all_actions = jnp.broadcast_to(jnp.arange(num_actions, dtype=jnp.int16),
+        all_actions = jnp.broadcast_to(jnp.arange(num_actions, dtype=ACTION_DTYPE),
                                        (batch_size, num_actions))
         actions_flat = all_actions.reshape(-1)
         state_flat = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
@@ -60,7 +61,7 @@ def negamax_policy(step_b, depth: int, heuristic=zero_heuristic):
         batch_size, num_actions = state_b.legal_action_mask.shape
 
         # One-step expansion at root
-        all_actions = jnp.broadcast_to(jnp.arange(num_actions, dtype=jnp.int16),
+        all_actions = jnp.broadcast_to(jnp.arange(num_actions, dtype=ACTION_DTYPE),
                                        (batch_size, num_actions))
         actions_flat = all_actions.reshape(-1)
         state_flat = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
@@ -84,6 +85,6 @@ def negamax_policy(step_b, depth: int, heuristic=zero_heuristic):
         # Mask & tie-break noise
         scores = jnp.where(state_b.legal_action_mask, scores, -jnp.inf)
         noise = jax.random.uniform(key, shape=(batch_size, num_actions), minval=-SMALL, maxval=SMALL)
-        return jnp.argmax(scores + noise, axis=1).astype(jnp.int16)
+        return jnp.argmax(scores + noise, axis=1).astype(ACTION_DTYPE)
 
     return policy_f

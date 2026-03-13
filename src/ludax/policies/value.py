@@ -2,6 +2,7 @@ from functools import partial
 
 import jax.numpy as jnp
 import jax
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 @jax.jit
 def zero_heuristic(state_b, *_):
@@ -9,7 +10,7 @@ def zero_heuristic(state_b, *_):
     A zero heuristic that returns 0.0 for all states.
     """
 
-    return jnp.zeros(state_b.legal_action_mask.shape[0], dtype=jnp.float32)
+    return jnp.zeros(state_b.legal_action_mask.shape[0], dtype=REWARD_DTYPE)
 
 
 def construct_playout_heuristic(step_b, num_playouts=20):
@@ -32,7 +33,7 @@ def construct_playout_heuristic(step_b, num_playouts=20):
         logits = jnp.where(legal_action_mask.astype(bool), 0.0, -jnp.inf)  # [N, A]
 
         # sample one action per state (remove the last axis → shape [N])
-        action = jax.random.categorical(subkey, logits=logits, axis=-1).astype(jnp.int16)
+        action = jax.random.categorical(subkey, logits=logits, axis=-1).astype(ACTION_DTYPE)
 
         state = step_b(state, action)
         return state, _key

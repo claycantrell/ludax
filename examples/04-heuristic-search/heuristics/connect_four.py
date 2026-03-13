@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from ludax.config import BOARD_DTYPE, REWARD_DTYPE
 
 # ----- precompute all 4-in-a-row windows on a 6x7 board -----
 def _make_windows_indices():
@@ -21,7 +22,7 @@ def _make_windows_indices():
     for r in range(3, R):
         for c in range(C - 3):
             idxs.append([(r - k)*C + (c + k) for k in range(4)])
-    return jnp.array(idxs, dtype=jnp.int32)  # (69, 4)
+    return jnp.array(idxs, dtype=BOARD_DTYPE)  # (69, 4)
 
 WINDOWS_IDX = _make_windows_indices()  # constant used by the heuristic
 
@@ -59,7 +60,7 @@ def connect_four_heuristic(state):
 
     # Map counts -> scores (0..4). We ignore 4-in-a-row here; terminal rewards can handle wins.
     # Tweak weights as you like.
-    score_map = jnp.array([0.0, 0.1, 1.0, 5.0, 0.0], dtype=jnp.float32)
+    score_map = jnp.array([0.0, 0.1, 1.0, 5.0, 0.0], dtype=REWARD_DTYPE)
 
     my_line_score  = jnp.take(score_map, my_cnt)
     opp_line_score = jnp.take(score_map, opp_cnt)
@@ -67,12 +68,12 @@ def connect_four_heuristic(state):
     my_score  = jnp.sum(jnp.where(my_open,  my_line_score,  0.0), axis=-1)
     opp_score = jnp.sum(jnp.where(opp_open, opp_line_score, 0.0), axis=-1)
 
-    return (my_score - opp_score).astype(jnp.float32)
+    return (my_score - opp_score).astype(REWARD_DTYPE)
 
 
 def _center_bonus(board, cur):
     # center column is column 3 (0-based); rows 0..5 -> indices [0*7+3, 1*7+3, ...]
-    center_idx = jnp.array([3, 10, 17, 24, 31, 38], dtype=jnp.int32)
+    center_idx = jnp.array([3, 10, 17, 24, 31, 38], dtype=BOARD_DTYPE)
     center_cells = jnp.take(board, center_idx, axis=-1)
     return 0.05 * jnp.sum(center_cells == cur[..., None], axis=-1)  # (...,)
 

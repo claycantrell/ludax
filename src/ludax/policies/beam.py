@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from . import BIG, SMALL, zero_heuristic
+from ludax.config import ACTION_DTYPE
 
 from .simple import random_policy
 
@@ -67,7 +68,7 @@ def beam_search_policy(step_b, heuristic=zero_heuristic, cache_size=1000, topk=1
             lambda x: jnp.repeat(x, num_actions, axis=0), top_states
         )
 
-        flat_next_state = step_b(state_flat, actions_flat.astype(jnp.int16))
+        flat_next_state = step_b(state_flat, actions_flat.astype(ACTION_DTYPE))
 
         # Small noise to break ties
         noise = jax.random.uniform(key, shape=flat_next_state.mover_reward.shape)

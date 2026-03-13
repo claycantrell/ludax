@@ -2,6 +2,7 @@
 import jax
 import jax.numpy as jnp
 from ludax import LudaxEnvironment
+from ludax.config import ACTION_DTYPE
 from ludax.config import Shapes
 from ludax.games import connect_four
 
@@ -71,7 +72,7 @@ while not root_state.terminated and not root_state.truncated:
     action = mcts_policy(root_state_b, subkey)[0]
 
     print(f"Player {root_state.current_player} selecting action {action}")
-    root_state = step_fn(root_state, action.astype(jnp.int16))
+    root_state = step_fn(root_state, action.astype(ACTION_DTYPE))
 
     turn_idx += 1
 

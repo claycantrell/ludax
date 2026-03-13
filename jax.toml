@@ -5,4 +5,4 @@ workdir = "/users/alexpadula/projects/ludax"
 
 [annotations]
 com.hooks.aws_ofi_nccl.enabled = "true"
-com.hooks.aws_ofi_nccl.variant = "cuda13"
+com.hooks.aws_ofi_nccl.variant = "cuda12"

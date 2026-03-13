@@ -7,7 +7,7 @@ from svgwrite import cm, mm
 import jax.numpy as jnp
 import numpy as np
 
-from ..config import Shapes, PieceShapes, P1, P2, EMPTY, RENDER_CONFIG
+from ..config import Shapes, PieceShapes, P1, P2, EMPTY, RENDER_CONFIG, BOARD_DTYPE
 
 
 class InteractiveBoardHandler():
@@ -126,8 +126,8 @@ class InteractiveBoardHandler():
         
         # Create a minimal dummy state with required attributes
         DummyState = namedtuple('DummyState', ['board', 'current_player'])
-        dummy_board = jnp.ones((self.game_info.num_piece_types, self.game_info.board_size), dtype=jnp.int8) * EMPTY
-        dummy_state = DummyState(board=dummy_board, current_player=jnp.int8(0))
+        dummy_board = jnp.ones((self.game_info.num_piece_types, self.game_info.board_size), dtype=BOARD_DTYPE) * EMPTY
+        dummy_state = DummyState(board=dummy_board, current_player=BOARD_DTYPE(0))
         
         # Evaluate each region mask function and store the result
         region_colors = self.render_config.get('region_colors', [])

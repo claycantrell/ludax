@@ -57,8 +57,8 @@ from pgx.experimental import auto_reset
 
 # Lazy imports that depend on the training code
 from network import AZNet
-
 from pydantic import BaseModel
+from ludax.config import ACTION_DTYPE
 
 
 class Config(BaseModel):
@@ -238,7 +238,7 @@ def make_play_fn(env, forward, env_type):
             action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
             if env_type != "pgx":
-                action = action.astype(jnp.int8)
+                action = action.astype(ACTION_DTYPE)
 
             st = jax.vmap(_step)(st, action)
             rewards = st.rewards

@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from ludax.config import BOARD_DTYPE, REWARD_DTYPE
 
 def connectivity_heuristic(state_b):
 
@@ -9,7 +10,7 @@ def connectivity_heuristic(state_b):
         player = state.game_state.current_player
 
         # Keep labels only on the current player's stones; 0 elsewhere.
-        flat = jnp.where(board != player, labels, 0).ravel().astype(jnp.int32)
+        flat = jnp.where(board != player, labels, 0).ravel().astype(BOARD_DTYPE)
 
         # Count presence of each label. Use a static length: #cells + 1 (for label 0).
         n_cells = flat.shape[0]  # static at trace time
@@ -17,7 +18,7 @@ def connectivity_heuristic(state_b):
 
         # Number of non‑empty component labels, excluding label 0.
         num_components = jnp.count_nonzero(counts[1:] > 0)
-        return -num_components.astype(jnp.float32)
+        return -num_components.astype(REWARD_DTYPE)
 
     return jax.vmap(per_state, in_axes=0, out_axes=0)(state_b)
 
@@ -97,6 +98,6 @@ def distance_heuristic(state_b):
         my_dist  = _min_path_length(my_cost,  vertical=(player == 0))
         opp_dist = _min_path_length(opp_cost, vertical=(player == 1))
 
-        return (opp_dist - my_dist).astype(jnp.float32)
+        return (opp_dist - my_dist).astype(REWARD_DTYPE)
 
     return jax.vmap(per_state, in_axes=0, out_axes=0)(state_b)
