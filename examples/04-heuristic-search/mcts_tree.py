@@ -13,6 +13,7 @@ import re
 
 import jax
 import jax.numpy as jnp
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 import numpy as np
 import mctx
 
@@ -50,9 +51,9 @@ LEGAL_LOGIT = 100.0
 # WINNING_LOGIT = 6.0
 # LEGAL_LOGIT = 0.0
 # LOSING_LOGIT  = -6.0
-# NEG_INF = jnp.array(-jnp.inf, dtype=jnp.float32)
-NEG_BIG = jnp.array(-1e9, dtype=jnp.float32)
-# NEG_INF = jnp.array(-1e3, dtype=jnp.float32)
+# NEG_INF = jnp.array(-jnp.inf, dtype=REWARD_DTYPE)
+NEG_BIG = jnp.array(-1e9, dtype=REWARD_DTYPE)
+# NEG_INF = jnp.array(-1e3, dtype=REWARD_DTYPE)
 
 
 @partial(jax.jit, static_argnames=['step_b'])
@@ -68,14 +69,14 @@ def one_ply_logits(step_b, state_b, root_player_b):
     state_flat = jax.tree_util.tree_map(lambda x: jnp.repeat(x, num_actions, axis=0), state_b)
     root_player_flat = jnp.repeat(root_player_b, num_actions, axis=0)
 
-    next_state_flat = step_b(state_flat, actions_flat.astype(jnp.int16))
+    next_state_flat = step_b(state_flat, actions_flat.astype(ACTION_DTYPE))
 
     root_rewards_flat = next_state_flat.rewards[
         jnp.arange(next_state_flat.rewards.shape[0]),
         root_player_flat
     ]
 
-    logits_flat = jnp.full(root_rewards_flat.shape, LEGAL_LOGIT, dtype=jnp.float32)
+    logits_flat = jnp.full(root_rewards_flat.shape, LEGAL_LOGIT, dtype=REWARD_DTYPE)
     logits_flat = jnp.where(root_rewards_flat < 0, LOSING_LOGIT, logits_flat)
     logits_flat = jnp.where(root_rewards_flat > 0, WINNING_LOGIT, logits_flat)
 
@@ -84,13 +85,13 @@ def one_ply_logits(step_b, state_b, root_player_b):
     legal_flat = legal.reshape(-1)
     logits_flat = jnp.where(legal_flat, logits_flat, NEG_BIG)
 
-    return logits_flat.reshape(batch_size, num_actions).astype(jnp.float32)
+    return logits_flat.reshape(batch_size, num_actions).astype(REWARD_DTYPE)
 
 
 def ludax_recurrent(root_player_b, step_b, heuristic):
     def recurrent_fn(params, rng_key, action, state):
         key, sub_key = jax.random.split(rng_key)
-        next_state = step_b(state, action.astype(jnp.int16))
+        next_state = step_b(state, action.astype(ACTION_DTYPE))
 
         r = next_state.rewards[jnp.arange(next_state.rewards.shape[0]), root_player_b]
         l = one_ply_logits(step_b, next_state, root_player_b)
@@ -370,7 +371,7 @@ def gumbel_policy(step_b, renderer, heuristic=None, num_simulations=100,
         #         dirichlet_fraction=0.0,
         # )
 
-        return po.action.astype(jnp.int16), po.search_tree
+        return po.action.astype(ACTION_DTYPE), po.search_tree
 
     _compiled = jax.jit(_compiled)
 

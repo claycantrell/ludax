@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import ActionTypes, Shapes, PieceShapes, PlayerAndMoverRefs, MoveTypes
+from .config import ActionTypes, Shapes, PieceShapes, PlayerAndMoverRefs, MoveTypes, BOARD_DTYPE, REWARD_DTYPE
 
 @dataclass
 class GameInfo:
@@ -196,7 +196,7 @@ class GameInfoExtractor(Visitor):
         '''
         if "connected_components" not in self.game_state_attributes:
             self.game_state_attributes.append("connected_components")
-            self.defaults.append(jnp.zeros((self.game_info.num_piece_types, self.game_info.board_size), dtype=jnp.int8))
+            self.defaults.append(jnp.zeros((self.game_info.num_piece_types, self.game_info.board_size), dtype=BOARD_DTYPE))
 
     def play_effects(self, tree):
         '''
@@ -205,7 +205,7 @@ class GameInfoExtractor(Visitor):
         '''
         if "scores" not in self.game_state_attributes:
             self.game_state_attributes.append("scores")
-            self.defaults.append(jnp.zeros(2, dtype=jnp.float32))
+            self.defaults.append(jnp.zeros(2, dtype=REWARD_DTYPE))
 
     def play_mechanic(self, tree):
         child = tree.children[0]
@@ -283,7 +283,7 @@ class GameInfoExtractor(Visitor):
     def predicate_action_was(self, tree):
         if "action_was" not in self.game_state_attributes:
             self.game_state_attributes.append("action_was")
-            self.defaults.append(-jnp.ones(2, dtype=jnp.int8))
+            self.defaults.append(-jnp.ones(2, dtype=BOARD_DTYPE))
 
     def predicate_can_move_again(self, tree):
         if "can_move_again" not in self.game_state_attributes:

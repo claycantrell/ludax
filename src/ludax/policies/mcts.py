@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 
 from ludax import LudaxEnvironment
-from ludax.config import State
+from ludax.config import State, ACTION_DTYPE, REWARD_DTYPE
 
 
 REWARD_SCALE = 1
@@ -65,12 +65,12 @@ def initialize(environment: LudaxEnvironment, root_state: State, num_sims: int, 
     - params (MCTSParams): the initialized MCTS parameters
     - key (jax.random.PRNGKey): the updated random key
     '''
-    transitions = -jnp.ones((num_sims, environment.num_actions), dtype=jnp.int32)
+    transitions = -jnp.ones((num_sims, environment.num_actions), dtype=ACTION_DTYPE)
     states = jax.vmap(lambda i: root_state)(jnp.arange(num_sims))
-    legal_actions = jnp.ones((num_sims, environment.num_actions), dtype=jnp.int32)
-    visits = jnp.zeros((num_sims, environment.num_actions), dtype=jnp.int32)
-    rewards = jnp.zeros((num_sims, environment.num_actions), dtype=jnp.float32)
-    to_play = jnp.zeros((num_sims,), dtype=jnp.int32)
+    legal_actions = jnp.ones((num_sims, environment.num_actions), dtype=ACTION_DTYPE)
+    visits = jnp.zeros((num_sims, environment.num_actions), dtype=ACTION_DTYPE)
+    rewards = jnp.zeros((num_sims, environment.num_actions), dtype=REWARD_DTYPE)
+    to_play = jnp.zeros((num_sims,), dtype=ACTION_DTYPE)
 
     legal_actions = legal_actions.at[0].set(root_state.legal_action_mask)
     to_play = to_play.at[0].set(root_state.current_player)
@@ -137,7 +137,7 @@ def select_action_ucb(mcts_params: MCTSParams, node_idx: int, key: jax.random.PR
     ucb_values = jnp.where(legal_actions, ucb_values, -jnp.inf)
 
     logits = jnp.where(ucb_values == ucb_values.max(), 0.0, -jnp.inf)
-    max_action = jax.random.categorical(key, logits=logits, axis=0).astype(jnp.int16)
+    max_action = jax.random.categorical(key, logits=logits, axis=0).astype(ACTION_DTYPE)
 
     return max_action, ucb_values
 
@@ -199,7 +199,7 @@ def expand_leaf(mcts_params: MCTSParams, traversal: MCTSTraversal, environment: 
     node_idx, action = traversal.nodes[last_valid_step], traversal.actions[last_valid_step]
 
     leaf_state = jax.tree_util.tree_map(lambda x: x[node_idx], mcts_params.states)
-    next_state = step_fn(leaf_state, action.astype(jnp.int16))
+    next_state = step_fn(leaf_state, action.astype(ACTION_DTYPE))
     reward, key = evaluate_state(mcts_params, next_state, step_fn, key)
 
     # If the leaf was terminal, then we use the actual reward instead of a rollout reward
@@ -257,8 +257,8 @@ def evaluate_state(mcts_params: MCTSParams, state: State, step_fn: callable, key
     def body_fn(args):
         state, key = args
         key, subkey = jax.random.split(key)
-        logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-        action = jax.random.categorical(key, logits=logits, axis=0).astype(jnp.int16)
+        logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))
+        action = jax.random.categorical(key, logits=logits, axis=0).astype(ACTION_DTYPE)
         state = step_fn(state, action)
         return state, key
 
@@ -286,7 +286,7 @@ def uct_mcts_policy(environment, num_simulations=100, max_depth=20):
             return params, key
 
         params, key = jax.lax.fori_loop(0, num_simulations, body_fn, (params, key))
-        return jnp.argmax(params.visits[0]).astype(jnp.int16)
+        return jnp.argmax(params.visits[0]).astype(ACTION_DTYPE)
 
     def policy_f(state_b, key):
         return jax.vmap(policy_single)(state_b, jax.random.split(key, state_b.rewards.shape[0]))

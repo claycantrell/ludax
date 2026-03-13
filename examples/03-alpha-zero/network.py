@@ -4,6 +4,7 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from ludax.config import REWARD_DTYPE
 
 
 class BlockV1(hk.Module):
@@ -56,7 +57,7 @@ class AZNet(hk.Module):
         self.resnet_cls = BlockV2 if resnet_v2 else BlockV1
 
     def __call__(self, x, is_training, test_local_stats):
-        x = x.astype(jnp.float32)
+        x = x.astype(REWARD_DTYPE)
         x = hk.Conv2D(self.num_channels, kernel_shape=3)(x)
 
         if not self.resnet_v2:

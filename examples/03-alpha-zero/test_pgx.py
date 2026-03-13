@@ -3,6 +3,7 @@ import random
 import jax
 import jax.numpy as jnp
 from ludax import LudaxEnvironment, games
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 # Import the PGX environment
 import pgx
@@ -32,8 +33,8 @@ for env, type in zip((env_pgx, env_ldx), ("PGX", "Ludax")):
             state, key = args
             key, subkey = jax.random.split(key)
 
-            logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-            action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int8)
+            logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))
+            action = jax.random.categorical(key, logits=logits, axis=1).astype(ACTION_DTYPE)
             state = step(state, action)
             return state, key
 

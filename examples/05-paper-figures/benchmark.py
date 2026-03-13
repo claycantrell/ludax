@@ -14,6 +14,7 @@ from thefuzz import process
 from tqdm import tqdm
 
 from ludax import LudaxEnvironment
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 from ludax import games
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -45,8 +46,8 @@ def run_batch(state, step, key):
     def body_fn(args):
         state, key = args
         key, subkey = jax.random.split(key)
-        logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-        action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+        logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))
+        action = jax.random.categorical(key, logits=logits, axis=1).astype(ACTION_DTYPE)
         state = step(state, action)
         return state, key
 

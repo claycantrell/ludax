@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from lark import Lark, UnexpectedEOF, Token, UnexpectedToken, Tree
 
 from ludax import LudaxEnvironment
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 from ludax.games import tic_tac_toe
 
 
@@ -171,8 +172,8 @@ if __name__ == "__main__":
         def body_fn(args):
             state, key = args
             key, subkey = jax.random.split(key)
-            logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-            action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+            logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))
+            action = jax.random.categorical(key, logits=logits, axis=1).astype(ACTION_DTYPE)
             state = step(state, action)
             return state, key
 

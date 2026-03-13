@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .config import EMPTY, INVALID, Shapes, Directions, RelativeDirections, EdgeTypes, Orientations, OptionalArgs, PieceRefs, PlayerAndMoverRefs, P1, P2
+from .config import EMPTY, INVALID, Shapes, Directions, RelativeDirections, EdgeTypes, Orientations, OptionalArgs, PieceRefs, PlayerAndMoverRefs, P1, P2, BOARD_DTYPE, ACTION_DTYPE
 from .game_info import GameInfo
 
 BOARD_SHAPE_TO_DIRECTIONS = {
@@ -80,7 +80,7 @@ def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
     lookup information
     '''
     if game_info.board_shape == Shapes.SQUARE or game_info.board_shape == Shapes.RECTANGLE:
-        kernel = jnp.zeros((1, 1, 3, 3), dtype=jnp.int8)
+        kernel = jnp.zeros((1, 1, 3, 3), dtype=BOARD_DTYPE)
         if optional_args[OptionalArgs.DIRECTION] in [Directions.UP_LEFT, Directions.DIAGONAL, Directions.BACK_DIAGONAL, Directions.ANY]:
             kernel = kernel.at[:, :, 0, 0].set(1)
 
@@ -106,7 +106,7 @@ def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
             kernel = kernel.at[:, :, 2, 2].set(1)
 
     elif game_info.board_shape == Shapes.HEX_RECTANGLE:
-        kernel = jnp.zeros((1, 1, 3, 3), dtype=jnp.int8)
+        kernel = jnp.zeros((1, 1, 3, 3), dtype=BOARD_DTYPE)
         # The "back diagonal" in hex-rectangle board is, oddly, the same X position as the original
         if optional_args[OptionalArgs.DIRECTION] in [Directions.UP_LEFT, Directions.DIAGONAL, Directions.BACK_DIAGONAL, Directions.ANY]:
             kernel = kernel.at[:, :, 0, 1].set(1)
@@ -128,7 +128,7 @@ def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
             kernel = kernel.at[:, :, 2, 1].set(1)
     
     elif game_info.board_shape == Shapes.HEXAGON:
-        kernel = jnp.zeros((1, 1, 5, 5), dtype=jnp.int8)
+        kernel = jnp.zeros((1, 1, 5, 5), dtype=BOARD_DTYPE)
         if optional_args[OptionalArgs.DIRECTION] in [Directions.UP_LEFT, Directions.DIAGONAL, Directions.BACK_DIAGONAL, Directions.ANY]:
             kernel = kernel.at[:, :, 1, 1].set(1)
 
@@ -166,18 +166,18 @@ def _get_adjacency_lookup(game_info: GameInfo):
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
 
-    adjacency_array = jnp.zeros((len(directions), game_info.board_size, game_info.board_size), dtype=jnp.int8)
+    adjacency_array = jnp.zeros((len(directions), game_info.board_size, game_info.board_size), dtype=BOARD_DTYPE)
     for channel_idx, direction in enumerate(directions):
         kernel = _get_adjacency_kernel(game_info, {OptionalArgs.DIRECTION: direction})
 
         for i in range(game_info.board_size):
-            mask = jnp.zeros((game_info.board_size,), dtype=jnp.int8).at[i].set(1)
+            mask = jnp.zeros((game_info.board_size,), dtype=BOARD_DTYPE).at[i].set(1)
             board_2d = mask_to_board(mask)
             board_2d = board_2d[jnp.newaxis, jnp.newaxis, :, :]
             board_2d = jnp.where(board_2d == INVALID, EMPTY, board_2d)
 
-            board_2d = board_2d.astype(jnp.int8)
-            kernel = kernel.astype(jnp.int8)
+            board_2d = board_2d.astype(BOARD_DTYPE)
+            kernel = kernel.astype(BOARD_DTYPE)
 
             conv_out = jax.lax.conv(board_2d, kernel, (1, 1), 'SAME')[0][0] > 0
             out_mask = board_to_mask(conv_out)
@@ -219,8 +219,8 @@ def _get_direction_indices(game_info: GameInfo, directions: typing.Union[Directi
     p1_dir_indices = [all_directions.index(_dir) for _dir in p1_query_dirs if _dir in all_directions]
     p2_dir_indices = [all_directions.index(_dir) for _dir in p2_query_dirs if _dir in all_directions]
 
-    p1_dir_indices = jnp.array(list(sorted(p1_dir_indices)), dtype=jnp.int8)
-    p2_dir_indices = jnp.array(list(sorted(p2_dir_indices)), dtype=jnp.int8)
+    p1_dir_indices = jnp.array(list(sorted(p1_dir_indices)), dtype=BOARD_DTYPE)
+    p2_dir_indices = jnp.array(list(sorted(p2_dir_indices)), dtype=BOARD_DTYPE)
 
     return p1_dir_indices, p2_dir_indices
 
@@ -245,17 +245,18 @@ def _get_slide_lookup(game_info: GameInfo):
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     num_board_positions = game_info.board_size
 
-    # TODO: for some large boards, it's possible that int8 might not be a large enough dtype to represent the indices
-    if num_board_positions > 127:
-        raise ValueError(f"WIP: board size {num_board_positions} is too large for int8 dtype. Slide lookup cannot be generated.")
+    # TODO: for some large boards, BOARD_DTYPE might not be large enough to represent board indices
+    import numpy as _np
+    if num_board_positions > _np.iinfo(BOARD_DTYPE).max:
+        raise ValueError(f"WIP: board size {num_board_positions} is too large for BOARD_DTYPE ({BOARD_DTYPE}). Slide lookup cannot be generated.")
 
     num_line_positions = max(game_info.board_dims) if game_info.board_shape != Shapes.HEXAGON else game_info.hex_diameter
 
     mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
-    dummy_board = mask_to_board(jnp.zeros(num_board_positions, dtype=jnp.int8))
+    dummy_board = mask_to_board(jnp.zeros(num_board_positions, dtype=BOARD_DTYPE))
     n_rows, n_cols = dummy_board.shape
 
-    slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=jnp.int16)
+    slide_lookup = jnp.zeros((len(directions), num_board_positions, num_line_positions), dtype=ACTION_DTYPE)
 
     for channel_idx, direction in enumerate(directions):
         for i in range(num_board_positions):
@@ -272,7 +273,7 @@ def _get_slide_lookup(game_info: GameInfo):
                     indices = [np.ravel_multi_index((r, col), dummy_board.shape) for r in range(row, -1, -1)]
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
-                    board_indices = np.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, -1, -1))], dtype=np.int8)
+                    board_indices = np.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, -1, -1))], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
@@ -284,7 +285,7 @@ def _get_slide_lookup(game_info: GameInfo):
                     indices = [np.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, -1, -1), range(col, n_cols))]
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
-                    board_indices = np.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, n_cols))], dtype=np.int8)
+                    board_indices = np.array([[r, c] for r, c in zip(range(row, -1, -1), range(col, n_cols))], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
@@ -294,7 +295,7 @@ def _get_slide_lookup(game_info: GameInfo):
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
                     start_col = abs((n_rows // 2) - row) - 1
-                    board_indices = np.array([[row, c] for c in range(col, start_col, -2)], dtype=np.int8)
+                    board_indices = np.array([[row, c] for c in range(col, start_col, -2)], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten()[::-1].tolist()
 
@@ -304,7 +305,7 @@ def _get_slide_lookup(game_info: GameInfo):
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
                     end_col = n_cols - abs((n_rows // 2) - row) + 1
-                    board_indices = np.array([[row, c] for c in range(col, end_col, 2)], dtype=np.int8)
+                    board_indices = np.array([[row, c] for c in range(col, end_col, 2)], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
 
@@ -314,7 +315,7 @@ def _get_slide_lookup(game_info: GameInfo):
                     indices = [np.ravel_multi_index((r, c), game_info.board_dims) for r, c in zip(range(row, n_rows), range(col, -1, -1))]
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
-                    board_indices = np.array([[r, c] for r, c in zip(range(row, n_rows), range(col, -1, -1))], dtype=np.int8)
+                    board_indices = np.array([[r, c] for r, c in zip(range(row, n_rows), range(col, -1, -1))], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
 
@@ -330,12 +331,12 @@ def _get_slide_lookup(game_info: GameInfo):
                     indices = [np.ravel_multi_index((r, col), game_info.board_dims) for r in range(row, n_rows)]
                 
                 elif game_info.board_shape == Shapes.HEXAGON:
-                    board_indices = np.array([[r, c] for r, c in zip(range(row, n_rows), range(col, n_cols))], dtype=np.int8)
+                    board_indices = np.array([[r, c] for r, c in zip(range(row, n_rows), range(col, n_cols))], dtype=BOARD_DTYPE)
                     occupied_board = dummy_board.at[board_indices[:, 0], board_indices[:, 1]].set(1)
                     indices = np.argwhere(board_to_mask(occupied_board) == 1).flatten().tolist()
 
             # Pad the indices with num_board_positions+1 to ensure that the resulting array has the correct shape
-            indices = jnp.array(indices + [num_board_positions + 1] * (num_line_positions - len(indices)), dtype=jnp.int16)
+            indices = jnp.array(indices + [num_board_positions + 1] * (num_line_positions - len(indices)), dtype=ACTION_DTYPE)
             
             slide_lookup = slide_lookup.at[channel_idx, i].set(indices)
     
@@ -363,7 +364,7 @@ def _get_mask_board_conversion_fns(game_info: GameInfo):
         offset = (diameter // 2) % 2
 
         # Apply checkerboard pattern
-        base = np.zeros(game_info.board_dims, dtype=np.int8)
+        base = np.zeros(game_info.board_dims, dtype=BOARD_DTYPE)
         offset_indices = np.argwhere(np.ones_like(base))[offset::2]
         base[tuple(offset_indices.T)] = 1
 
@@ -389,7 +390,7 @@ def _get_mask_board_conversion_fns(game_info: GameInfo):
             base[corner_slice] = base[corner_slice] & stair_mask
 
         valid_hex_indices = jnp.argwhere(base == 1).T
-        base_board = jnp.ones_like(base, dtype=jnp.int8) * INVALID
+        base_board = jnp.ones_like(base, dtype=BOARD_DTYPE) * INVALID
 
         def mask_to_board(mask):
             return base_board.at[tuple(valid_hex_indices)].set(mask)
@@ -423,7 +424,7 @@ def _get_column_indices(game_info: GameInfo, column_idx: int):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
-    return indices.astype(jnp.int8)
+    return indices.astype(BOARD_DTYPE)
 
 def _get_corner_indices(game_info: GameInfo):
     '''
@@ -455,7 +456,7 @@ def _get_corner_indices(game_info: GameInfo):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
     
-    return indices.astype(jnp.int8)
+    return indices.astype(BOARD_DTYPE)
 
 def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
     '''
@@ -545,7 +546,7 @@ def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
-    return indices.astype(jnp.int8)
+    return indices.astype(BOARD_DTYPE)
 
 def _get_row_indices(game_info: GameInfo, row_idx: int):
     '''
@@ -569,7 +570,7 @@ def _get_row_indices(game_info: GameInfo, row_idx: int):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
     
-    return indices.astype(jnp.int8)
+    return indices.astype(BOARD_DTYPE)
 
 def _get_valid_edge_types(game_info: GameInfo):
     '''
@@ -605,7 +606,7 @@ def _get_flood_fill_fn(adjacency_lookup: jnp.array):
     def flood_fill(mask, idx):
         val_at_start = mask[idx]
 
-        fill_out = jnp.zeros_like(mask, dtype=jnp.int8).at[idx].set(1)
+        fill_out = jnp.zeros_like(mask, dtype=BOARD_DTYPE).at[idx].set(1)
         occupied = jnp.where(mask == val_at_start, 1, 0)
 
         def cond_fn(args):
@@ -645,12 +646,12 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
                 sub.append(jnp.argmax(adjacency_mask))
             else:
                 sub.append(-1)
-        neighbor_indices.append(jnp.array(sub, dtype=jnp.int8))
-    neighbor_indices = jnp.array(neighbor_indices, dtype=jnp.int8)
+        neighbor_indices.append(jnp.array(sub, dtype=BOARD_DTYPE))
+    neighbor_indices = jnp.array(neighbor_indices, dtype=BOARD_DTYPE)
 
     def get_connected_components_piece(state, action, piece_idx):
         cur_components = state.connected_components[piece_idx]
-        set_val = (action + 1).astype(jnp.int8)
+        set_val = (action + 1).astype(BOARD_DTYPE)
 
         board_occupant = state.board[piece_idx, action]
         cur_components = cur_components.at[action].set(set_val)
@@ -671,7 +672,7 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
     
     # TODO: special case (no VMAP) for when there's only one piece type?
     def get_connected_components(state, action):
-        piece_indices = jnp.arange(num_pieces, dtype=jnp.int8)
+        piece_indices = jnp.arange(num_pieces, dtype=BOARD_DTYPE)
         cur_components = jax.vmap(get_connected_components_piece, in_axes=(None, None, 0))(state, action, piece_indices)
         state = state._replace(connected_components=cur_components)
         return state
@@ -779,7 +780,7 @@ def _get_line_indices(game_info: GameInfo, n: int, orientation: Orientations):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
-    return jnp.array(indices, dtype=jnp.int16)
+    return jnp.array(indices, dtype=ACTION_DTYPE)
 
 def _get_custodial_indices(game_info: GameInfo, inner_n: int, orientation: Orientations):
     '''
@@ -793,7 +794,7 @@ def _get_custodial_indices(game_info: GameInfo, inner_n: int, orientation: Orien
 
     # If there aren't any valid custodial arrangements, we can just return empty arrays
     if line_indices.shape[0] == 0:
-        return jnp.array([], dtype=jnp.int16), jnp.array([], dtype=jnp.int16)
+        return jnp.array([], dtype=ACTION_DTYPE), jnp.array([], dtype=ACTION_DTYPE)
 
     inner_indices = line_indices[:, 1:-1]
     outer_indices = jnp.stack([line_indices[:, 0], line_indices[:, -1]], axis=1)
@@ -828,10 +829,10 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
 
         # Rectangular shapes are impossible on a hexagonal board and vice-versa
         if (shape in [Shapes.SQUARE, Shapes.RECTANGLE]) and (game_info.board_shape == Shapes.HEXAGON):
-            return jnp.array([], dtype=jnp.int16)
+            return jnp.array([], dtype=ACTION_DTYPE)
         
         if (shape in [Shapes.HEXAGON, Shapes.HEX_RECTANGLE]) and (game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE]):
-            return jnp.array([], dtype=jnp.int16)
+            return jnp.array([], dtype=ACTION_DTYPE)
         
         if shape == Shapes.SQUARE:
             pattern_width = shape_dims
@@ -902,21 +903,21 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
                 can_fit = (row + pattern_height <= board_height) and (col + max_pattern_width <= board_width)
                 if can_fit:    
                     transformed_indices = [start + (r * board_width) + c for r, c in local_pattern]
-                    indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
+                    indices.append(jnp.array(transformed_indices, dtype=ACTION_DTYPE))
 
                 if rotate and shape not in [Shapes.HEXAGON]:
                     # Add the 180 degree rotation of the pattern (rotated[2])
                     if can_fit:
                         transformed_indices_180 = [start + (r * board_width) + c for r, c in rotated_patterns[2]]
-                        indices.append(jnp.array(transformed_indices_180, dtype=jnp.int16))
+                        indices.append(jnp.array(transformed_indices_180, dtype=ACTION_DTYPE))
 
                     # Check if the rotated pattern can fit at this position
                     can_fit_rotated = (row + max_pattern_width <= board_height) and (col + pattern_height <= board_width)
                     if can_fit_rotated:
                         transformed_indices_90 = [start + (r * board_width) + c for r, c in rotated_patterns[1]]
                         transformed_indices_270 = [start + (r * board_width) + c for r, c in rotated_patterns[3]]
-                        indices.append(jnp.array(transformed_indices_90, dtype=jnp.int16))
-                        indices.append(jnp.array(transformed_indices_270, dtype=jnp.int16))
+                        indices.append(jnp.array(transformed_indices_90, dtype=ACTION_DTYPE))
+                        indices.append(jnp.array(transformed_indices_270, dtype=ACTION_DTYPE))
 
     elif game_info.board_shape == Shapes.HEXAGON:
         indices = []
@@ -944,7 +945,7 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
                         can_fit = check_fit(row, col, p)
                         if can_fit:
                             transformed_indices = [start + get_exceeded_width(row, r) + c for r, c in p]
-                            indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
+                            indices.append(jnp.array(transformed_indices, dtype=ACTION_DTYPE))
 
                 else:
                     # Check if the pattern can fit at this position
@@ -952,12 +953,12 @@ def _get_pattern_indices(game_info: GameInfo, arg_type: str, pattern: list, rota
                     
                     if can_fit:
                         transformed_indices = [start + get_exceeded_width(row, r) + c for r, c in local_pattern]
-                        indices.append(jnp.array(transformed_indices, dtype=jnp.int16))
+                        indices.append(jnp.array(transformed_indices, dtype=ACTION_DTYPE))
 
     else:
         raise NotImplementedError(f"Pattern-based indices not implemented yet for board shape {game_info.board_shape}")
     
-    return jnp.array(indices, dtype=jnp.int16)
+    return jnp.array(indices, dtype=ACTION_DTYPE)
 
 def _get_collect_values_fn(outer_children, vmap=False):
     '''
@@ -1007,23 +1008,23 @@ def _get_occupied_mask_fn(piece, player_or_mover):
     if piece == PieceRefs.ANY:
         if player_or_mover == PlayerAndMoverRefs.MOVER:
             def get_mask(state):
-                return (state.board == state.current_player).any(axis=0).astype(jnp.int8)
+                return (state.board == state.current_player).any(axis=0).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
             def get_mask(state):
-                return (state.board == (state.current_player + 1) % 2).any(axis=0).astype(jnp.int8)
+                return (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.P1:
             def get_mask(state):
-                return (state.board == P1).any(axis=0).astype(jnp.int8)
+                return (state.board == P1).any(axis=0).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.P2:
             def get_mask(state):
-                return (state.board == P2).any(axis=0).astype(jnp.int8)
+                return (state.board == P2).any(axis=0).astype(BOARD_DTYPE)
             
         elif player_or_mover == PlayerAndMoverRefs.BOTH:
             def get_mask(state):
-                return (state.board != EMPTY).any(axis=0).astype(jnp.int8)
+                return (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
             
         else:
             raise ValueError(f"Invalid player or mover reference: {player_or_mover}")
@@ -1031,23 +1032,23 @@ def _get_occupied_mask_fn(piece, player_or_mover):
     else:
         if player_or_mover == PlayerAndMoverRefs.MOVER:
             def get_mask(state):
-                return (state.board[piece] == state.current_player).astype(jnp.int8)
+                return (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
             def get_mask(state):
-                return (state.board[piece] == (state.current_player + 1) % 2).astype(jnp.int8)
+                return (state.board[piece] == (state.current_player + 1) % 2).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.P1:
             def get_mask(state):
-                return (state.board[piece] == P1).astype(jnp.int8)
+                return (state.board[piece] == P1).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.P2:
             def get_mask(state):
-                return (state.board[piece] == P2).astype(jnp.int8)
+                return (state.board[piece] == P2).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.BOTH:
             def get_mask(state):
-                return (state.board[piece] != EMPTY).astype(jnp.int8)
+                return (state.board[piece] != EMPTY).astype(BOARD_DTYPE)
 
         else:
             raise ValueError(f"Invalid player or mover reference: {player_or_mover}")

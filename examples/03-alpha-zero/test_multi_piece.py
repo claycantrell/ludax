@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 from ludax import LudaxEnvironment, games
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 BATCH_SIZE = 16
 
@@ -22,15 +23,15 @@ for game in test_games:
             def body_fn(args):
                 state, key, step_count = args
                 key, subkey = jax.random.split(key)
-                logits = jnp.log(state.legal_action_mask.astype(jnp.float32))
-                action = jax.random.categorical(key, logits=logits, axis=1).astype(jnp.int16)
+                logits = jnp.log(state.legal_action_mask.astype(REWARD_DTYPE))
+                action = jax.random.categorical(key, logits=logits, axis=1).astype(ACTION_DTYPE)
                 new_state = step(state, action)
                 # Only increment step_count for games not yet done
                 done = state.terminated | state.truncated
-                step_count = step_count + (~done).astype(jnp.int32)
+                step_count = step_count + (~done).astype(ACTION_DTYPE)
                 return new_state, key, step_count
 
-            step_count = jnp.zeros(BATCH_SIZE, dtype=jnp.int32)
+            step_count = jnp.zeros(BATCH_SIZE, dtype=ACTION_DTYPE)
             state, key, step_count = jax.lax.while_loop(cond_fn, body_fn, (state, key, step_count))
 
             return state, key, step_count
