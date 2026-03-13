@@ -107,6 +107,10 @@ def render_game(id):
     print(f"Loading the following game:\n{getattr(games, id)}")
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
+    MOVE_INFO = {
+        "stage": "selecting_piece",
+        "select_idx": None
+    }
     if ENV.game_info.uses_slide_logic:
         SLIDE_LOOKUP = utils._get_slide_lookup(ENV.game_info)
 
@@ -195,8 +199,10 @@ def step():
         if action_idx >= len(legal_action_mask) or not legal_action_mask[action_idx]:
             print(f"Illegal action selected: {action_idx}")
             print("Legal action mask:\n", legal_action_mask)
+            print("Legal action indices:\n", jnp.where(legal_action_mask)[0])
+            
             # Return current state with an error message
-            HANDLER.render(STATE)
+            HANDLER.render(STATE, legal_actions=legal_action_mask)
             time.sleep(0.1)
 
             if hasattr(STATE.game_state, "scores"):

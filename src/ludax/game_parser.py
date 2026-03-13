@@ -423,7 +423,7 @@ class GameRuleParser(Transformer):
         action_size = self.game_info.board_size
         def apply_action_fn(state, action):
             board = state.board.at[piece, action].set((state.current_player + offset) % 2)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(action)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
             return state._replace(board=board, previous_actions=previous_actions)
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
@@ -450,7 +450,7 @@ class GameRuleParser(Transformer):
             def apply_action(state, action):
                 pred_val = predicate_fn(state._replace(
                     board=state.board.at[action].set(state.current_player),
-                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, 2])].set(action)
+                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
                 ))
                 return pred_val
             
@@ -884,7 +884,7 @@ class GameRuleParser(Transformer):
                     board = board.at[:, step_index].set(EMPTY)  # Remove the hopped-over piece
 
                     captured_mask = jnp.zeros_like(state.captured).at[step_index].set(True)
-                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
+                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_index))
 
                     return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
                 
@@ -896,7 +896,7 @@ class GameRuleParser(Transformer):
                     board = state.board.at[piece, end_index].set(state.current_player)
                     board = board.at[piece, start].set(EMPTY)
 
-                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
+                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_index))
 
                     return state._replace(board=board, previous_actions=previous_actions)
                 
@@ -945,7 +945,7 @@ class GameRuleParser(Transformer):
                 
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
                 
                 return state._replace(board=board, previous_actions=previous_actions)
         
@@ -1038,7 +1038,7 @@ class GameRuleParser(Transformer):
             
             board = state.board.at[piece, end_idx].set(state.current_player)
             board = board.at[piece, start_idx].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
             
             return state._replace(board=board, previous_actions=previous_actions)
         
@@ -1096,7 +1096,7 @@ class GameRuleParser(Transformer):
 
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
 
                 return state._replace(board=board, previous_actions=previous_actions)
 
@@ -1135,7 +1135,7 @@ class GameRuleParser(Transformer):
                 
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_idx)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
                 
                 return state._replace(board=board, previous_actions=previous_actions)
 
