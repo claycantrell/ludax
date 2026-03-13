@@ -194,6 +194,7 @@ def step():
         # Check if the selected action is legal
         if action_idx >= len(legal_action_mask) or not legal_action_mask[action_idx]:
             print(f"Illegal action selected: {action_idx}")
+            print("Legal action mask:\n", legal_action_mask)
             # Return current state with an error message
             HANDLER.render(STATE)
             time.sleep(0.1)

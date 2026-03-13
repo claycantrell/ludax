@@ -208,7 +208,7 @@ direction_arg: "direction:" (direction | multi_direction)
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
 exclude_arg: "exclude:" multi_mask_arg
-hop_over_arg: "hop_over:" (player_reference | mover_reference)
+hop_over_arg: "hop_over:" (player_reference | mover_reference | BOTH)
 increment_score_arg: "increment_score:" boolean
 mover_arg: "mover:" (mover_reference | BOTH)
 multi_mask_arg: multi_mask | super_mask | "(" super_mask+ ")"

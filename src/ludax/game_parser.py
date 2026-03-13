@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from lark.visitors import Transformer
 
-from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, MoveTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs, Shapes, BOARD_DTYPE
+from .config import EMPTY, P1, P2, TRUE, FALSE, DEFAULT_ARGUMENTS, ActionTypes, Directions, EdgeTypes, MoveTypes, PieceRefs, PlayerAndMoverRefs, OptionalArgs, Shapes, ACTION_DTYPE, BOARD_DTYPE
 from .game_info import GameInfo
 from . import utils
 
@@ -139,7 +139,7 @@ class GameRuleParser(Transformer):
             player = P2
 
         if place_arg_type == OptionalArgs.INDICES:
-            pattern = jnp.array(place_arg_info, dtype=BOARD_DTYPE)
+            pattern = jnp.array(place_arg_info, dtype=ACTION_DTYPE)
 
             def start_fn(state):
                 board = state.board.at[piece, pattern].set(player)
@@ -322,7 +322,7 @@ class GameRuleParser(Transformer):
         if piece_ref not in self.game_info.piece_names:
             raise SyntaxError(f"Piece '{piece_ref}' not defined in game pieces: {self.game_info.piece_names}")
         
-        return self.game_info.piece_names.index(piece_ref)
+        return ACTION_DTYPE(self.game_info.piece_names.index(piece_ref))
 
     '''
     Regions
@@ -332,7 +332,7 @@ class GameRuleParser(Transformer):
         region_idx = self.game_info.region_names.index(name)
 
         if region_arg_type == OptionalArgs.INDICES:
-            pattern = jnp.array(region_arg_info, dtype=BOARD_DTYPE)
+            pattern = jnp.array(region_arg_info, dtype=ACTION_DTYPE)
             def region_fn(state):
                 mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE)
                 mask = mask.at[pattern].set(1)
@@ -883,7 +883,7 @@ class GameRuleParser(Transformer):
                     board = board.at[piece, start].set(EMPTY)
                     board = board.at[:, step_index].set(EMPTY)  # Remove the hopped-over piece
 
-                    captured_mask = jnp.zeros_like(state.captured).at[step_index].set(1)
+                    captured_mask = jnp.zeros_like(state.captured).at[step_index].set(True)
                     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(end_index)
 
                     return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
@@ -901,7 +901,7 @@ class GameRuleParser(Transformer):
                     return state._replace(board=board, previous_actions=previous_actions)
                 
         else:
-            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=BOARD_DTYPE), len(p1_direction_indices))
+            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=ACTION_DTYPE), len(p1_direction_indices))
 
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
@@ -911,13 +911,13 @@ class GameRuleParser(Transformer):
 
                 step_indices = self.slide_lookup[direction_indices, :, 1].T
 
-                can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(BOARD_DTYPE)
+                can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(ACTION_DTYPE)
                 hop_indices = self.slide_lookup[direction_indices, :, 2].T
                 valid_hops = jnp.where(
                     can_hop,
                     hop_indices,
                     self.game_info.board_size + 1
-                )
+                ).astype(ACTION_DTYPE)
 
                 valid_indices = jnp.stack([indices, valid_hops.flatten()], axis=1)
                 
@@ -985,6 +985,8 @@ class GameRuleParser(Transformer):
 
         direction = optional_args[OptionalArgs.DIRECTION]
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
+
+        # TODO
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
         
         if self.game_info.action_type != ActionTypes.FROM_TO:
@@ -992,9 +994,9 @@ class GameRuleParser(Transformer):
 
 
         num_directions = len(p1_direction_indices)
-        indices = jnp.arange(self.game_info.board_size, dtype=BOARD_DTYPE)      
-        general_indices = jnp.indices((self.game_info.board_size, num_directions, distance), dtype=BOARD_DTYPE)[2]
-        occupied_pad = jnp.ones((self.game_info.board_size, num_directions, 1), dtype=BOARD_DTYPE)
+        indices = jnp.arange(self.game_info.board_size, dtype=ACTION_DTYPE)      
+        general_indices = jnp.indices((self.game_info.board_size, num_directions, distance), dtype=ACTION_DTYPE)[2]
+        occupied_pad = jnp.ones((self.game_info.board_size, num_directions, 1), dtype=ACTION_DTYPE)
         
         def legal_action_fn(state):
             direction_indices = all_direction_indices[state.current_player]
@@ -1691,7 +1693,7 @@ class GameRuleParser(Transformer):
         for corner in corner_indices:
             outer_indices.append(jnp.argwhere(local_lookup[corner] == 1).flatten())
         
-        outer_indices = jnp.array(outer_indices)
+        outer_indices = jnp.array(outer_indices, dtype=ACTION_DTYPE)
         inner_indices = corner_indices[:, jnp.newaxis]
         full_indices = jnp.concatenate([outer_indices[:, 0:1], inner_indices, outer_indices[:, 1:]], axis=1)
         full_match_width = 3
@@ -1763,7 +1765,7 @@ class GameRuleParser(Transformer):
                 inner_indices = jnp.concatenate(inner_indices, axis=0)
                 outer_indices = jnp.concatenate(outer_indices, axis=0)
             else:
-                line_indices = jnp.array([], dtype=BOARD_DTYPE)
+                line_indices = jnp.array([], dtype=ACTION_DTYPE)
 
         else:
             n = int(n)
@@ -2474,7 +2476,8 @@ class GameRuleParser(Transformer):
 
             # This array contains the "left" and "right" overshoot positions for each line and is set to
             # an overflow value if there is no overshoot in that direction
-            overshoot_indices = jnp.ones((line_indices.shape[0], 2), dtype=jnp.int16) * (self.game_info.board_size + 1)
+            overshoot_indices = jnp.ones((line_indices.shape[0], 2), dtype=ACTION_DTYPE) * (self.game_info.board_size + 1)
+
             for i in range(line_indices.shape[0]):
                 line = line_indices[i]
                 left_match = (overshoot_line_indices[:, :-1] == line).all(axis=1)
@@ -2503,11 +2506,32 @@ class GameRuleParser(Transformer):
                 no_overshoot_line_matches = line_matches & no_overshoot
 
                 matched_indices = jnp.where(no_overshoot_line_matches[:, jnp.newaxis], line_indices, self.game_info.board_size+1).flatten()
-                mask = jnp.zeros(self.game_info.board_size, dtype=jnp.int16).at[matched_indices].set(1)
+                mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE).at[matched_indices].set(1)
 
                 return mask
 
-            info = {"mask_fn": mask_fn}
+            num_lines = line_indices.shape[0]
+            def lookahead_mask_fn(state):
+                occupied_mask = get_occupied_mask(state)
+
+                line_mask = (occupied_mask[line_indices] == 1)
+                almost_line_mask = (line_mask.sum(axis=1) == n-1)
+                no_overshoot = (occupied_mask.at[overshoot_indices].get(fill_value=0) == 0).all(axis=1)
+
+                arange = jnp.arange(num_lines).astype(ACTION_DTYPE)
+                missing_line_indices = jnp.argmin(line_mask, axis=1).astype(ACTION_DTYPE)
+                missing_positions = jnp.where(almost_line_mask & no_overshoot, line_indices[arange, missing_line_indices], self.game_info.board_size+1)
+                unique_positions, counts = jnp.unique_counts(missing_positions, size=num_lines, fill_value=self.game_info.board_size+1)
+
+                unique_positions = unique_positions.astype(ACTION_DTYPE)
+                counts = counts.astype(BOARD_DTYPE)
+
+                mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE)
+                mask = mask.at[unique_positions].set(counts)
+
+                return mask
+
+            info = {"mask_fn": mask_fn, "lookahead_mask_fn": lookahead_mask_fn}
 
         else:
             line_indices = utils._get_line_indices(self.game_info, n, orientation)
@@ -2538,12 +2562,12 @@ class GameRuleParser(Transformer):
                 line_mask = (occupied_mask[line_indices] == 1)
                 almost_line_mask = (line_mask.sum(axis=1) == n-1)
 
-                arange = jnp.arange(num_lines).astype(BOARD_DTYPE)
-                missing_line_indices = jnp.argmin(line_mask, axis=1).astype(BOARD_DTYPE)
+                arange = jnp.arange(num_lines).astype(ACTION_DTYPE)
+                missing_line_indices = jnp.argmin(line_mask, axis=1).astype(ACTION_DTYPE)
                 missing_positions = jnp.where(almost_line_mask, line_indices[arange, missing_line_indices], self.game_info.board_size+1)
                 unique_positions, counts = jnp.unique_counts(missing_positions, size=num_lines, fill_value=self.game_info.board_size+1)
 
-                unique_positions = unique_positions.astype(BOARD_DTYPE)
+                unique_positions = unique_positions.astype(ACTION_DTYPE)
                 counts = counts.astype(BOARD_DTYPE)
 
                 mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE)

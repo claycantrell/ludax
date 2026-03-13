@@ -245,11 +245,6 @@ def _get_slide_lookup(game_info: GameInfo):
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     num_board_positions = game_info.board_size
 
-    # TODO: for some large boards, BOARD_DTYPE might not be large enough to represent board indices
-    import numpy as _np
-    if num_board_positions > _np.iinfo(BOARD_DTYPE).max:
-        raise ValueError(f"WIP: board size {num_board_positions} is too large for BOARD_DTYPE ({BOARD_DTYPE}). Slide lookup cannot be generated.")
-
     num_line_positions = max(game_info.board_dims) if game_info.board_shape != Shapes.HEXAGON else game_info.hex_diameter
 
     mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
@@ -424,7 +419,7 @@ def _get_column_indices(game_info: GameInfo, column_idx: int):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
-    return indices.astype(BOARD_DTYPE)
+    return indices.astype(ACTION_DTYPE)
 
 def _get_corner_indices(game_info: GameInfo):
     '''
@@ -456,7 +451,7 @@ def _get_corner_indices(game_info: GameInfo):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
     
-    return indices.astype(BOARD_DTYPE)
+    return indices.astype(ACTION_DTYPE)
 
 def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
     '''
@@ -546,7 +541,7 @@ def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
-    return indices.astype(BOARD_DTYPE)
+    return indices.astype(ACTION_DTYPE)
 
 def _get_row_indices(game_info: GameInfo, row_idx: int):
     '''
@@ -570,7 +565,7 @@ def _get_row_indices(game_info: GameInfo, row_idx: int):
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
     
-    return indices.astype(BOARD_DTYPE)
+    return indices.astype(ACTION_DTYPE)
 
 def _get_valid_edge_types(game_info: GameInfo):
     '''
