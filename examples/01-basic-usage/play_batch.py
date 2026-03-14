@@ -6,7 +6,7 @@ from ludax import LudaxEnvironment
 from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 
-BATCH_SIZE = 1
+BATCH_SIZE = 1024
 
 env = LudaxEnvironment(game_str=english_draughts)
 init = jax.jit(jax.vmap(env.init))
