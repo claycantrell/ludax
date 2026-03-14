@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from lark import Lark
 
 import ludax
-from .config import Array, PRNGKey, State, EMPTY, TRUE, MAX_STEP_COUNT
+from .config import Array, PRNGKey, State, EMPTY, TRUE, MAX_STEP_COUNT, BOARD_DTYPE, ACTION_DTYPE, REWARD_DTYPE
 from .game_info import GameInfoExtractor
 from .game_parser import GameRuleParser
 
@@ -50,14 +50,14 @@ class LudaxEnvironment():
     def init(self, rng: PRNGKey) -> State:
 
         # Temporarily hard-coding the init of the game state
-        temp_current_player = jnp.int8(0)
+        temp_current_player = BOARD_DTYPE(0)
         game_state = self.game_state_cls(
-            board=jnp.ones((self.num_piece_types, self.board_size), dtype=jnp.int8) * EMPTY,
+            board=jnp.ones((self.num_piece_types, self.board_size), dtype=BOARD_DTYPE) * EMPTY,
             legal_action_mask=jnp.ones((self.num_actions,), dtype=jnp.bool_),
             current_player=temp_current_player,
-            phase_idx=jnp.int8(0),
-            phase_step_count=jnp.int8(0),
-            previous_actions=jnp.int16([-1, -1, -1]),
+            phase_idx=BOARD_DTYPE(0),
+            phase_step_count=BOARD_DTYPE(0),
+            previous_actions=jnp.array([-1, -1, -1], dtype=ACTION_DTYPE),
         )
 
         # Initialize the board using the game rules
@@ -157,7 +157,7 @@ class LudaxEnvironment():
         # Use the new board to compute the winner, terminal, and rewards -- but consider the
         # current player to be the "original" player so they get credit for winning on their turn
         winners, terminated = self._get_winner(game_state._replace(current_player=original_player))
-        terminal_rewards = jnp.where((winners == EMPTY).all(), jnp.zeros_like(winners), jnp.where(winners, 1, -1)).astype(jnp.float32)
+        terminal_rewards = jnp.where((winners == EMPTY).all(), jnp.zeros_like(winners), jnp.where(winners, 1, -1)).astype(REWARD_DTYPE)
         rewards = jax.lax.select(terminated, terminal_rewards, jnp.zeros_like(terminal_rewards))
 
         mover_reward = rewards[original_player]

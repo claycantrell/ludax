@@ -20,6 +20,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from ludax import LudaxEnvironment, games
+from ludax.config import ACTION_DTYPE
 
 import pgx
 from pgx.experimental import auto_reset
@@ -93,7 +94,7 @@ def recurrent_fn(model, rng_key, action, state):
     model_params, model_state = model
 
     if config.env_type != "pgx":
-        action = action.astype(jnp.int8)
+        action = action.astype(ACTION_DTYPE)
     state = jax.vmap(env.step)(state, action)
 
     (logits, value), _ = forward.apply(
@@ -155,7 +156,7 @@ def selfplay(model, rng_key: jnp.ndarray) -> SelfplayOutput:
         keys = jax.random.split(key2, batch_size)
         action = policy_output.action
         if config.env_type != "pgx":
-            action = action.astype(jnp.int8)
+            action = action.astype(ACTION_DTYPE)
         state = jax.vmap(auto_reset(env.step, env.init))(state, action, keys)
         discount = -1.0 * jnp.ones_like(value)
         discount = jnp.where(state.terminated, 0.0, discount)
@@ -266,7 +267,7 @@ def _play_match_batch(rng_key, model_a, model_b, init_keys, player_a_side: int):
         action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
         # if config.env_type != "pgx":
-        #     action = action.astype(jnp.int8)
+        #     action = action.astype(ACTION_DTYPE)
 
         st = jax.vmap(env.step)(st, action)
         rewards = st.rewards
@@ -426,9 +427,16 @@ if __name__ == "__main__":
 
             # Quick eval: current vs best
             rng_key, subkey = jax.random.split(rng_key)
-            wins, draws, losses = play_match(
-                subkey, model_cpu, best_model_cpu, config.eval_num_games
+            wins_p1, draws_p1, losses_p1 = play_match(
+                subkey, model_cpu, best_model_cpu, config.eval_num_games // 2
             )
+
+            wins_p2, draws_p2, losses_p2 = play_match(
+                subkey, best_model_cpu, model_cpu, config.eval_num_games // 2
+            )
+
+            wins, draws, losses = wins_p1 + losses_p2, draws_p1 + draws_p2, losses_p1 + wins_p2
+
             total = wins + draws + losses
             loss_rate = losses / total if total else 0.0
             win_rate = wins / total if total else 0.0
@@ -465,7 +473,7 @@ if __name__ == "__main__":
 
             tqdm.write(
                 f"[iter {iteration}] vs best (iter {best_iteration}): "
-                f"Win/Loss={win_rate/loss_rate if loss_rate != 0 else float('inf'):.3f} (W={wins} D={draws} L={losses})"
+                f"W={wins} D={draws} L={losses}  win_rate={win_rate:.3f}"
             )
 
         wandb.log(log)

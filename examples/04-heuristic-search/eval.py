@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ludax import LudaxEnvironment
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
 
 from ludax.games import hex, connect_four, reversi, tic_tac_toe
 

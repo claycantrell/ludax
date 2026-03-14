@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from ludax import LudaxEnvironment
+from ludax.config import ACTION_DTYPE
 from ludax.games import *
 from ludax.policies import simple_mctx_policy, lookahead_mctx_policy, uct_mcts_policy, random_policy
 
@@ -41,8 +42,8 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
 
     B = state_b.winners.shape[0]
     occ0 = state_b.game_state.board != -1
-    agency_num0 = jnp.zeros((B,), jnp.int32)  # turns with >1 legal move
-    agency_den0 = jnp.zeros((B,), jnp.int32)  # total turns taken (per game)
+    agency_num0 = jnp.zeros((B,), ACTION_DTYPE)  # turns with >1 legal move
+    agency_den0 = jnp.zeros((B,), ACTION_DTYPE)  # total turns taken (per game)
 
     carry0 = (state_b, key, 0, agency_num0, agency_den0, occ0)
 
@@ -59,8 +60,8 @@ def gavel_metrics(policy, state_b, step_b, key, truncate=200) -> tuple:
         legal_n = jnp.sum(state.legal_action_mask, axis=-1)
         occ_now = state.game_state.board != -1
 
-        a_num = a_num + (active & (legal_n > 1)).astype(jnp.int32)
-        a_den = a_den + active.astype(jnp.int32)
+        a_num = a_num + (active & (legal_n > 1)).astype(ACTION_DTYPE)
+        a_den = a_den + active.astype(ACTION_DTYPE)
         covered = jnp.where(active[:, None], covered | occ_now, covered)
 
         action = policy(state, subkey)

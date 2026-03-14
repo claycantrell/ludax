@@ -5,6 +5,8 @@ import jax.numpy as jnp
 from . import construct_playout_heuristic, zero_heuristic
 import mctx
 
+from ludax.config import ACTION_DTYPE, REWARD_DTYPE
+
 # 1 With zero heurisitc, no difference. With random rollout 8x improvement: support one-ply logits
 # 2 TODO: support one-ply logits with heuristic
 # 3 10% improvement: default to a random rollout value fn if no heuristic is given
@@ -33,7 +35,7 @@ def construct_one_ply_logits(step_b):
         root_player_flat = jnp.repeat(root_player_b, num_actions, axis=0)
 
         # Step every (state, action) pair in one call
-        next_state_flat = step_b(state_flat, actions_flat.astype(jnp.int16))
+        next_state_flat = step_b(state_flat, actions_flat.astype(ACTION_DTYPE))
 
         # Reward from the root player's perspective after taking the action
         root_rewards_flat = next_state_flat.rewards[
@@ -42,7 +44,7 @@ def construct_one_ply_logits(step_b):
         ]
 
         # Start all actions at 100 (we'll mask illegals to 0 at the end)
-        logits_flat = jnp.full(root_rewards_flat.shape, LEGAL_LOGIT, dtype=jnp.float32)
+        logits_flat = jnp.full(root_rewards_flat.shape, LEGAL_LOGIT, dtype=REWARD_DTYPE)
 
         # Upgrade legal logits: 200 if opponent wins, 300 if root wins
         logits_flat = jnp.where(root_rewards_flat < 0, LOSING_LOGIT, logits_flat)
@@ -53,7 +55,7 @@ def construct_one_ply_logits(step_b):
         logits_flat = jnp.where(legal_flat, logits_flat, 0.0)
 
         # Reshape back to (batch, num_actions)
-        return logits_flat.reshape(batch_size, num_actions).astype(jnp.float32)
+        return logits_flat.reshape(batch_size, num_actions).astype(REWARD_DTYPE)
     return jax.jit(one_ply_logits_fn)
 
 def legal_logits(state_b, root_player_b):
@@ -63,7 +65,7 @@ def legal_logits(state_b, root_player_b):
     """
     legal_mask = state_b.legal_action_mask
     logits = jnp.where(legal_mask, LEGAL_LOGIT, 0.0)
-    return logits.astype(jnp.float32)
+    return logits.astype(REWARD_DTYPE)
 
 
 def ludax_recurrent(root_player_b, step_b, heuristic, logit_fn):
@@ -71,7 +73,7 @@ def ludax_recurrent(root_player_b, step_b, heuristic, logit_fn):
 
         key, sub_key = jax.random.split(rng_key)
 
-        next_state = step_b(state, action.astype(jnp.int16))
+        next_state = step_b(state, action.astype(ACTION_DTYPE))
 
         # Reward from the root player's perspective
         r = next_state.rewards[jnp.arange(next_state.rewards.shape[0]), root_player_b]
@@ -134,7 +136,7 @@ def muzero_policy(step_b, heuristic=None, logit_fn=None, num_simulations=100):
             invalid_actions=~state_b.legal_action_mask
         )
 
-        return policy_output.action.astype(jnp.int16)
+        return policy_output.action.astype(ACTION_DTYPE)
 
     return jax.jit(mcts_policy_f)
 
@@ -172,7 +174,7 @@ def gumbel_policy(step_b, heuristic=None, logit_fn=None, num_simulations=100):
             gumbel_scale=0.0  # Perfect information game
         )
 
-        return policy_output.action.astype(jnp.int16)
+        return policy_output.action.astype(ACTION_DTYPE)
 
     return jax.jit(policy_f)
 

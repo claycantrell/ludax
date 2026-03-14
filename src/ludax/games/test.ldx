@@ -1,7 +1,7 @@
 (game "Test" 
     (players 2)
     (equipment 
-        (board (hexagon 7))
+        (board (square 15))
         (pieces
             ("token" both)
         )
@@ -13,9 +13,18 @@
     ) 
     
     (rules 
+        (start
+            (place "token" P1 (200 202 204))
+            (place "token" P2 (180 182 184))
+        )
         (play
             (repeat (P1 P2)
-                (place "token" (destination (empty)))
+                (move
+                    (or
+                        (step "token" direction:orthogonal) 
+                        (hop "token" direction:orthogonal capture:false)
+                    )
+                )
             )
         )
         

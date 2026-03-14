@@ -166,7 +166,7 @@ def make_heterogeneous_play_fn(env, env_type, get_action_a, get_action_b):
             action = jnp.where(is_a_turn.squeeze(-1), action_a, action_b)
 
             if env_type != "pgx":
-                action = action.astype(jnp.int8)
+                action = action.astype(ACTION_DTYPE)
 
             st = jax.vmap(_step)(st, action)
             rewards = st.rewards

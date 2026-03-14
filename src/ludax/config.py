@@ -15,13 +15,18 @@ from .struct import dataclass
 Array = Any
 PRNGKey = Any
 
+# Configurable dtypes for quantization profiling
+BOARD_DTYPE = jnp.int8     # board cells, piece/player indices, integer masks
+ACTION_DTYPE = jnp.int16   # action indices, step/phase counters
+REWARD_DTYPE = jnp.float32 # rewards and value estimates
+
 TRUE = jnp.bool_(True)
 FALSE = jnp.bool_(False)
 
-INVALID = jnp.int8(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
-EMPTY = jnp.int8(-1)
-P1 = jnp.int8(0)
-P2 = jnp.int8(1)
+INVALID = BOARD_DTYPE(-2)  # used to represent invalid cells when projecting hex grid onto rectangular array
+EMPTY = BOARD_DTYPE(-1)
+P1 = BOARD_DTYPE(0)
+P2 = BOARD_DTYPE(1)
 
 MAX_STEP_COUNT = 2000
 
@@ -44,12 +49,12 @@ class State():
     game_state: type
     current_player: Array
     legal_action_mask: Array
-    winners: Array = EMPTY * jnp.ones(2, jnp.int8)
-    rewards: Array = jnp.float32([0.0, 0.0])
-    mover_reward: Array = jnp.float32(0.0)
+    winners: Array = EMPTY * jnp.ones(2, BOARD_DTYPE)
+    rewards: Array = jnp.array([0.0, 0.0], dtype=REWARD_DTYPE)
+    mover_reward: Array = REWARD_DTYPE(0.0)
     terminated: Array = FALSE
     truncated: Array = FALSE
-    global_step_count: Array = jnp.int16(0)
+    global_step_count: Array = ACTION_DTYPE(0)
 
 class ActionTypes(StrEnum):
     TO = 'action_to'
