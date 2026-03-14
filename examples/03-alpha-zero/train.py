@@ -1,7 +1,5 @@
-# Training script with simplified evaluation (win/draw rate vs best model).
-# Checkpoints are saved every `eval_interval` steps for later tournament evaluation.
-#
-# Based on the PGX AlphaZero training script:
+# Self-play AlphaZero training for Ludax games. Uses Gumbel MuZero policy (via mctx) and a ResNet policy/value network.
+# Originally based on the PGX AlphaZero training script:
 # https://github.com/sotetsuk/pgx/blob/18799f81a03651e7de8fb9dc79daee9090e2e695/examples/alphazero/train.py
 
 import random
@@ -19,7 +17,6 @@ import mctx
 import optax
 import wandb
 from omegaconf import OmegaConf
-from pydantic import BaseModel
 from tqdm import tqdm
 
 from ludax import LudaxEnvironment, games
@@ -28,51 +25,12 @@ import pgx
 from pgx.experimental import auto_reset
 
 from network import AZNet
-
-
-devices = jax.local_devices()
-num_devices = len(devices)
+from az_config import Config, devices, num_devices
 
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-# python examples/03-alpha-zero/train.py env_id=reversi     env_type=ldx     seed=0     max_num_iters=800     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.005     eval_interval=50     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-# python examples/03-alpha-zero/train.py env_id=hex     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=256     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-# python examples/03-alpha-zero/train.py env_id=dai_hasami_shogi     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=1024     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-# python examples/03-alpha-zero/train.py env_id=english_draughts     env_type=ldx     seed=42     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/english_draughts/"
-# python examples/03-alpha-zero/train.py env_id=wolf_and_sheep     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/wolf_and_sheep/"
-
-# python examples/03-alpha-zero/train.py env_id=hop_through     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/hop_through/"
-# python examples/03-alpha-zero/train.py env_id=pente    env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=128     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/pente/"
-# python examples/03-alpha-zero/train.py env_id=gomoku    env_type=ldx     seed=1     max_num_iters=400     num_channels=128     num_layers=6     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=256     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/gomoku/"
-
-# python examples/03-alpha-zero/train.py env_id=connect_four     env_type=ldx     seed=0     max_num_iters=400     num_channels=64     num_layers=4     resnet_v2=True     selfplay_batch_size=4096     num_simulations=32     max_num_steps=64     training_batch_size=4096     learning_rate=0.001     eval_interval=10     eval_num_games=128  ckpt_dir="/users/alexpadula/store/ludax/checkpoints/"
-class Config(BaseModel):
-    env_id: str = "reversi"
-    env_type: str = "ldx"
-    seed: int = -1
-    max_num_iters: int = 1000
-    # network params
-    num_channels: int = 128
-    num_layers: int = 6
-    resnet_v2: bool = True
-    # selfplay params
-    selfplay_batch_size: int = 1024
-    num_simulations: int = 32
-    max_num_steps: int = 256
-    # training params
-    training_batch_size: int = 4096
-    learning_rate: float = 0.001
-    # eval params
-    eval_interval: int = 5
-    eval_num_games: int = 128  # games per side vs best model (total = 2x this)
-    # checkpoint params
-    ckpt_dir: str = ""  # auto-generated if empty
-
-    class Config:
-        extra = "forbid"
-
 conf_dict = OmegaConf.from_cli()
 config: Config = Config(**conf_dict)
 print(config)
@@ -366,13 +324,9 @@ if __name__ == "__main__":
     model, opt_state = jax.device_put_replicated((model, opt_state), devices)
 
     # -- Checkpoint dir ---------------------------------------------------
-    base_dir = "checkpoints"
-    if config.ckpt_dir:
-        base_dir = config.ckpt_dir
-        
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
     now = now.strftime("%Y%m%d%H%M%S")
-    ckpt_dir = os.path.join(base_dir, f"{config.env_id}_{config.env_type}_{now}")
+    ckpt_dir = os.path.join(config.ckpt_dir, f"{config.env_id}_{config.env_type}_{now}")
     os.makedirs(ckpt_dir, exist_ok=True)
     print(f"Checkpoints will be saved to: {ckpt_dir}")
 
@@ -511,7 +465,7 @@ if __name__ == "__main__":
 
             tqdm.write(
                 f"[iter {iteration}] vs best (iter {best_iteration}): "
-                f"W={wins} D={draws} L={losses}  win_rate={win_rate:.3f}"
+                f"Win/Loss={win_rate/loss_rate if loss_rate != 0 else float('inf'):.3f} (W={wins} D={draws} L={losses})"
             )
 
         wandb.log(log)

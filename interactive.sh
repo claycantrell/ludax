@@ -1,8 +1,8 @@
-tmux new -s ludax
+zellij --session ludax
 srun --time=6:00:00 -A infra01 --container-writable --environment=/users/alexpadula/projects/ludax/jax.toml --pty bash
 srun --time=6:00:00 -A infra01 --container-writable --environment=/users/alexpadula/projects/ludax/jax_old.toml --pty bash
 
-tmux attach -t ludax
+zellij attach ludax
 
 uv pip install --system --break-system-packages -c constraints.txt --pre -r requirements-dev.txt
 uv pip install --system --break-system-packages -c constraints_old.txt --pre -r requirements-dev.txt

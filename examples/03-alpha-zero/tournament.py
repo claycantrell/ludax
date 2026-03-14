@@ -1,20 +1,9 @@
 """
-python examples/03-alpha-zero/tournament.py --env_id reversi --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_reversi.pkl --baseline=othello_v0 --dirs /users/alexpadula/store/ludax/checkpoints/reversi2/*
-python examples/03-alpha-zero/tournament.py --env_id hex --env_type pgx --games_per_pair 64 --log_interval 100 --output_path examples/05-paper-figures/data/rl_runs/elo_hex.pkl --dirs /users/alexpadula/store/ludax/checkpoints/hex2/*
-"""
-
-"""
 Tournament Elo evaluation for AlphaZero checkpoints.
 
 Takes a list of checkpoint directories (each from a different training run)
 and evaluates relative Elo ratings across all checkpoints in a shared tournament.
 Now supports injecting a Pgx baseline model into the tournament if one exists.
-
-Key design decisions:
-  - No MCTS during evaluation — moves are sampled directly from the policy head.
-  - The tournament continuously iterates over shuffled pairings.
-  - Matches dynamically compile based on the opponent type (AZNet vs AZNet,
-    AZNet vs Baseline, etc.) and cache the compiled JAX functions.
 """
 
 import argparse
@@ -36,34 +25,9 @@ from tqdm import tqdm
 import pgx
 from pgx.experimental import auto_reset
 
-# Lazy imports that depend on the training code
 from network import AZNet
-from pydantic import BaseModel
-
-
-class Config(BaseModel):
-    env_id: str = "reversi"
-    env_type: str = "ldx"
-    seed: int = 0
-    max_num_iters: int = 1000
-    num_channels: int = 128
-    num_layers: int = 6
-    resnet_v2: bool = True
-    selfplay_batch_size: int = 1024
-    num_simulations: int = 32
-    max_num_steps: int = 256
-    training_batch_size: int = 4096
-    learning_rate: float = 0.001
-    eval_interval: int = 5
-    eval_num_games: int = 128
-    ckpt_dir: str = ""
-
-    class Config:
-        extra = "forbid"
-
-
-devices = jax.local_devices()
-num_devices = len(devices)
+from ludax.config import ACTION_DTYPE
+from az_config import Config, devices, num_devices
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +241,7 @@ def main():
     parser.add_argument("--baseline", type=str, default=None, help="Optional Pgx baseline model id (e.g. 'othello_v0')")
     parser.add_argument("--games_per_pair", type=int, default=32, help="Games per pair per side")
     parser.add_argument("--log_interval", type=int, default=None, help="Log every N pairings (default: num_pairs)")
-    parser.add_argument("--output_path", type=str, default="elo_ratings.pkl", help="Path to save the Elo plot")
+    parser.add_argument("--output_path", type=str, default="examples/03-alpha-zero/data/elo_ratings.pkl", help="Path to save the Elo ratings")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 

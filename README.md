@@ -2,6 +2,26 @@
 Ludax is a domain specific language for board games that compiles into hardware-accelerated learning environments using [JAX](https://github.com/jax-ml/jax). Ludax draws inspiration from the [Ludii](https://ludii.games/index.php) game description language as well as [PGX](https://github.com/sotetsuk/pgx), a library of JAX implementations for classic board games and video games. Ludax supports a variety of two-player perfect-information board games and can run at tens of millions of steps per second on modern GPUs.
 
 ![Throughput of Ludax environments compared to PGX and Ludii implementations](/assets/throughput_comparison.png)
+## Bundled Games
+Though one can describe many board games in the Ludax grammar, we bundle a number popular game implementations with the pip package.
+| Game | Description | File |
+|------|-------------|------|
+| Connect-Four (Four in a Row) | 7×6 grid, drop pieces to connect 4 in a row | [connect_four.ldx](src/ludax/games/connect_four.ldx) |
+| Connect-Six | 19×19 grid, place 2 stones per turn to connect 6 | [connect_six.ldx](src/ludax/games/connect_six.ldx) |
+| Dai Hasami Shogi | 9×9 grid, custodial capture shogi variant with 18 pieces per side | [dai_hasami_shogi.ldx](src/ludax/games/dai_hasami_shogi.ldx) |
+| English Draughts (Checkers) | 8×8 board, diagonal movement with jumps and kings | [english_draughts.ldx](src/ludax/games/english_draughts.ldx) |
+| English Draughts on Hex (Hex Checkers) | Draughts rules adapted to a hexagonal board | [english_draughts_hex.ldx](src/ludax/games/english_draughts_hex.ldx) |
+| Gomoku (Five in a Row, Gobang) | 15×15 grid, place stones to connect 5 in a row | [gomoku.ldx](src/ludax/games/gomoku.ldx) |
+| Gridworld | Single-agent grid navigation to a goal | [gridworld.ldx](src/ludax/games/gridworld.ldx) |
+| Hasami Shogi (Intercepting Chess) | 9×9 grid, custodial capture shogi variant with 9 pieces per side | [hasami_shogi.ldx](src/ludax/games/hasami_shogi.ldx) |
+| Hex (Nash, Con-Tac-Tix) | 11×11 rhombus, connect opposite sides with adjacent placements | [hex.ldx](src/ludax/games/hex.ldx) |
+| HopThrough | Grid-based piece hopping/capture game | [hop_through.ldx](src/ludax/games/hop_through.ldx) |
+| Pente (Ninuki-Renju) | 19×19 grid, connect 5 or make 5 custodial captures | [pente.ldx](src/ludax/games/pente.ldx) |
+| Reversi (Othello) | 8×8 grid, place to flip opponent discs by outflanking | [reversi.ldx](src/ludax/games/reversi.ldx) |
+| Tic-Tac-Toe | 3×3 grid, connect 3 in a row | [tic_tac_toe.ldx](src/ludax/games/tic_tac_toe.ldx) |
+| Wolf and Sheep (Fox and Hounds) | 8×8 board, asymmetric: 1 wolf vs 4 sheep, diagonal movement | [wolf_and_sheep.ldx](src/ludax/games/wolf_and_sheep.ldx) |
+| Yavalath | Hexagonal grid, connect 4 to win but 3 loses | [yavalath.ldx](src/ludax/games/yavalath.ldx) |
+| Yavalax | Hexagonal grid, form two lines of 3+ simultaneously to win | [yavalax.ldx](src/ludax/games/yavalax.ldx) |
 
 ## Installation
 > [!IMPORTANT]
