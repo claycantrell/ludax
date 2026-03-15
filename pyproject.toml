@@ -26,6 +26,7 @@ gui = [
 ]
 agents = [
     "dm-haiku",
+    "mctx",
 ]
 
 

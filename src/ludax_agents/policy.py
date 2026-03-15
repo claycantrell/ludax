@@ -4,11 +4,13 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import haiku as hk
+import mctx
 
 from ludax.config import ACTION_DTYPE
 from .network import AZNet
 
 CKPT_DIR = Path(__file__).parent / "checkpoints"
+NUM_SIMULATIONS = 256
 
 
 def get_checkpoint_path(game_id: str) -> Path | None:
@@ -37,7 +39,10 @@ def _find_num_actions(params) -> int:
 
 
 def az_checkpoint_policy(env, ckpt_path):
-    """Load an AlphaZero checkpoint and return a GUI-compatible policy.
+    """Load an AlphaZero checkpoint and return a GUI-compatible MCTS policy.
+
+    Runs Gumbel MuZero search (NUM_SIMULATIONS={NUM_SIMULATIONS}) at each
+    move, identical to the search used during self-play training.
 
     The returned function has signature ``policy(state_b, key) -> action_b``,
     matching the interface expected by the Ludax GUI and all other policies in
@@ -55,8 +60,6 @@ def az_checkpoint_policy(env, ckpt_path):
 
     config = data["config"]
     params, model_state = data["model"]
-    # Read num_actions from the policy head weight shape — the checkpoint is
-    # authoritative and handles games with extra actions (e.g. Reversi's pass move).
     num_actions = _find_num_actions(params)
 
     def forward_fn(x, is_eval=False):
@@ -69,13 +72,44 @@ def az_checkpoint_policy(env, ckpt_path):
         return net(x, is_training=not is_eval, test_local_stats=False)
 
     forward = hk.without_apply_rng(hk.transform_with_state(forward_fn))
+    model_tuple = (params, model_state)
+
+    def recurrent_fn(model, rng_key, action, embedding):
+        """One MCTS simulation step: apply action, evaluate resulting state."""
+        del rng_key
+        model_params, model_st = model
+        state = jax.vmap(env.step)(embedding, action.astype(ACTION_DTYPE))
+        obs = env.observe(state, state.current_player)
+        (logits, value), _ = forward.apply(model_params, model_st, obs, is_eval=True)
+        logits = logits - jnp.max(logits, axis=-1, keepdims=True)
+        logits = jnp.where(state.legal_action_mask, logits, jnp.finfo(logits.dtype).min)
+
+        rewards = state.rewards
+        reward = rewards[jnp.arange(rewards.shape[0]), state.current_player]
+        value = jnp.where(state.terminated, 0.0, value)
+        discount = jnp.where(state.terminated, 0.0, -jnp.ones_like(value))
+
+        return mctx.RecurrentFnOutput(
+            reward=reward, discount=discount, prior_logits=logits, value=value
+        ), state
 
     def policy_fn(state_b, key):
-        # observe() supports arbitrary leading batch dims natively
-        obs_b = env.observe(state_b, state_b.game_state.current_player)
-        (logits, _value), _ = forward.apply(params, model_state, obs_b, is_eval=True)
-        # mask illegal actions to -inf before sampling
+        obs_b = env.observe(state_b, state_b.current_player)
+        (logits, value), _ = forward.apply(params, model_state, obs_b, is_eval=True)
+        logits = logits - jnp.max(logits, axis=-1, keepdims=True)
         logits = jnp.where(state_b.legal_action_mask, logits, jnp.finfo(logits.dtype).min)
-        return jax.random.categorical(key, logits, axis=1).astype(ACTION_DTYPE)
+
+        root = mctx.RootFnOutput(prior_logits=logits, value=value, embedding=state_b)
+        policy_output = mctx.gumbel_muzero_policy(
+            params=model_tuple,
+            rng_key=key,
+            root=root,
+            recurrent_fn=recurrent_fn,
+            num_simulations=NUM_SIMULATIONS,
+            invalid_actions=~state_b.legal_action_mask,
+            qtransform=mctx.qtransform_completed_by_mix_value,
+            gumbel_scale=1.0,
+        )
+        return policy_output.action.astype(ACTION_DTYPE)
 
     return jax.jit(policy_fn)
