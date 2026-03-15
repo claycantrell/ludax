@@ -13,3 +13,7 @@ checkpoints
 *.log
 core_*
 *.code-workspace
+constraints.txt
+interactive.sh
+jax.toml
+*.ckpt
