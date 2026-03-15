@@ -4,6 +4,99 @@
     <meta charset="UTF-8">
     <title>Ludax</title>
     <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='main.css')}}">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100vh;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #main_layout {
+            display: flex;
+            height: 100vh;
+            padding: 16px;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        /* Board column — shrinks/grows to fit the SVG */
+        #svg_container {
+            flex: 0 0 auto;
+            width: calc(100vh - 32px);
+            display: flex;
+            align-items: center;
+        }
+
+        /* Scale the SVG to fit the available height without scrolling.
+           Requires a viewBox (added by fitBoard() below). */
+        #svg_container svg {
+            max-height: calc(100vh - 32px);
+            width: auto;
+            height: auto;
+            display: block;
+            cursor: pointer;
+        }
+
+        #svg_container.ai-turn svg {
+            cursor: default;
+        }
+
+        /* Sidebar — all controls and info */
+        #sidebar {
+            flex: 1;
+            min-width: 200px;
+            max-width: 300px;
+            height: calc(100vh - 32px);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            overflow-y: auto;
+        }
+
+        #sidebar h1 { font-size: 22px; }
+
+        #error_message {
+            display: none;
+            color: red;
+            font-weight: bold;
+            padding: 8px 12px;
+            background: #ffeeee;
+            border: 1px solid #ffcccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .info-label { font-size: 16px; color: #333; }
+
+        #policy_controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #policy_controls label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 15px;
+            gap: 8px;
+        }
+
+        #policy_controls select {
+            flex: 1;
+            font-size: 14px;
+            padding: 2px 4px;
+        }
+
+        #policy_controls button {
+            align-self: flex-start;
+            font-size: 14px;
+            padding: 5px 14px;
+            cursor: pointer;
+        }
+    </style>
     <script>
         let moveStage = "selecting_piece";
         let selectIdx = null;
@@ -11,27 +104,60 @@
         const AI_MOVE_DELAY_MS = 400;
 
         // ---------------------------------------------------------------------------
+        // SVG scaling — add a viewBox so CSS max-height can scale the board,
+        // and fix up click coordinates to match the SVG coordinate space.
+        // ---------------------------------------------------------------------------
+
+        function fitBoard() {
+            const svg = document.getElementById('game_board');
+            if (!svg) return;
+            const w = parseFloat(svg.getAttribute('width'));
+            const h = parseFloat(svg.getAttribute('height'));
+            if (w && h) {
+                svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+            }
+        }
+
+        function svgClickCoords(event) {
+            // Map a CSS-pixel click on the scaled SVG back to SVG coordinate space.
+            const rect = event.target.getBoundingClientRect();
+            const svg  = document.getElementById('game_board');
+            const vb   = svg.viewBox.baseVal;
+            const scaleX = vb.width  > 0 ? vb.width  / rect.width  : 1;
+            const scaleY = vb.height > 0 ? vb.height / rect.height : 1;
+            return {
+                x: (event.clientX - rect.left) * scaleX,
+                y: (event.clientY - rect.top)  * scaleY,
+            };
+        }
+
+        // ---------------------------------------------------------------------------
         // Display helpers
         // ---------------------------------------------------------------------------
 
         async function updateBoard(data) {
-            document.getElementById('game_board').innerHTML = data['svg'];
-            document.getElementById("game_board").innerHTML += "";
+            // Replace the whole SVG element (avoids nested-SVG artifacts)
+            document.getElementById('svg_container').innerHTML = data['svg'];
+            fitBoard();
             await new Promise(resolve => setTimeout(resolve, 0));
 
-            document.getElementById('cur_player').innerHTML = data['current_player'] == 0
+            document.getElementById('cur_player').textContent = data['current_player'] == 0
                 ? 'Current player: Player 1'
                 : 'Current player: Player 2';
 
-            document.getElementById('p1_score').innerHTML = 'Player 1 score: ' + data['scores'][0];
-            document.getElementById('p2_score').innerHTML = 'Player 2 score: ' + data['scores'][1];
+            document.getElementById('p1_score').textContent = 'Player 1 score: ' + data['scores'][0];
+            document.getElementById('p2_score').textContent = 'Player 2 score: ' + data['scores'][1];
 
             moveStage = data['stage'];
             selectIdx = data['select_idx'];
+
+            document.getElementById('svg_container').classList.toggle('ai-turn', !!data['ai_turn']);
         }
 
         function showResult(data) {
-            var r = data['rewards'];
+            const r = data['rewards'];
             if      (r[0] == 1  && r[1] == -1) alert('Player 1 wins!');
             else if (r[1] == 1  && r[0] == -1) alert('Player 2 wins!');
             else if (r[0] == 1  && r[1] == 1)  alert('Both players win!');
@@ -41,8 +167,7 @@
         }
 
         // ---------------------------------------------------------------------------
-        // AI turn loop — calls /step_ai one move at a time with a delay so each
-        // move is visible. Runs until it's a human's turn or the game ends.
+        // AI turn loop
         // ---------------------------------------------------------------------------
 
         async function runAiTurns() {
@@ -57,11 +182,7 @@
                 const data = await response.json();
                 await updateBoard(data);
 
-                if (data['terminated']) {
-                    showResult(data);
-                    await resetGame();
-                    break;
-                }
+                if (data['terminated']) { showResult(data); await resetGame(); break; }
                 if (!data['ai_turn']) break;
             }
         }
@@ -71,9 +192,9 @@
         // ---------------------------------------------------------------------------
 
         async function handleClick(event) {
-            var rect = event.target.getBoundingClientRect();
-            var x = event.clientX - rect.left;
-            var y = event.clientY - rect.top;
+            if (document.getElementById('svg_container').classList.contains('ai-turn')) return;
+
+            const { x, y } = svgClickCoords(event);
 
             const response = await fetch('/step', {
                 method: 'POST',
@@ -83,23 +204,18 @@
             const data = await response.json();
 
             if (data.hasOwnProperty('error')) {
-                document.getElementById('error_message').textContent = data.error;
-                document.getElementById('error_message').style.display = 'block';
-                setTimeout(() => {
-                    document.getElementById('error_message').style.display = 'none';
-                }, 3000);
+                const el = document.getElementById('error_message');
+                el.textContent = data.error;
+                el.style.display = 'block';
+                setTimeout(() => { el.style.display = 'none'; }, 3000);
                 return;
             }
 
             document.getElementById('error_message').style.display = 'none';
             await updateBoard(data);
 
-            if (data['terminated']) {
-                showResult(data);
-                await resetGame();
-            } else if (data['ai_turn']) {
-                await runAiTurns();
-            }
+            if (data['terminated']) { showResult(data); await resetGame(); }
+            else if (data['ai_turn']) { await runAiTurns(); }
         }
 
         // ---------------------------------------------------------------------------
@@ -110,14 +226,11 @@
             const response = await fetch('/set_policy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player: player, policy_name: name }),
+                body: JSON.stringify({ player, policy_name: name }),
             });
             const data = await response.json();
             await updateBoard(data);
-
-            if (data['ai_turn']) {
-                await runAiTurns();
-            }
+            if (data['ai_turn']) await runAiTurns();
         }
 
         // ---------------------------------------------------------------------------
@@ -132,75 +245,52 @@
             });
             const data = await response.json();
             await updateBoard(data);
+            if (data['ai_turn']) await runAiTurns();
+        }
 
-            if (data['ai_turn']) {
-                await runAiTurns();
-            }
-        }
+        // Scale the initial server-rendered board on load
+        document.addEventListener('DOMContentLoaded', fitBoard);
     </script>
-    <style>
-        #error_message {
-            display: none;
-            color: red;
-            font-weight: bold;
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #ffeeee;
-            border: 1px solid #ffcccc;
-            border-radius: 4px;
-        }
-        #policy_controls {
-            margin-top: 15px;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        #policy_controls label {
-            font-size: 16px;
-        }
-        #policy_controls select {
-            margin-left: 6px;
-            font-size: 15px;
-            padding: 2px 6px;
-        }
-        #policy_controls button {
-            font-size: 15px;
-            padding: 4px 14px;
-            cursor: pointer;
-        }
-    </style>
 </head>
 <body>
-    <h1>Game Rendering</h1>
-    <div style="display: flex; align-items: flex-start; gap: 20px;">
-        <div id="svg_container">
-            {{ game_svg }}
-        </div>
-        <div id="legend_container">
-            {{ region_legend }}
-        </div>
-    </div>
-    <div id="error_message"></div>
-    <h2 id="cur_player">Current player: Player 1</h2>
-    <h2 id="p1_score">Player 1 score: 0</h2>
-    <h2 id="p2_score">Player 2 score: 0</h2>
+    <div id="main_layout">
 
-    <div id="policy_controls">
-        <label>Player 1:
-            <select id="p1_policy_select" onchange="setPolicy(0, this.value)">
-                {% for name in policy_names %}
-                <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label>Player 2:
-            <select id="p2_policy_select" onchange="setPolicy(1, this.value)">
-                {% for name in policy_names %}
-                <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <button onclick="resetGame()">Reset game</button>
+        <!-- Board -->
+        <div id="svg_container">{{ game_svg }}</div>
+
+        <!-- Sidebar -->
+        <div id="sidebar">
+            <h1>Ludax</h1>
+
+            <div id="error_message"></div>
+
+            <div>
+                <p id="cur_player" class="info-label">Current player: Player 1</p>
+                <p id="p1_score"   class="info-label">Player 1 score: 0</p>
+                <p id="p2_score"   class="info-label">Player 2 score: 0</p>
+            </div>
+
+            <div id="legend_container">{{ region_legend }}</div>
+
+            <div id="policy_controls">
+                <label>Player 1:
+                    <select id="p1_policy_select" onchange="setPolicy(0, this.value)">
+                        {% for name in policy_names %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Player 2:
+                    <select id="p2_policy_select" onchange="setPolicy(1, this.value)">
+                        {% for name in policy_names %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button onclick="resetGame()">Reset game</button>
+            </div>
+        </div>
+
     </div>
 </body>
 </html>
