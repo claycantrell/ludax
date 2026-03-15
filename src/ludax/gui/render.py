@@ -33,8 +33,9 @@ class InteractiveBoardHandler():
             self.cell_size *= 2
             height, width = self.game_info.board_dims
             self.action_indices = [(y, x) for y in range(height) for x in range(width)]
+            self._action_map = {idx: i for i, idx in enumerate(self.action_indices)}
             self.action_to_pixel = lambda action: self._grid_to_pixel(self.action_indices[action])
-            self.pixel_to_action = lambda pixel: self.action_indices.index(self._pixel_to_grid(pixel))
+            self.pixel_to_action = lambda pixel: self._action_map[self._pixel_to_grid(pixel)]
             self.get_cell_vertices = lambda position: self._get_grid_vertices(position)
 
             # Compute the total width and height of the board
@@ -48,8 +49,9 @@ class InteractiveBoardHandler():
             diameter = self.game_info.hex_diameter
             n = diameter // 2
             self.action_indices = [(q, r, s) for r in range(-n, n+1) for s in range(n, -(n+1), -1) for q in range(-n, n+1) if q + r + s == 0]
+            self._action_map = {idx: i for i, idx in enumerate(self.action_indices)}
             self.action_to_pixel = lambda action: self._hex_to_pixel(self.action_indices[action])
-            self.pixel_to_action = lambda pixel: self.action_indices.index(self._pixel_to_hex(pixel))
+            self.pixel_to_action = lambda pixel: self._action_map[self._pixel_to_hex(pixel)]
             self.get_cell_vertices = lambda position: self._get_hexagon_vertices(position)
 
             # Compute the total width and height of the board
@@ -78,8 +80,9 @@ class InteractiveBoardHandler():
             self.orientation = 'pointy'
             height, width = self.game_info.board_dims
             self.action_indices = [(y, x) for y in range(height) for x in range(width)]
+            self._action_map = {idx: i for i, idx in enumerate(self.action_indices)}
             self.action_to_pixel = lambda action: self._hex_rectangle_to_pixel(self.action_indices[action])
-            self.pixel_to_action = lambda pixel: self.action_indices.index(self._pixel_to_hex_rectangle(pixel))
+            self.pixel_to_action = lambda pixel: self._action_map[self._pixel_to_hex_rectangle(pixel)]
             self.get_cell_vertices = lambda position: self._get_hexagon_vertices(position)
 
 

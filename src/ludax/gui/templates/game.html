@@ -5,19 +5,22 @@
     <title>Todo App</title>  
     <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='main.css')}}">
     <script>
+        let moveStage = "selecting_piece";
+        let selectIdx = null;
+
         async function handleClick(event) {
             var rect = event.target.getBoundingClientRect();
             var x = event.clientX - rect.left;
             var y = event.clientY - rect.top;
 
-            // alert('x: ' + x + ', y: ' + y);
-
             response = await fetch('/step', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     x: x,
                     y: y,
+                    stage: moveStage,
+                    select_idx: selectIdx,
                 }),
             });
 
@@ -36,6 +39,10 @@
 
                 return; // Don't process the move
             }
+
+            // Update move stage state
+            moveStage = data['stage'];
+            selectIdx = data['select_idx'];
 
             // Clear any previous error messages
             document.getElementById('error_message').style.display = 'none';
@@ -60,8 +67,8 @@
             var p2_score = document.getElementById('p2_score');
             p1_score.innerHTML = 'Player 1 score: ' + data['scores'][0];
             p2_score.innerHTML = 'Player 2 score: ' + data['scores'][1];
-            
-            // Alert the user on game end 
+
+            // Alert the user on game end
             var rewards = data['rewards'];
             if (data['terminated']) {
                 if (rewards[0] == 1 && rewards[1] == -1) {
@@ -90,9 +97,11 @@
                     body: JSON.stringify({}),
                 });
 
-                var data = await response.json();
-                document.getElementById('game_board').innerHTML = data['svg'];
+                var resetData = await response.json();
+                document.getElementById('game_board').innerHTML = resetData['svg'];
                 document.getElementById("game_board").innerHTML += "";
+                moveStage = resetData['stage'];
+                selectIdx = resetData['select_idx'];
             }
         }
     </script>  

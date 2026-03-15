@@ -1,5 +1,4 @@
 import math
-import time
 
 import jax
 import jax.numpy as jnp
@@ -15,10 +14,6 @@ from .render import InteractiveBoardHandler
 
 ENV, HANDLER, STATE = None, None, None
 SLIDE_LOOKUP = None
-MOVE_INFO = {
-    "stage": "selecting_piece",
-    "select_idx": None
-}
 
 from ludax import games
 
@@ -102,15 +97,10 @@ def render_game(id):
     global HANDLER
     global STATE
     global SLIDE_LOOKUP
-    global MOVE_INFO
 
     print(f"Loading the following game:\n{getattr(games, id)}")
     ENV = environment.LudaxEnvironment(game_str=getattr(games, id))
     HANDLER = InteractiveBoardHandler(ENV.game_info, ENV.rendering_info)
-    MOVE_INFO = {
-        "stage": "selecting_piece",
-        "select_idx": None
-    }
     if ENV.game_info.uses_slide_logic:
         SLIDE_LOOKUP = utils._get_slide_lookup(ENV.game_info)
 
@@ -136,8 +126,9 @@ def render_game(id):
 
     else:
         raise ValueError(f"Unknown action type: {HANDLER.game_info.action_type}")
-        
-    time.sleep(0.1)
+
+    # Warm up JAX JIT compilation so the first user click is fast
+    _ = ENV.step(STATE, 0)
 
     # Generate region legend
     region_legend = HANDLER.render_legend()
@@ -150,15 +141,15 @@ def step():
     global HANDLER
     global STATE
     global SLIDE_LOOKUP
-    global MOVE_INFO
 
     if ENV is None:
         return "No game loaded"
-    
-    # Get x and y from the request
+
     data = request.get_json()
     x = float(data['x'])
     y = float(data['y'])
+    stage = data.get('stage', 'selecting_piece')
+    select_idx = data.get('select_idx', None)
 
     action_idx = HANDLER.pixel_to_action((x, y))
 
@@ -168,23 +159,23 @@ def step():
 
     # Step / hop games (board_size, num_directions)
     elif HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-        if MOVE_INFO['stage'] == "selecting_piece":
+        if stage == "selecting_piece":
             legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
 
         # When selecting a destination, we need to convert from direction indices into actual board positions
-        elif MOVE_INFO['stage'] == "selecting_destination":
-            direction_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions))[MOVE_INFO["select_idx"]]
+        elif stage == "selecting_destination":
+            direction_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions))[select_idx]
             valid_directions = jnp.argwhere(direction_mask).flatten()
-            valid_ends = SLIDE_LOOKUP[valid_directions, MOVE_INFO["select_idx"],  1] # TODO: handle distances > 1
+            valid_ends = SLIDE_LOOKUP[valid_directions, select_idx,  1] # TODO: handle distances > 1
             legal_action_mask = jnp.zeros(ENV.board_size)
             legal_action_mask = legal_action_mask.at[valid_ends].set(1)
 
     # Sliding / moving games (board_size, board_size)
     elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
-        if MOVE_INFO['stage'] == "selecting_piece":
+        if stage == "selecting_piece":
             legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
-        elif MOVE_INFO['stage'] == "selecting_destination":
-            legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[MOVE_INFO["select_idx"]]
+        elif stage == "selecting_destination":
+            legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[select_idx]
 
     else:
         raise ValueError(f"Unknown action type: {HANDLER.game_info.action_type}")
@@ -200,10 +191,8 @@ def step():
             print(f"Illegal action selected: {action_idx}")
             print("Legal action mask:\n", legal_action_mask)
             print("Legal action indices:\n", jnp.where(legal_action_mask)[0])
-            
-            # Return current state with an error message
+
             HANDLER.render(STATE, legal_actions=legal_action_mask)
-            time.sleep(0.1)
 
             if hasattr(STATE.game_state, "scores"):
                 scores = list(map(float, STATE.game_state.scores))
@@ -216,9 +205,13 @@ def step():
                 "rewards": list(map(int, STATE.rewards)),
                 "current_player": int(STATE.game_state.current_player),
                 "scores": scores,
+                "stage": stage,
+                "select_idx": select_idx,
                 "error": "Illegal move! Please select a valid action."
             })
 
+    new_stage = "selecting_piece"
+    new_select_idx = None
 
     # Placement games (board_size,)
     if HANDLER.game_info.action_type == ActionTypes.TO:
@@ -227,7 +220,7 @@ def step():
 
     # Step / hop games (board_size, num_directions)
     elif HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-        if MOVE_INFO['stage'] == "selecting_piece":
+        if stage == "selecting_piece":
             shaped_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions))
             direction_mask = shaped_mask[action_idx]
             valid_directions = jnp.argwhere(direction_mask).flatten()
@@ -235,42 +228,38 @@ def step():
             legal_moves = jnp.zeros(ENV.board_size)
             legal_moves = legal_moves.at[valid_ends].set(1)
 
-            MOVE_INFO["select_idx"] = action_idx
+            new_select_idx = action_idx
+            new_stage = "selecting_destination"
             HANDLER.render(STATE, legal_actions=legal_moves)
-            MOVE_INFO['stage'] = "selecting_destination"
 
-        elif MOVE_INFO['stage'] == "selecting_destination":
-            slide_ends = SLIDE_LOOKUP[:, MOVE_INFO["select_idx"], 1]  # TODO: handle distances > 1
+        elif stage == "selecting_destination":
+            slide_ends = SLIDE_LOOKUP[:, select_idx, 1]  # TODO: handle distances > 1
             direction_idx = jnp.argwhere(slide_ends == action_idx).flatten()[0]
-            final_action_idx = np.ravel_multi_index((MOVE_INFO["select_idx"], direction_idx), (ENV.board_size, HANDLER.game_info.num_directions))
+            final_action_idx = np.ravel_multi_index((select_idx, direction_idx), (ENV.board_size, HANDLER.game_info.num_directions))
 
             STATE = ENV.step(STATE, final_action_idx)
             legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
             HANDLER.render(STATE, legal_actions=legal_selections)
-            MOVE_INFO['stage'] = "selecting_piece"
 
     # Sliding / moving games (board_size, board_size)
     elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
-        if MOVE_INFO['stage'] == "selecting_piece":
+        if stage == "selecting_piece":
             legal_moves = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[action_idx]
-            MOVE_INFO["select_idx"] = action_idx
+            new_select_idx = action_idx
+            new_stage = "selecting_destination"
             HANDLER.render(STATE, legal_actions=legal_moves)
-            MOVE_INFO['stage'] = "selecting_destination"
 
             # Remove the "last action" class from the SVG so it doesn't highlight twice
             HANDLER.rendered_svg = HANDLER.rendered_svg.replace(HANDLER.animation_snippet, "")
 
-        elif MOVE_INFO['stage'] == "selecting_destination":
-            final_action_idx = np.ravel_multi_index((MOVE_INFO["select_idx"], action_idx), (ENV.board_size, ENV.board_size))
+        elif stage == "selecting_destination":
+            final_action_idx = np.ravel_multi_index((select_idx, action_idx), (ENV.board_size, ENV.board_size))
             STATE = ENV.step(STATE, final_action_idx)
             legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
             HANDLER.render(STATE, legal_actions=legal_selections)
-            MOVE_INFO['stage'] = "selecting_piece"
 
     else:
         raise ValueError(f"Unknown action type: {HANDLER.game_info.action_type}")
-
-    time.sleep(0.1)
 
     terminated = bool(STATE.terminated)
     rewards = list(map(int, STATE.rewards))
@@ -286,19 +275,19 @@ def step():
 
     # debug_state(STATE, ENV)
 
-    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "rewards": rewards, "current_player": int(STATE.game_state.current_player),
-            "scores": scores}
+    return {"svg": HANDLER.rendered_svg, "terminated": terminated, "rewards": rewards,
+            "current_player": int(STATE.game_state.current_player), "scores": scores,
+            "stage": new_stage, "select_idx": new_select_idx}
 
 @app.route('/reset', methods=['POST'])
 def reset():
     global ENV
     global HANDLER
     global STATE
-    global MOVE_INFO
 
     if ENV is None:
         return "No game loaded"
-    
+
     STATE = ENV.init(jax.random.PRNGKey(42))
 
     # Placement games (board_size,)
@@ -318,11 +307,4 @@ def reset():
     else:
         raise ValueError(f"Unknown action type: {HANDLER.game_info.action_type}")
 
-    MOVE_INFO = {
-        "stage": "selecting_piece",
-        "select_idx": None
-    }
-
-    time.sleep(0.1)
-
-    return {"svg": HANDLER.rendered_svg}
+    return {"svg": HANDLER.rendered_svg, "stage": "selecting_piece", "select_idx": None}
