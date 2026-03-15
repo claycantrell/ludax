@@ -384,18 +384,18 @@ class InteractiveBoardHandler():
         drawing.add(drawing.polygon(points, fill=fill, stroke=stroke, stroke_width=stroke_width, class_=class_))
 
 
-    def render(self, state, add_button=True, show_legal_actions=True, legal_actions=None):
+    def render(self, state, add_button=True, show_legal_actions=True, legal_actions=None, selected_action=None):
         board = state.game_state.board
         if legal_actions is None and show_legal_actions:
             legal_actions = state.legal_action_mask
 
         # The third index of previous_actions stores the last action taken (regardless of player)
         last_action = state.game_state.previous_actions[-1]
-        
-        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action)
+
+        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action, selected_action=selected_action)
 
 
-    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None):
+    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None, selected_action=None):
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
 
@@ -433,6 +433,12 @@ class InteractiveBoardHandler():
                 # Draw the legal action mask
                 if legal_actions is not None and legal_actions[i]:
                     drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
+
+        # Draw a selection ring around the currently selected piece
+        if selected_action is not None:
+            position = self.action_to_pixel(selected_action)
+            ring_radius = self.render_config['piece_radius'] + 8
+            drawing.add(drawing.circle(center=position, r=ring_radius, fill='none', stroke='#f0a500', stroke_width=3))
 
         # Add an invisible rectangle to capture the user's clicks
         if add_button:

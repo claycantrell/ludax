@@ -153,6 +153,29 @@ def step():
 
     action_idx = HANDLER.pixel_to_action((x, y))
 
+    # Deselect if the user clicks the already-selected piece
+    if stage == "selecting_destination" and action_idx == select_idx:
+        if HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
+            legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
+        elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
+            legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
+        else:
+            legal_selections = STATE.legal_action_mask
+        HANDLER.render(STATE, legal_actions=legal_selections)
+        if hasattr(STATE.game_state, "scores"):
+            scores = list(map(float, STATE.game_state.scores))
+        else:
+            scores = [0.0, 0.0]
+        return jsonify({
+            "svg": HANDLER.rendered_svg,
+            "terminated": bool(STATE.terminated),
+            "rewards": list(map(int, STATE.rewards)),
+            "current_player": int(STATE.game_state.current_player),
+            "scores": scores,
+            "stage": "selecting_piece",
+            "select_idx": None,
+        })
+
     # Placement games (board_size,)
     if HANDLER.game_info.action_type == ActionTypes.TO:
         legal_action_mask = STATE.legal_action_mask
@@ -230,7 +253,7 @@ def step():
 
             new_select_idx = action_idx
             new_stage = "selecting_destination"
-            HANDLER.render(STATE, legal_actions=legal_moves)
+            HANDLER.render(STATE, legal_actions=legal_moves, selected_action=action_idx)
 
         elif stage == "selecting_destination":
             slide_ends = SLIDE_LOOKUP[:, select_idx, 1]  # TODO: handle distances > 1
@@ -247,7 +270,7 @@ def step():
             legal_moves = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[action_idx]
             new_select_idx = action_idx
             new_stage = "selecting_destination"
-            HANDLER.render(STATE, legal_actions=legal_moves)
+            HANDLER.render(STATE, legal_actions=legal_moves, selected_action=action_idx)
 
             # Remove the "last action" class from the SVG so it doesn't highlight twice
             HANDLER.rendered_svg = HANDLER.rendered_svg.replace(HANDLER.animation_snippet, "")
