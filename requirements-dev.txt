@@ -1,5 +1,5 @@
 # Ludax in development mode
--e .[gui]
+-e .[gui, agents]
 
 # Graphs
 matplotlib

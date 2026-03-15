@@ -24,6 +24,9 @@ gui = [
     "flask",
     "svgwrite"
 ]
+agents = [
+    "dm-haiku",
+]
 
 
 [project.urls]
@@ -35,4 +38,4 @@ Issues = "https://github.com/gdrtodd/ludax/issues"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg"]
+"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg", "*.ckpt"]

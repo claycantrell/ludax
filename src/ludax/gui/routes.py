@@ -137,10 +137,22 @@ def render_game(id):
 
     print(f"Rendering info: {ENV.rendering_info.color_mapping}, {ENV.rendering_info.piece_shape_mapping}")
 
-    AVAILABLE_POLICIES = app.config.get('POLICIES', {})
+    AVAILABLE_POLICIES = dict(app.config.get('POLICIES', {}))
     P1_POLICY = None
     P2_POLICY = None
     RNG_KEY = jax.random.PRNGKey(0)
+
+    # Load AlphaZero checkpoint for this game if ludax_agents is installed
+    try:
+        from ludax_agents import az_checkpoint_policy, get_checkpoint_path
+        ckpt_path = get_checkpoint_path(id)
+        if ckpt_path is not None:
+            AVAILABLE_POLICIES['alphazero'] = az_checkpoint_policy(ENV, ckpt_path)
+            print(f"Loaded AlphaZero checkpoint: {ckpt_path}")
+    except ImportError:
+        pass  # ludax_agents not installed
+    except Exception as e:
+        print(f"Failed to load AlphaZero checkpoint for '{id}': {e}")
 
     STATE = ENV.init(jax.random.PRNGKey(42))
     _render_selection_state()
