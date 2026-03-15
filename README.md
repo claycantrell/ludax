@@ -3,7 +3,7 @@ Ludax is a domain specific language for board games that compiles into hardware-
 
 ![Throughput of Ludax environments compared to PGX and Ludii implementations](/assets/throughput_comparison.png)
 ## Bundled Games
-Though one can describe many board games in the Ludax grammar, we bundle a number popular game implementations with the pip package.
+Though you can describe many board games in the Ludax grammar, we bundle reference implementation for a handful of popular games.
 | Game | Description | File |
 |------|-------------|------|
 | Connect-Four (Four in a Row) | 7×6 grid, drop pieces to connect 4 in a row | [connect_four.ldx](src/ludax/games/connect_four.ldx) |
