@@ -1,110 +1,143 @@
-<!DOCTYPE html>  
-<html lang="en">  
-<head>  
-    <meta charset="UTF-8">  
-    <title>Todo App</title>  
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ludax</title>
     <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='main.css')}}">
     <script>
         let moveStage = "selecting_piece";
         let selectIdx = null;
+
+        const AI_MOVE_DELAY_MS = 400;
+
+        // ---------------------------------------------------------------------------
+        // Display helpers
+        // ---------------------------------------------------------------------------
+
+        async function updateBoard(data) {
+            document.getElementById('game_board').innerHTML = data['svg'];
+            document.getElementById("game_board").innerHTML += "";
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            document.getElementById('cur_player').innerHTML = data['current_player'] == 0
+                ? 'Current player: Player 1'
+                : 'Current player: Player 2';
+
+            document.getElementById('p1_score').innerHTML = 'Player 1 score: ' + data['scores'][0];
+            document.getElementById('p2_score').innerHTML = 'Player 2 score: ' + data['scores'][1];
+
+            moveStage = data['stage'];
+            selectIdx = data['select_idx'];
+        }
+
+        function showResult(data) {
+            var r = data['rewards'];
+            if      (r[0] == 1  && r[1] == -1) alert('Player 1 wins!');
+            else if (r[1] == 1  && r[0] == -1) alert('Player 2 wins!');
+            else if (r[0] == 1  && r[1] == 1)  alert('Both players win!');
+            else if (r[0] == -1 && r[1] == -1) alert('Both players lose!');
+            else if (r[0] == 0  && r[1] == 0)  alert('Draw!');
+            else                               alert('Unexpected result: ' + r);
+        }
+
+        // ---------------------------------------------------------------------------
+        // AI turn loop — calls /step_ai one move at a time with a delay so each
+        // move is visible. Runs until it's a human's turn or the game ends.
+        // ---------------------------------------------------------------------------
+
+        async function runAiTurns() {
+            while (true) {
+                await new Promise(resolve => setTimeout(resolve, AI_MOVE_DELAY_MS));
+
+                const response = await fetch('/step_ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await response.json();
+                await updateBoard(data);
+
+                if (data['terminated']) {
+                    showResult(data);
+                    await resetGame();
+                    break;
+                }
+                if (!data['ai_turn']) break;
+            }
+        }
+
+        // ---------------------------------------------------------------------------
+        // Click handler (human moves)
+        // ---------------------------------------------------------------------------
 
         async function handleClick(event) {
             var rect = event.target.getBoundingClientRect();
             var x = event.clientX - rect.left;
             var y = event.clientY - rect.top;
 
-            response = await fetch('/step', {
+            const response = await fetch('/step', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    x: x,
-                    y: y,
-                    stage: moveStage,
-                    select_idx: selectIdx,
-                }),
+                body: JSON.stringify({ x, y, stage: moveStage, select_idx: selectIdx }),
             });
+            const data = await response.json();
 
-            var data = await response.json();
-
-            // Check if there was an error (illegal move)
             if (data.hasOwnProperty('error')) {
-                // Display error message
                 document.getElementById('error_message').textContent = data.error;
                 document.getElementById('error_message').style.display = 'block';
-
-                // Hide error message after 3 seconds
                 setTimeout(() => {
                     document.getElementById('error_message').style.display = 'none';
                 }, 3000);
-
-                return; // Don't process the move
+                return;
             }
 
-            // Update move stage state
-            moveStage = data['stage'];
-            selectIdx = data['select_idx'];
-
-            // Clear any previous error messages
             document.getElementById('error_message').style.display = 'none';
+            await updateBoard(data);
 
-            document.getElementById('game_board').innerHTML = data['svg'];
-            document.getElementById("game_board").innerHTML += "";
-
-            // Wait for the DOM to update
-            await new Promise(resolve => setTimeout(resolve, 0));
-
-            // Update the current player
-            var cur_player = document.getElementById('cur_player');
-            if (data['current_player'] == 0) {
-                cur_player.innerHTML = 'Current player: Player 1';
-            }
-            else {
-                cur_player.innerHTML = 'Current player: Player 2';
-            }
-
-            // Update the scores
-            var p1_score = document.getElementById('p1_score');
-            var p2_score = document.getElementById('p2_score');
-            p1_score.innerHTML = 'Player 1 score: ' + data['scores'][0];
-            p2_score.innerHTML = 'Player 2 score: ' + data['scores'][1];
-
-            // Alert the user on game end
-            var rewards = data['rewards'];
             if (data['terminated']) {
-                if (rewards[0] == 1 && rewards[1] == -1) {
-                    alert('Player 1 wins!');
-                }
-                else if (rewards[1] == 1 && rewards[0] == -1) {
-                    alert('Player 2 wins!');
-                }
-                else if (rewards[0] == 1 && rewards[1] == 1) {
-                    alert('Both players win!');
-                }
-                else if (rewards[0] == -1 && rewards[1] == -1) {
-                    alert('Both players lose!');
-                }
-                else if (rewards[0] == 0 && rewards[1] == 0) {
-                    alert('Draw!');
-                }
-                else {
-                    alert('Unexpected ending result!' + rewards);
-                }
-
-                // Reset the game
-                response = await fetch('/reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({}),
-                });
-
-                var resetData = await response.json();
-                document.getElementById('game_board').innerHTML = resetData['svg'];
-                document.getElementById("game_board").innerHTML += "";
-                moveStage = resetData['stage'];
-                selectIdx = resetData['select_idx'];
+                showResult(data);
+                await resetGame();
+            } else if (data['ai_turn']) {
+                await runAiTurns();
             }
         }
-    </script>  
+
+        // ---------------------------------------------------------------------------
+        // Policy selection
+        // ---------------------------------------------------------------------------
+
+        async function setPolicy(player, name) {
+            const response = await fetch('/set_policy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player: player, policy_name: name }),
+            });
+            const data = await response.json();
+            await updateBoard(data);
+
+            if (data['ai_turn']) {
+                await runAiTurns();
+            }
+        }
+
+        // ---------------------------------------------------------------------------
+        // Reset
+        // ---------------------------------------------------------------------------
+
+        async function resetGame() {
+            const response = await fetch('/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const data = await response.json();
+            await updateBoard(data);
+
+            if (data['ai_turn']) {
+                await runAiTurns();
+            }
+        }
+    </script>
     <style>
         #error_message {
             display: none;
@@ -116,10 +149,29 @@
             border: 1px solid #ffcccc;
             border-radius: 4px;
         }
+        #policy_controls {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        #policy_controls label {
+            font-size: 16px;
+        }
+        #policy_controls select {
+            margin-left: 6px;
+            font-size: 15px;
+            padding: 2px 6px;
+        }
+        #policy_controls button {
+            font-size: 15px;
+            padding: 4px 14px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <h1>Game Rendering</h1>  
+    <h1>Game Rendering</h1>
     <div style="display: flex; align-items: flex-start; gap: 20px;">
         <div id="svg_container">
             {{ game_svg }}
@@ -132,6 +184,23 @@
     <h2 id="cur_player">Current player: Player 1</h2>
     <h2 id="p1_score">Player 1 score: 0</h2>
     <h2 id="p2_score">Player 2 score: 0</h2>
-</body>
 
+    <div id="policy_controls">
+        <label>Player 1:
+            <select id="p1_policy_select" onchange="setPolicy(0, this.value)">
+                {% for name in policy_names %}
+                <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Player 2:
+            <select id="p2_policy_select" onchange="setPolicy(1, this.value)">
+                {% for name in policy_names %}
+                <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button onclick="resetGame()">Reset game</button>
+    </div>
+</body>
 </html>
