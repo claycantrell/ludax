@@ -9,7 +9,7 @@ dist/
 baselines/
 wandb/
 submit.sh
-checkpoints
+
 *.log
 core_*
 *.code-workspace
