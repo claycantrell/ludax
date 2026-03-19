@@ -1,6 +1,6 @@
 [project]
 name = "ludax"
-version = "0.0.7"
+version = "1.0.0"
 authors = [
   { name="Graham Todd", email="gdrtodd@gmail.com" }, { name="Alexander Padula", email="alexpadula2001@gmail.com"}
 ]
@@ -25,8 +25,7 @@ gui = [
     "svgwrite"
 ]
 agents = [
-    "dm-haiku",
-    "mctx",
+    "ludax-agents",
 ]
 
 
@@ -39,4 +38,4 @@ Issues = "https://github.com/gdrtodd/ludax/issues"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg", "*.ckpt"]
+"*" = ["*.lark", "*.html", "*.css", "*.ldx", "*.svg"]

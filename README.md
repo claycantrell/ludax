@@ -31,11 +31,11 @@ Though you can describe many board games in the Ludax grammar, we bundle referen
 ### Package Installation
 To install Ludax as a pip package, run
 ```bash
-pip install ludax[gui]
+pip install 'ludax[gui,agents]'
 ```
 
 > [!TIP]
-> This will install the Ludax package along with the optional GUI dependencies. If you do not need the GUI, you can install it without the `[gui]` option.
+> This will install the Ludax package along with the optional GUI dependencies and the [ludax-agents](https://github.com/gdrtodd/ludax/tree/main/packages/ludax-agents) package, which includes pretrained AlphaZero-style agents for bundled games.
 
 ### Development Installation
 To try out the example scripts in this repository or to contribute to the Ludax codebase, you can clone the repository and install the dependencies using:

@@ -1,5 +1,6 @@
 # Ludax in development mode
--e .[gui,agents]
+-e .[gui]
+-e packages/ludax-agents
 
 # Graphs
 matplotlib
@@ -9,8 +10,6 @@ tqdm
 
 # Alphazero
 pgx>=2.0.0
-dm-haiku
-mctx
 optax
 wandb
 omegaconf
