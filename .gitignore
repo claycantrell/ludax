@@ -16,4 +16,3 @@ core_*
 constraints.txt
 interactive.sh
 jax.toml
-*.ckpt
