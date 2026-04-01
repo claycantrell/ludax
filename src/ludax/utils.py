@@ -641,12 +641,12 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
                 sub.append(jnp.argmax(adjacency_mask))
             else:
                 sub.append(-1)
-        neighbor_indices.append(jnp.array(sub, dtype=BOARD_DTYPE))
-    neighbor_indices = jnp.array(neighbor_indices, dtype=BOARD_DTYPE)
+        neighbor_indices.append(jnp.array(sub, dtype=ACTION_DTYPE))
+    neighbor_indices = jnp.array(neighbor_indices, dtype=ACTION_DTYPE)
 
     def get_connected_components_piece(state, action, piece_idx):
         cur_components = state.connected_components[piece_idx]
-        set_val = (action + 1).astype(BOARD_DTYPE)
+        set_val = (action + 1).astype(ACTION_DTYPE)
 
         board_occupant = state.board[piece_idx, action]
         cur_components = cur_components.at[action].set(set_val)
@@ -667,7 +667,7 @@ def _get_connected_components_fn(game_info: GameInfo, adjacency_lookup: jnp.arra
     
     # TODO: special case (no VMAP) for when there's only one piece type?
     def get_connected_components(state, action):
-        piece_indices = jnp.arange(num_pieces, dtype=BOARD_DTYPE)
+        piece_indices = jnp.arange(num_pieces, dtype=ACTION_DTYPE)
         cur_components = jax.vmap(get_connected_components_piece, in_axes=(None, None, 0))(state, action, piece_indices)
         state = state._replace(connected_components=cur_components)
         return state

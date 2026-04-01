@@ -2400,7 +2400,7 @@ class GameRuleParser(Transformer):
 
             # The connected components are necessarily computed in the update_additional_info call
             set_val = state.previous_actions[mover] + 1
-            fill_mask = (state.connected_components[piece] == set_val).astype(BOARD_DTYPE)
+            fill_mask = (state.connected_components[piece] == set_val).astype(ACTION_DTYPE)
             
             target_intersections = jnp.sum(target_masks & fill_mask, axis=1)
             return jnp.sum(target_intersections > 0)

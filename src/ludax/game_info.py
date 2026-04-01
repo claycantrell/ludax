@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from lark import Lark, Token, Tree
 from lark.visitors import Visitor
 
-from .config import ActionTypes, Shapes, PieceShapes, PlayerAndMoverRefs, MoveTypes, BOARD_DTYPE, REWARD_DTYPE
+from .config import ActionTypes, Shapes, PieceShapes, PlayerAndMoverRefs, MoveTypes, BOARD_DTYPE, ACTION_DTYPE, REWARD_DTYPE
 
 @dataclass
 class GameInfo:
@@ -196,7 +196,7 @@ class GameInfoExtractor(Visitor):
         '''
         if "connected_components" not in self.game_state_attributes:
             self.game_state_attributes.append("connected_components")
-            self.defaults.append(jnp.zeros((self.game_info.num_piece_types, self.game_info.board_size), dtype=BOARD_DTYPE))
+            self.defaults.append(jnp.zeros((self.game_info.num_piece_types, self.game_info.board_size), dtype=ACTION_DTYPE))
 
     def play_effects(self, tree):
         '''
