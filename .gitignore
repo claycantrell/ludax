@@ -17,3 +17,4 @@ constraints.txt
 interactive.sh
 jax.toml
 *.ckpt
+*.jar

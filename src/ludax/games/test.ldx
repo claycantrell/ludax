@@ -1,37 +1,19 @@
-(game "Test" 
+(game "dhl12l04gqyepux"
     (players 2)
-    (equipment 
-        (board (square 15))
+    (equipment
+        (board (rectangle 15 10))
         (pieces
             ("token" both)
         )
-        (regions
-            ("home" (1 2 4))
-            ("corners" (corners))
-            ("away" (10 20 30))
-        )
-    ) 
-    
-    (rules 
-        (start
-            (place "token" P1 (200 202 204))
-            (place "token" P2 (180 182 184))
-        )
+    )
+    (rules
         (play
             (repeat (P1 P2)
-                (move
-                    (or
-                        (step "token" direction:orthogonal) 
-                        (hop "token" direction:orthogonal capture:false)
-                    )
-                )
+                (place "token" (destination (empty)))
             )
         )
-        
-        (end 
-            (if (pattern "token" (2 (0 1 2)) rotate:true) (mover win))
-            (if (>= (connected "token" ((region "home") (region "away"))) 2) (mover win))
-            (if (full_board) (draw))    
+        (end
+            (if (>= (connected "token" ((edge top) (edge bottom))) 2) (mover win))
         )
     )
 )
