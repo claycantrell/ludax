@@ -1904,16 +1904,9 @@ class GameRuleParser(Transformer):
             
             return mask_fn, {}
         
-        mover_ref = children[0]
-        
-        if mover_ref == PlayerAndMoverRefs.MOVER:
-            offset = 0
-        elif mover_ref == PlayerAndMoverRefs.OPPONENT:
-            offset = 1
-
-        def mask_fn(state):
-            return (state.board == ((state.current_player + offset)%2)).any(axis=0).astype(BOARD_DTYPE)
-        
+        player_or_mover = children[0]
+        mask_fn = utils._get_occupied_mask_fn(PieceRefs.ANY, player_or_mover)
+         
         return mask_fn, {}
 
     def mask_prev_move(self, children):

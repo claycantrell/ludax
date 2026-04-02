@@ -148,7 +148,7 @@ mask_edge: "(" "edge" (edge | FORWARD | BACKWARD) ")"
 mask_empty: "(" "empty" ")"
 mask_hopped: "(" "hopped" ")"
 // TODO: should things like "mover_reference" be replaced with a "mover_arg" to match syntax elsewhere? Probably yes...
-mask_occupied: "(" "occupied" mover_reference? ")"
+mask_occupied: "(" "occupied" (mover_reference | player_reference)? ")"
 mask_prev_move: "(" "prev_move" mover_reference ")"
 mask_promoted: "(" "promoted" ")"
 mask_row: "(" "row" nonnegative_int ")"
