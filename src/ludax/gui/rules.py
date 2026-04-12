@@ -106,7 +106,31 @@ def _describe_effects(play_block: str) -> list:
         else:
             effects.append("Capture opponent pieces")
     if "(flip" in play_block:
-        effects.append("Flip: opponent pieces sandwiched between yours change to your color")
+        m = re.search(r'flip\s+\(custodial\s+"(\w+)"\s+(\w+)\s*(?:orientation:(\w+))?', play_block)
+        if m:
+            piece = m.group(1)
+            n = m.group(2)
+            orient = m.group(3) if m.group(3) else "any"
+            # n could be a number or "any" — "any" means any length chain
+            dirs = {"orthogonal": "in a straight horizontal/vertical line (not diagonal)",
+                    "diagonal": "diagonally",
+                    "any": "in any straight line"}
+            if n == "any":
+                n_desc = ""
+                orient_from_n = "any"
+            elif n.isdigit() and n != "1":
+                n_desc = f"exactly {n} "
+                orient_from_n = orient
+            else:
+                n_desc = ""
+                orient_from_n = orient
+            direction = dirs.get(orient_from_n, orient_from_n)
+            effects.append(
+                f"Flip: when you place a {piece} so that {n_desc}opponent {piece}(s) are "
+                f"sandwiched between two of yours {direction}, "
+                f"those pieces change to your color")
+        else:
+            effects.append("Flip: opponent pieces sandwiched between yours change to your color")
     if "(promote" in play_block:
         m = re.search(r'\(promote\s+"(\w+)"\s+"(\w+)"', play_block)
         if m:
