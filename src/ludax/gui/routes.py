@@ -143,6 +143,22 @@ def render_game(id):
     P2_POLICY = None
     RNG_KEY = jax.random.PRNGKey(0)
 
+    # Build AI policies that need the environment/step function
+    step_b = jax.jit(ENV.step)
+    try:
+        from ludax.policies.simple import one_ply_policy
+        AVAILABLE_POLICIES['one_ply'] = one_ply_policy(step_b)
+        print("Loaded one-ply lookahead policy")
+    except Exception as e:
+        print(f"Failed to load one_ply policy: {e}")
+
+    try:
+        from ludax.policies.mcts import uct_mcts_policy
+        AVAILABLE_POLICIES['mcts_50'] = uct_mcts_policy(ENV, num_simulations=50, max_depth=15)
+        print("Loaded MCTS policy (50 simulations)")
+    except Exception as e:
+        print(f"Failed to load MCTS policy: {e}")
+
     # Load AlphaZero checkpoint for this game if ludax_agents is installed
     try:
         from ludax_agents import az_checkpoint_policy, get_checkpoint_path
