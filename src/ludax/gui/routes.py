@@ -11,6 +11,7 @@ from ..config import ActionTypes, Shapes, RENDER_CONFIG
 
 from . import app
 from .render import InteractiveBoardHandler
+from .rules import generate_rules
 
 ENV, HANDLER, STATE = None, None, None
 SLIDE_LOOKUP = None
@@ -163,9 +164,13 @@ def render_game(id):
     region_legend = HANDLER.render_legend()
     policy_names = ['human'] + list(AVAILABLE_POLICIES.keys())
 
+    game_str = getattr(games, id)
+    rules_html = generate_rules(game_str)
+
     return render_template('game.html',
                            game_svg=Markup(HANDLER.rendered_svg),
                            region_legend=Markup(region_legend),
+                           rules_html=Markup(rules_html),
                            policy_names=policy_names)
 
 
