@@ -1,0 +1,173 @@
+// Ludii-compatible grammar for Ludax JAX engine
+// Phase 1: placement games, simple movement, basic end conditions
+// Accepts .lud syntax and compiles to the same JAX backend as .ldx
+
+// Top-level game structure
+game: "(" "game" ESCAPED_STRING game_players game_equipment game_rules ")"
+
+// Players
+game_players: "(" "players" (INT | player_list) ")"
+player_list: "{" player_def+ "}"
+player_def: "(" "player" DIRECTION ")"
+
+// Equipment
+game_equipment: "(" "equipment" "{" equipment_item+ "}" ")"
+equipment_item: board_def | piece_def | regions_def
+
+// Board
+board_def: "(" "board" board_type board_option* ")"
+board_type: "(" board_shape board_args ")"
+board_shape: "square" | "rectangle" | "hex" | "tri" | "rotate" | "Diamond" | "Star" | "concentric"
+board_args: (INT | board_type)+
+board_option: "use:" NAME
+
+// Pieces
+piece_def: "(" "piece" ESCAPED_STRING piece_owner piece_moves? ")"
+piece_owner: "Each" | "P1" | "P2" | "Neutral" | "Shared"
+piece_moves: move_rule | "(" "or" "{" move_rule+ "}" ")"
+
+// Regions
+regions_def: "(" "regions" region_owner region_sites ")"
+region_owner: "P1" | "P2" | NAME
+region_sites: sites_expr | "{" sites_expr+ "}"
+
+// Sites expressions
+sites_expr: "(" "sites" sites_type sites_args? ")"
+sites_type: "Empty" | "Side" | "Top" | "Bottom" | "Corners" | "Centre" | "Phase" | "Around"
+          | "Board" | "Outer" | "Inner" | "Mover"
+sites_args: (DIRECTION | INT | sites_expr | name_ref)*
+
+// Rules
+game_rules: "(" "rules" meta_rule? start_rules? play_rules phase_rules? end_rules ")"
+
+meta_rule: "(" "meta" "(" "swap" ")" ")"
+
+// Start
+start_rules: "(" "start" "{" start_action+ "}" ")"
+           | "(" "start" start_action+ ")"
+start_action: "(" "place" ESCAPED_STRING start_location ")"
+start_location: sites_expr | "(" "expand" sites_expr ")" | "(" "expand" sites_expr "steps:" INT ")"
+
+// Play
+play_rules: "(" "play" play_action ")"
+play_action: foreach_piece | move_rule | if_action
+
+foreach_piece: "(" "forEach" "Piece" piece_name? ")"
+            | "(" "forEach" "Piece" piece_name? move_rule ")"
+
+// Phase rules (Ludii-style)
+phase_rules: "phases:" "{" phase_def+ "}"
+phase_def: "(" "phase" ESCAPED_STRING phase_player? "(" "play" play_action ")" phase_next? ")"
+phase_player: "P1" | "P2"
+phase_next: "(" "nextPhase" phase_target ESCAPED_STRING ")"
+phase_target: "Mover" | "All"
+
+// Move rules
+move_rule: move_step | move_slide | move_hop | move_add | move_remove | move_from_to | move_pass
+         | "(" "or" "{" move_rule+ "}" ")"
+         | "(" "or" move_rule+ ")"
+         | "(" "if" condition move_rule move_rule? ")"
+
+move_step: "(" "move" "Step" step_direction? to_clause? then_clause? ")"
+move_slide: "(" "move" "Slide" slide_direction? slide_range? to_clause? then_clause? ")"
+move_hop: "(" "move" "Hop" hop_from? hop_direction? between_clause to_clause then_clause? ")"
+move_add: "(" "move" "Add" to_clause then_clause? ")"
+move_remove: "(" "move" "Remove" remove_target ")"
+move_from_to: "(" "move" "(" "from" from_clause ")" "(" "to" to_inner_clause ")" then_clause? ")"
+move_pass: "(" "move" "Pass" ")"
+
+// Directions
+step_direction: "Forward" | "Backward" | "Orthogonal" | "Diagonal" | "Adjacent"
+              | "All" | "(" "directions" "{" DIRECTION+ "}" ")"
+              | DIRECTION
+slide_direction: "Orthogonal" | "Diagonal" | "All" | "SameDirection" | DIRECTION
+slide_range: "(" "between" "(" "max" INT ")" ")"
+hop_from: "(" "from" from_clause ")"
+hop_direction: "Orthogonal" | "Diagonal" | "All" | "SameDirection" | "(" "directions" "{" DIRECTION+ "}" ")"
+
+// Direction tokens
+DIRECTION: "N" | "S" | "E" | "W" | "NE" | "NW" | "SE" | "SW"
+         | "FR" | "FL" | "Forward" | "Backward"
+
+// Clauses
+to_clause: "(" "to" to_inner_clause ")"
+to_inner_clause: sites_expr? if_clause? apply_clause?
+if_clause: "if:" condition
+apply_clause: "(" "apply" effect+ ")"
+
+from_clause: "(" "from" ")" | "(" "last" "To" ")" | sites_expr
+
+between_clause: "(" "between" between_condition? apply_clause? ")"
+              | "(" "between" "if:" condition apply_clause? ")"
+between_condition: "if:" condition
+
+then_clause: "(" "then" effect+ ")"
+
+// Effects
+effect: "(" "remove" remove_target ")"
+      | "(" "moveAgain" ")"
+      | custodial_effect
+      | surround_effect
+      | "(" "if" condition effect ")"
+      | "(" "or" effect+ ")"
+      | "(" "set" set_target ")"
+
+remove_target: "(" "to" ")" | "(" "between" ")" | "(" "from" ")" | "(" "last" "To" ")"
+             | sites_expr
+
+custodial_effect: "(" "custodial" "(" "from" from_clause ")" direction_type? between_clause to_clause ")"
+surround_effect: "(" "surround" "(" "from" from_clause ")" direction_type? between_clause to_clause ")"
+direction_type: "Orthogonal" | "Diagonal" | "All"
+
+set_target: "Count" | "Score" | "Value" | NAME
+
+// Conditions
+condition: "(" condition_inner ")"
+condition_inner: is_condition | and_condition | or_condition | not_condition
+               | can_condition | comparison
+
+is_condition: "is" is_type is_args*
+is_type: "Empty" | "Enemy" | "Friend" | "Line" | "Connected" | "In" | "Mover" | "Prev"
+is_args: INT | "exact:" BOOL | "All" | "Mover" | "Next" | condition | sites_expr | "(" name_ref ")"
+       | "(" "who" "at:" "(" location ")" ")"
+       | "(" "what" "at:" "(" location ")" ")"
+
+and_condition: "and" condition+
+or_condition: "or" condition+
+not_condition: "not" condition
+
+can_condition: "can" "Move" move_rule
+comparison: "=" | ">=" | "<=" | ">" | "<" count_expr count_expr
+
+count_expr: "(" "count" count_type ")" | INT
+count_type: "Pieces" count_player? | "Moves" | "Sites" "in:" sites_expr
+count_player: "Mover" | "Next" | "P1" | "P2"
+
+location: "to" | "from" | "between" | "last" "To"
+
+// End conditions
+end_rules: "(" "end" end_items ")"
+end_items: "{" end_item+ "}" | end_item+
+end_item: "(" "if" condition result ")"
+        | "(" "if" "(" "no" no_type no_target ")" result ")"
+
+no_type: "Moves" | "Pieces"
+no_target: "Mover" | "Next" | "P1" | "P2" | name_ref
+
+result: "(" "result" result_player result_outcome ")"
+result_player: "Mover" | "Next" | "P1" | "P2"
+result_outcome: "Win" | "Loss" | "Draw"
+
+// Helpers
+if_action: "(" "if" condition play_action play_action? ")"
+piece_name: ESCAPED_STRING
+name_ref: ESCAPED_STRING
+
+BOOL: "True" | "False" | "true" | "false"
+NAME: /[A-Za-z_]\w*/
+
+%import common.ESCAPED_STRING
+%import common.INT
+%import common.WS
+%ignore WS
+%ignore /\/\/.*/
