@@ -70,14 +70,18 @@ def _describe_effects(play_block: str) -> list:
     if "(capture" in play_block:
         if "custodial" in play_block:
             m = re.search(r'custodial\s+"(\w+)"\s+(\w+)\s+orientation:(\w+)', play_block)
-            if m:
-                effects.append(f"Capture opponent's {m.group(1)} pieces by flanking them ({m.group(3)})")
-            else:
-                effects.append("Capture opponent pieces by flanking (custodial capture)")
+            orient = m.group(3) if m else "any"
+            piece = m.group(1) if m else "pieces"
+            dirs = {"orthogonal": "in a straight line (not diagonal)",
+                    "diagonal": "diagonally",
+                    "any": "in any direction"}
+            effects.append(
+                f"Custodial capture: if your {piece} sandwiches an opponent's {piece} "
+                f"between two of yours {dirs.get(orient, orient)}, the trapped piece is removed")
         else:
             effects.append("Capture opponent pieces")
     if "(flip" in play_block:
-        effects.append("Flip opponent pieces to your color (like Reversi)")
+        effects.append("Flip: opponent pieces sandwiched between yours change to your color")
     if "(promote" in play_block:
         m = re.search(r'\(promote\s+"(\w+)"\s+"(\w+)"', play_block)
         if m:
@@ -85,7 +89,12 @@ def _describe_effects(play_block: str) -> list:
     if "(extra_turn" in play_block:
         effects.append("Get an extra turn after capturing")
     if "(set_score" in play_block or "(increment_score" in play_block:
-        effects.append("Score points based on your position")
+        if "count (occupied mover)" in play_block:
+            effects.append("Your score = number of your pieces on the board")
+        elif "count (occupied opponent)" in play_block:
+            effects.append("Score tracks opponent's remaining pieces")
+        else:
+            effects.append("Score points based on board position")
     return effects
 
 
