@@ -46,20 +46,45 @@ def _describe_board(game_str: str) -> str:
 def _describe_movement(play_block: str) -> list:
     rules = []
     if "(place" in play_block:
-        rules.append("Place one of your pieces on an empty cell each turn")
+        # Check for placement constraints
+        if "(destination (empty))" in play_block:
+            if "(result" in play_block:
+                rules.append("Place a piece on an empty cell (must satisfy placement constraint)")
+            else:
+                rules.append("Place one of your pieces on an empty cell each turn")
+        else:
+            rules.append("Place one of your pieces on the board each turn")
+    # Deduplicate: track which piece+direction combos we've seen
+    seen_moves = set()
     if "(step" in play_block:
-        pieces = re.findall(r'\(step\s+"(\w+)"\s+direction:(\w+)', play_block)
+        pieces = re.findall(r'\(step\s+"(\w+)"\s+direction:([^\s)]+)', play_block)
         for piece, direction in pieces:
-            rules.append(f"Move a {piece} one step in {direction.replace('_', ' ')} direction")
+            key = f"step_{piece}_{direction}"
+            if key in seen_moves: continue
+            seen_moves.add(key)
+            d = direction.replace('_', ' ').replace('(', '').replace(')', '')
+            rules.append(f"Move a {piece} one step in {d} direction")
     if "(slide" in play_block:
-        pieces = re.findall(r'\(slide\s+"(\w+)"\s+direction:(\w+)', play_block)
+        pieces = re.findall(r'\(slide\s+"(\w+)"\s+direction:([^\s)]+)', play_block)
         for piece, direction in pieces:
-            rules.append(f"Slide a {piece} any distance in {direction.replace('_', ' ')} direction")
+            key = f"slide_{piece}_{direction}"
+            if key in seen_moves: continue
+            seen_moves.add(key)
+            d = direction.replace('_', ' ')
+            rules.append(f"Slide a {piece} any distance in {d} direction")
     if "(hop" in play_block:
-        pieces = re.findall(r'\(hop\s+"(\w+)"\s+direction:(\w+)', play_block)
+        pieces = re.findall(r'\(hop\s+"(\w+)"\s+direction:([^\s)]+)', play_block)
         for piece, direction in pieces:
-            cap = " (capturing the jumped piece)" if "capture:true" in play_block else ""
-            rules.append(f"Hop a {piece} over a piece in {direction.replace('_', ' ')} direction{cap}")
+            key = f"hop_{piece}_{direction}"
+            if key in seen_moves: continue
+            seen_moves.add(key)
+            d = direction.replace('_', ' ').replace('(', '').replace(')', '')
+            # Check if this specific hop captures
+            hop_context = play_block[play_block.find(f'(hop "{piece}"'):][:200]
+            cap = " (capturing the jumped piece)" if "capture:true" in hop_context else ""
+            rules.append(f"Hop a {piece} over an adjacent piece in {d} direction{cap}")
+    if "priority:" in play_block:
+        rules.append("Captures are mandatory when available (priority moves)")
     if "(force_pass)" in play_block:
         rules.append("You must pass if you have no legal moves")
     return rules
@@ -100,10 +125,15 @@ def _describe_effects(play_block: str) -> list:
 
 def _describe_end(end_block: str) -> list:
     conditions = []
-    # Line wins (skip lines that are loss conditions — handled below)
-    for m in re.finditer(r'\(if\s+\(line\s+"(\w+)"\s+(\d+)[^)]*\)\s+\(mover win\)', end_block):
-        exact = " exactly" if "exact:true" in end_block[m.start():m.start()+80] else ""
-        conditions.append(f"Form{exact} {m.group(2)} {m.group(1)}s in a row to win")
+    # Line wins — search for (line "piece" N) anywhere in win conditions (deduplicated)
+    line_matches = set(re.findall(r'\(line\s+"(\w+)"\s+(\d+)', end_block))
+    for piece, n in sorted(line_matches):
+        # Check if this is a loss condition (handled separately below)
+        loss_check = re.search(rf'\(line\s+"{piece}"\s+{n}[^)]*\)\s+\(mover lose\)', end_block)
+        if loss_check:
+            continue
+        exact = " exactly" if f'(line "{piece}" {n} exact:true' in end_block else ""
+        conditions.append(f"Form{exact} {n} {piece}s in a row to win")
     # Connected
     if "(connected" in end_block:
         conditions.append("Connect your pieces across opposite edges of the board")
@@ -127,9 +157,25 @@ def _describe_end(end_block: str) -> list:
     # Score
     if "(by_score)" in end_block and "(full_board)" not in end_block:
         conditions.append("Highest score wins")
-    # Lose conditions
+    # Elimination via count
+    if "(<=" in end_block and "count" in end_block:
+        m = re.search(r'\(<=\s+\(count\s+\(occupied\s+(\w+)\)\)\s+(\d+)\)', end_block)
+        if m:
+            target = m.group(1)
+            n = int(m.group(2))
+            if target == "opponent":
+                conditions.append(f"Win by reducing opponent to {n} or fewer pieces")
+            else:
+                conditions.append(f"Condition: {target} has {n} or fewer pieces")
+    # Reach the other side
+    if "(exists" in end_block and "(edge" in end_block:
+        conditions.append("Win by getting one of your pieces to the far edge of the board")
+    # Lose conditions (line)
     for m in re.finditer(r'\(if\s+\(line\s+"(\w+)"\s+(\d+)\)\s+\(mover lose\)', end_block):
         conditions.append(f"LOSE if you form {m.group(2)} {m.group(1)}s in a row!")
+    # Fallback: if no conditions found, note it
+    if not conditions:
+        conditions.append("(End conditions could not be parsed from game description)")
     return conditions
 
 
