@@ -11,6 +11,7 @@ from ..config import ActionTypes, Shapes, RENDER_CONFIG
 
 from . import app
 from .render import InteractiveBoardHandler
+from .rules import generate_rules
 
 ENV, HANDLER, STATE = None, None, None
 SLIDE_LOOKUP = None
@@ -142,6 +143,22 @@ def render_game(id):
     P2_POLICY = None
     RNG_KEY = jax.random.PRNGKey(0)
 
+    # Build AI policies that need the environment/step function
+    step_b = jax.jit(ENV.step)
+    try:
+        from ludax.policies.simple import one_ply_policy
+        AVAILABLE_POLICIES['one_ply'] = one_ply_policy(step_b)
+        print("Loaded one-ply lookahead policy")
+    except Exception as e:
+        print(f"Failed to load one_ply policy: {e}")
+
+    try:
+        from ludax.policies.mcts import uct_mcts_policy
+        AVAILABLE_POLICIES['mcts_50'] = uct_mcts_policy(ENV, num_simulations=50, max_depth=15)
+        print("Loaded MCTS policy (50 simulations)")
+    except Exception as e:
+        print(f"Failed to load MCTS policy: {e}")
+
     # Load AlphaZero checkpoint for this game if ludax_agents is installed
     try:
         from ludax_agents import az_checkpoint_policy, get_checkpoint_path
@@ -163,9 +180,13 @@ def render_game(id):
     region_legend = HANDLER.render_legend()
     policy_names = ['human'] + list(AVAILABLE_POLICIES.keys())
 
+    game_str = getattr(games, id)
+    rules_html = generate_rules(game_str)
+
     return render_template('game.html',
                            game_svg=Markup(HANDLER.rendered_svg),
                            region_legend=Markup(region_legend),
+                           rules_html=Markup(rules_html),
                            policy_names=policy_names)
 
 
