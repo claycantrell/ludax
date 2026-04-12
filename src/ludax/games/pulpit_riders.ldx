@@ -1,0 +1,8 @@
+(game "Pulpit Riders"     
+    
+    (players 2)     
+    (equipment         (board (rectangle 6 8))         (pieces ("congregation" both)                 ("pulpit" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "congregation" (destination (empty))                     
+    (effects                         (flip (custodial "congregation" 1 orientation:orthogonal))                         (flip (custodial "pulpit" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

@@ -1,0 +1,8 @@
+(game "Fault Lines"     
+    
+    (players 2)     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("pillar" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "pillar" (destination (empty))                     
+    (effects                         (flip (custodial "pillar" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

@@ -1,0 +1,8 @@
+(game "Hollow Chorus"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces             ("spore" both)             ("node" both)         )     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "spore"                     (destination (empty))                     
+    (effects                         (flip (custodial "spore" 1 orientation:any))                         (increment_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (>= (score mover) 45) (mover win))             (if (no_legal_actions) (mover win))             (if (full_board) (by_score))         )     ) )

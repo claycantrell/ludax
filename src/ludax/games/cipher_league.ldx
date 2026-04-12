@@ -1,0 +1,9 @@
+(game "Cipher League"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("stone" both)                 ("riddle" both))     )     
+    (rules         
+    (start             (place "stone" P1 ((row 0)))             (place "stone" P2 ((row 12)))         )         
+    (play             (repeat (P1 P2)                 (place "stone" (destination (empty))                     
+    (effects                         (capture (custodial "stone" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (connected "stone" ((edge forward) (edge backward))) (mover win))             (if (full_board) (by_score))         )     ) )

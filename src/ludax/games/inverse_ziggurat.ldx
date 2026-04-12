@@ -1,0 +1,8 @@
+(game "Inverse Ziggurat"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (square 7))         (pieces ("stone" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "stone" (destination (empty))                     
+    (effects                         (flip (custodial "stone" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

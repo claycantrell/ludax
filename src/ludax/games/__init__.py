@@ -23,23 +23,18 @@ yavalath = _read_game('yavalath')
 yavalax = _read_game('yavalax')
 wolf_and_sheep = _read_game('wolf_and_sheep')
 
-# List of all games available in the package
-__all__ = [
-    "connect_four",
-    "connect_six",
-    "dai_hasami_shogi",
-    "english_draughts",
-    "english_draughts_hex",
-    "gridworld",
-    "hasami_shogi",
-    "hex",
-    "hop_through",
-    "gomoku",
-    "pente",
-    "reversi",
-    "test",
-    "tic_tac_toe",
-    "yavalath",
-    "yavalax",
-    "wolf_and_sheep",
-]
+# Auto-discover any additional .ldx files (e.g. generated games)
+import os as _os
+_games_dir = _os.path.dirname(_os.path.abspath(__file__))
+_all_games = []
+for _f in sorted(_os.listdir(_games_dir)):
+    if _f.endswith('.ldx'):
+        _name = _f.replace('.ldx', '')
+        if _name not in dir():
+            try:
+                globals()[_name] = _read_game(_name)
+            except Exception:
+                continue
+        _all_games.append(_name)
+
+__all__ = _all_games

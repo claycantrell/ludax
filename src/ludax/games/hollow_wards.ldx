@@ -1,0 +1,9 @@
+(game "Hollow Wards"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (rectangle 6 8))         (pieces ("archivist" both) ("record" both) ("blocked" both))     )     
+    (rules         
+    (start             (place "archivist" P1 (0 1 2))             (place "archivist" P2 (45 46 47))             (place "record" P1 (7 8 13 14 19 20))             (place "record" P2 (27 28 33 34 39 40))         )         
+    (play             (repeat (P1 P2)                 (move                     (or                         (step "archivist" direction:orthogonal)                         (step "archivist" direction:diagonal)                     )                     
+    (effects                         (capture (custodial "record" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))             (if (no_legal_actions) (mover lose))         )     ) )

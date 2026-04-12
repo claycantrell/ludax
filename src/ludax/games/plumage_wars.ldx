@@ -1,0 +1,9 @@
+(game "Plumage Wars"     
+    
+    (players 2)     
+    (equipment         (board (hex_rectangle 9 9))         (pieces ("feather" both))     )     
+    (rules         
+    (start             (place "feather" P1 (40 41))             (place "feather" P2 (38 39))         )         
+    (play             (repeat (P1 P2)                 (place "feather" (destination (empty))                     
+    (effects                         (flip (custodial "feather" 1 orientation:any))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

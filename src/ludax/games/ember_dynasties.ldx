@@ -1,0 +1,9 @@
+(game "Ember Dynasties"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hexagon 9))         (pieces ("elder" both) ("tender" both) ("vent" both))     )     
+    (rules         
+    (start             (place "elder" P1 (0 1 2 3 4 5 6 7 8))             (place "elder" P2 (162 163 164 165 166 167 168 169 170))             (place "tender" P1 (9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29))             (place "tender" P2 (141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161))             (place "vent" P1 (76 77 78 85 86 87 94 95 96))         )         
+    (play             (repeat (P1 P2)                 (move                     (or                         (step "elder" direction:any)                         (step "tender" direction:any)                         (hop "elder" direction:any hop_over:opponent capture:true)                         (hop "tender" direction:any hop_over:opponent capture:true)                     )                     
+    (effects                         (capture (custodial "tender" 1 orientation:orthogonal))                         (capture (custodial "elder" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (line "elder" 3) (mover win))             (if (no_legal_actions) (mover lose))         )     ) )

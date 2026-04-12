@@ -1,0 +1,8 @@
+(game "Obsidian Vigil"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces ("guardian" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "guardian"                     (destination (empty))                     
+    (effects                         (capture (custodial "guardian" 1 orientation:any))                         (increment_score mover (count (custodial "guardian" 1 orientation:any)))                     )                 )             )         )         
+    (end             (if (>= (score mover) 5) (mover win))             (if (full_board) (by_score))         )     ) )

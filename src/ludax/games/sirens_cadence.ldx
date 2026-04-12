@@ -1,0 +1,9 @@
+(game "Siren's Cadence"     
+    
+    (players 2)     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("note" both))     )     
+    (rules         
+    (start             (place "note" P1 (23 25))             (place "note" P2 (22 26))         )         
+    (play             (repeat (P1 P2)                 (place "note"                     (destination (empty))                     (result (exists (custodial "note" 1 orientation:any)))                     
+    (effects                         (flip (custodial "note" 1 orientation:any))                         (set_score mover (count (occupied mover)))                         (set_score opponent (count (occupied opponent)))                     )                 )                 (force_pass)             )         )         
+    (end             (if (passed both) (by_score))         )     ) )

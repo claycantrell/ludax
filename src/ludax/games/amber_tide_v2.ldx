@@ -1,0 +1,8 @@
+(game "Amber Tide"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("fish" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "fish" (destination (empty))                     
+    (effects                         (flip (custodial "fish" any))                         (set_score mover (count (occupied mover)))                         (set_score opponent (count (occupied opponent)))                     )                 )                 (force_pass)             )         )         
+    (end             (if (passed both) (by_score))             (if (no_legal_actions) (mover lose))         )     ) )

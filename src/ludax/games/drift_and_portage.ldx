@@ -1,0 +1,8 @@
+(game "Drift & Portage"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("canoe" both))     )     
+    (rules         
+    (start             (place "canoe" P1 (0 1 2 3 4 5 6))             (place "canoe" P2 (42 43 44 45 46 47 48))         )         
+    (play             (repeat (P1 P2)                 (move                     (or                         (step "canoe" direction:forward)                         (step "canoe" direction:forward_left)                         (step "canoe" direction:forward_right)                         (step "canoe" direction:backward)                         (step "canoe" direction:diagonal)                         (step "canoe" direction:orthogonal)                     )                 )             )         )         
+    (end             (if (>= (connected "canoe" ((edge forward) (edge backward))) 2) (mover win))             (if (no_legal_actions) (mover lose))         )     ) )

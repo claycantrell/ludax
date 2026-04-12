@@ -1,0 +1,9 @@
+(game "Iron Skies"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hex_rectangle 7 7))         (pieces             ("ironclad" both)             ("flagship" both)         )     )     
+    (rules         
+    (start             (place "ironclad" P1 (0 1 2 3 4 5 6))             (place "flagship" P1 (7 8 9))             (place "ironclad" P2 (42 43 44 45 46 47 48))             (place "flagship" P2 (38 39 40))         )         
+    (play             (repeat (P1 P2)                 (move                     (or                         (step "ironclad" direction:forward)                         (step "ironclad" direction:forward_left)                         (step "ironclad" direction:forward_right)                         (step "flagship" direction:forward)                         (step "flagship" direction:forward_left)                         (step "flagship" direction:forward_right)                         (step "flagship" direction:orthogonal)                     )                     
+    (effects                         (capture (and (occupied opponent) (adjacent (occupied mover) direction:forward)))                         (set_score mover (count (occupied mover)))                         (set_score opponent (count (occupied opponent)))                     )                 )             )         )         
+    (end             (if (no_legal_actions) (mover lose))             (if (full_board) (by_score))         )     ) )

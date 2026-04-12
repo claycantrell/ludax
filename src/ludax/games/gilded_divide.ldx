@@ -1,0 +1,9 @@
+(game "Gilded Divide"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (rectangle 6 8))         (pieces             ("estate" both)             ("prestige" both)         )     )     
+    (rules         
+    (start             (place "estate" P1 (0 1 2 3 4 5))             (place "estate" P2 (42 43 44 45 46 47))         )         
+    (play             (repeat (P1 P2)                 (move                     (or                         (hop "estate" direction:orthogonal hop_over:opponent capture:true priority:0)                         (hop "estate" direction:diagonal hop_over:opponent capture:true priority:0)                         (step "estate" direction:orthogonal priority:1)                         (step "estate" direction:diagonal priority:1)                     )                     
+    (effects                         (flip (and (occupied mover) (adjacent (occupied mover) direction:orthogonal)))                     )                 )             )         )         
+    (end             (if (>= (connected "estate" ((edge left) (edge right))) 2) (mover win))             (if (no_legal_actions) (mover lose))         )     ) )

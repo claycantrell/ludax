@@ -1,0 +1,8 @@
+(game "Celestial Breath"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hexagon 9))         (pieces ("note" both) ("chord" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "note"                     (destination (empty))                     
+    (effects                         (capture (and (occupied opponent) (custodial "note" 1 orientation:any)))                     )                 )             )         )         
+    (end             (if (>= (connected "note" ((edge forward) (edge backward))) 2) (mover win))             (if (no_legal_actions) (mover lose))         )     ) )

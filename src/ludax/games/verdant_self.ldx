@@ -1,0 +1,8 @@
+(game "Verdant Self"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces ("seed" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "seed"                     (destination (empty))                     
+    (effects                         (flip (custodial "seed" 1 orientation:any))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

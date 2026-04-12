@@ -1,0 +1,8 @@
+(game "Fetch Frenzy"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces ("pup" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "pup" (destination (empty))                     
+    (effects                         (flip (custodial "pup" 1 orientation:any))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

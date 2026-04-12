@@ -1,0 +1,8 @@
+(game "Frenzied Path"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("waymarker" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "waymarker" (destination (empty))                     
+    (effects                         (flip (custodial "waymarker" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (connected "waymarker" ((edge forward) (edge backward))) (mover win))             (if (full_board) (by_score))         )     ) )

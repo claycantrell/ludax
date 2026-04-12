@@ -1,0 +1,9 @@
+(game "Forum Vitae"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (rectangle 6 8))         (pieces ("citizen" both)                 ("silenced" both))     )     
+    (rules         
+    (start             (place "citizen" P1 ((row 0) (row 1)))             (place "citizen" P2 ((row 6) (row 7)))         )         
+    (play             (repeat (P1 P2)                 (place "citizen" (destination (empty))                     
+    (effects                         (capture (custodial "citizen" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (line "citizen" 8) (mover win))             (if (>= (connected "citizen" ((edge forward) (edge backward))) 2) (mover win))             (if (no_legal_actions) (mover lose))             (if (full_board) (by_score))         )     ) )

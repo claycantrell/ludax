@@ -1,0 +1,8 @@
+(game "Elm Accord"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces ("grove" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "grove"                     (destination (and (empty) (not (center))))                     
+    (effects                         (capture (custodial "grove" 2 orientation:orthogonal))                         (flip (adjacent (center) direction:orthogonal))                         (capture (custodial "grove" 1 orientation:diagonal))                         (flip (custodial "grove" 2 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                         (set_score opponent (count (occupied opponent)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

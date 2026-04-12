@@ -1,0 +1,8 @@
+(game "Ember Synod"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hexagon 9))         (pieces ("ember" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "ember"                     (destination (empty))                     
+    (effects                         (capture (custodial "ember" 1 orientation:orthogonal))                     )                 )             )         )         
+    (end             (if (connected "ember" ((edge forward) (edge backward) (edge left))) (mover win))             (if (no_legal_actions) (mover win))             (if (full_board) (by_score))         )     ) )

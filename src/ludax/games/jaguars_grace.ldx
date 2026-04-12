@@ -1,0 +1,8 @@
+(game "Jaguar's Grace"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces ("stone" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "stone" (destination (empty))                     
+    (effects                         (flip (custodial "stone" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )

@@ -1,0 +1,8 @@
+(game "Ember Covenant"     
+    
+    (players 2)     
+    (equipment         (board (hexagon 9))         (pieces             ("ember" both)             ("ignited" both)         )     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "ember"                     (destination (empty))                     
+    (effects                         (increment_score mover (count (and (occupied mover) (adjacent (empty) direction:orthogonal))))                         (increment_score opponent (count (and (occupied opponent) (adjacent (empty) direction:orthogonal))))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))             (if (no_legal_actions) (by_score))         )     ) )

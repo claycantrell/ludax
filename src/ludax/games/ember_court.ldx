@@ -1,0 +1,8 @@
+(game "Ember Court"     
+    
+    (players 2 (set_forward (P1 up) (P2 down)))     
+    (equipment         (board (hexagon 9))         (pieces ("pillar" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "pillar"                     (destination (empty))                     
+    (effects                         (capture (custodial "pillar" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (no_legal_actions) (mover lose))             (if (full_board) (by_score))         )     ) )

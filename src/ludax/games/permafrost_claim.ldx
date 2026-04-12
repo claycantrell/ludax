@@ -1,0 +1,8 @@
+(game "Permafrost Claim"     
+    
+    (players 2)     
+    (equipment         (board (hex_rectangle 7 7))         (pieces ("shard" both))     )     
+    (rules         
+    (play             (repeat (P1 P2)                 (place "shard" (destination (empty))                     
+    (effects                         (flip (custodial "shard" 1 orientation:orthogonal))                         (set_score mover (count (occupied mover)))                     )                 )             )         )         
+    (end             (if (full_board) (by_score))         )     ) )
