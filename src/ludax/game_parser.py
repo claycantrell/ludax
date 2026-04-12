@@ -189,13 +189,39 @@ class GameRuleParser(Transformer):
             next_player_fn = next_player_fns[0]
 
         else:
+            max_action_size = max(action_sizes)
+
+            # Pad each phase's legal mask and apply_action to the max action size
+            # so jax.lax.switch gets uniform output shapes
+            padded_legal_fns = []
+            padded_apply_fns = []
+            for i, (asize, legal_fn, apply_fn) in enumerate(zip(action_sizes, legal_action_mask_fns, apply_action_fns)):
+                if asize < max_action_size:
+                    pad_size = max_action_size - asize  # compile-time constant
+                    def _make_padded_legal(fn=legal_fn, ps=pad_size):
+                        def padded(state):
+                            base = fn(state)
+                            return jnp.concatenate([base, jnp.zeros(ps, dtype=BOARD_DTYPE)])
+                        return padded
+                    padded_legal_fns.append(_make_padded_legal())
+
+                    def _make_padded_apply(fn=apply_fn, s=asize):
+                        def padded(state, action):
+                            # Clamp action to valid range for this phase
+                            action = jnp.minimum(action, s - 1)
+                            return fn(state, action)
+                        return padded
+                    padded_apply_fns.append(_make_padded_apply())
+                else:
+                    padded_legal_fns.append(legal_fn)
+                    padded_apply_fns.append(apply_fn)
 
             def apply_action_fn(state, action):
-                return jax.lax.switch(state.phase_idx, apply_action_fns, state, action)
+                return jax.lax.switch(state.phase_idx, padded_apply_fns, state, action)
 
             def legal_action_mask_fn(state):
-                return jax.lax.switch(state.phase_idx, legal_action_mask_fns, state)
-            
+                return jax.lax.switch(state.phase_idx, padded_legal_fns, state)
+
             def apply_effects_fn(state, original_player):
                 return jax.lax.switch(state.phase_idx, apply_effects_fns, state, original_player)
 
