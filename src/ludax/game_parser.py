@@ -136,6 +136,28 @@ class GameRuleParser(Transformer):
             if attribute == "promoted":
                 addl_info_functions.append(lambda state, action: state._replace(promoted=jnp.zeros(self.game_info.board_size, dtype=jnp.bool_)))
 
+        # Mancala: store initial seeds and pit ownership setup in the info dict
+        if hasattr(self, 'initial_seeds'):
+            initial_seeds = self.initial_seeds
+            board_size = self.game_info.board_size
+            half = board_size // 2
+
+            # Original start_rules
+            original_start = info_dict.get('start_rules', lambda state: state)
+
+            def mancala_start(state):
+                state = original_start(state)
+                # Set all pits to initial_seeds
+                seed_counts = jnp.full(board_size, BOARD_DTYPE(initial_seeds))
+                # Pit ownership: first half = P1, second half = P2
+                pit_owner = jnp.concatenate([
+                    jnp.zeros(half, dtype=BOARD_DTYPE),
+                    jnp.ones(board_size - half, dtype=BOARD_DTYPE)
+                ])
+                return state._replace(seed_counts=seed_counts, pit_owner=pit_owner)
+
+            info_dict['start_rules'] = mancala_start
+
         if len(addl_info_functions) > 0:
             n = len(addl_info_functions)
             def addl_info_fn(state, action):
@@ -546,6 +568,112 @@ class GameRuleParser(Transformer):
             hand_pieces = state.hand_pieces.at[state.current_player, piece].add(-1)
             previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(action)).at[self.num_players].set(ACTION_DTYPE(action))
             return state._replace(board=board, hand_pieces=hand_pieces, previous_actions=previous_actions)
+
+        apply_effects_fn = lambda state, original_player: state
+
+        return board_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
+    def play_sow(self, children):
+        '''
+        Mancala sow mechanic. Action = pick a pit owned by current player with seeds > 0.
+        Seeds are distributed one-by-one counter-clockwise around the board.
+        '''
+        # Parse args: seeds:N and optional capture rule
+        initial_seeds = 4
+        capture_rule = None
+        for child in children:
+            if isinstance(child, tuple) and child[0] == 'sow_seeds_arg':
+                initial_seeds = int(child[1])
+            elif isinstance(child, str):
+                capture_rule = child
+
+        board_size = self.game_info.board_size
+        num_players = self.num_players
+
+        # Store initial seeds for environment init
+        self.initial_seeds = initial_seeds
+
+        # Build the sow track for a standard 2-row mancala board
+        # Assumes rectangle W H where row 0 = P1 pits, row 1 = P2 pits
+        # Track goes: row0 left-to-right, then row1 right-to-left (counter-clockwise)
+        if "rectangle" in self.game_info.board_shape:
+            w, h = self.game_info.board_dims
+            if h == 2:
+                # Standard 2-row: P1 = row 0 (left→right), P2 = row 1 (right→left)
+                track = list(range(w)) + list(range(2 * w - 1, w - 1, -1))
+            else:
+                # Multi-row: just go cell by cell
+                track = list(range(board_size))
+        else:
+            track = list(range(board_size))
+
+        track_arr = jnp.array(track, dtype=ACTION_DTYPE)
+        track_len = len(track)
+
+        # Pit ownership: first half = P1, second half = P2
+        half = board_size // 2
+        pit_owner_init = jnp.concatenate([
+            jnp.zeros(half, dtype=BOARD_DTYPE),
+            jnp.ones(board_size - half, dtype=BOARD_DTYPE)
+        ])
+
+        # Build track position lookup: for each cell, its position in the track
+        track_pos = jnp.full(board_size, -1, dtype=ACTION_DTYPE)
+        for i, cell in enumerate(track):
+            track_pos = track_pos.at[cell].set(i)
+
+        def legal_action_mask_fn(state):
+            # Can sow from pits owned by current player that have seeds > 0
+            owned = (state.pit_owner == state.current_player)
+            has_seeds = (state.seed_counts > 0)
+            return (owned & has_seeds).astype(BOARD_DTYPE)
+
+        def apply_action_fn(state, action):
+            pit = action
+            seeds = state.seed_counts[pit]
+            seed_counts = state.seed_counts.at[pit].set(0)
+
+            # Find starting position in track
+            start_pos = track_pos[pit]
+
+            # Distribute seeds one-by-one along the track using lax.fori_loop
+            def sow_one(i, counts):
+                pos = (start_pos + i + 1) % track_len
+                cell = track_arr[pos]
+                return counts.at[cell].add(1)
+
+            seed_counts = jax.lax.fori_loop(0, seeds, sow_one, seed_counts)
+
+            # Find where the last seed landed
+            last_pos = (start_pos + seeds) % track_len
+            last_cell = track_arr[last_pos]
+
+            # Capture rule: capture_opposite
+            # If last seed lands in an empty pit on your side, capture opposite pit's seeds
+            if capture_rule == "capture_opposite":
+                opposite_cell = board_size - 1 - last_cell
+                landed_in_own_empty = (
+                    (state.pit_owner[last_cell] == state.current_player) &
+                    (state.seed_counts[last_cell] == 0)  # was empty before sowing
+                )
+                captured = jax.lax.select(
+                    landed_in_own_empty,
+                    seed_counts[opposite_cell] + 1,  # +1 for the seed that landed
+                    BOARD_DTYPE(0)
+                )
+                seed_counts = jax.lax.cond(
+                    landed_in_own_empty,
+                    lambda sc: sc.at[last_cell].set(0).at[opposite_cell].set(0),
+                    lambda sc: sc,
+                    seed_counts
+                )
+                # Add captured seeds to player's score
+                if "scores" in self.game_info.game_state_attributes:
+                    scores = state.scores.at[state.current_player].add(captured.astype(REWARD_DTYPE))
+                    state = state._replace(scores=scores)
+
+            pa = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(pit)).at[num_players].set(ACTION_DTYPE(last_cell))
+            return state._replace(seed_counts=seed_counts, previous_actions=pa)
 
         apply_effects_fn = lambda state, original_player: state
 

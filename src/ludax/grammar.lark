@@ -45,7 +45,7 @@ phase_repeat: "(" "repeat" play_mover_order play_super_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
 play_super_mechanic: play_mechanic force_pass? actions_per_turn?
-play_mechanic: play_place | play_move | play_drop
+play_mechanic: play_place | play_move | play_drop | play_sow
 force_pass: "(" "force_pass" ")"
 actions_per_turn: "(" "actions_per_turn" positive_int ")"
 
@@ -56,6 +56,12 @@ place_result_constraint: "(" "result" super_predicate ")"
 
 // ---Drop rules (place from hand/reserve)---
 play_drop: "(" "drop" piece_reference place_destination_constraint ")"
+
+// ---Sow rules (mancala)---
+// Pick a pit owned by the current player and distribute seeds counter-clockwise
+play_sow: "(" "sow" sow_seeds_arg? sow_capture_rule? ")"
+sow_seeds_arg: "seeds:" positive_int
+sow_capture_rule: "capture_opposite" | "capture_count" positive_int
 
 // ---Move rules---
 play_move: "(" "move" move_type_definition play_effects? ")"

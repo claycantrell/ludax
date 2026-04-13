@@ -255,7 +255,18 @@ class GameInfoExtractor(Visitor):
             self.game_info.uses_slide_logic = True
 
         elif child.data == "play_drop":
-            self.game_info.move_type = "place"  # drop uses same action space as place
+            self.game_info.move_type = "place"
+
+        elif child.data == "play_sow":
+            self.game_info.move_type = "sow"
+            # Mancala: seed_counts per cell, pit_owner per cell, sow track
+            bs = self.game_info.board_size
+            if "seed_counts" not in self.game_state_attributes:
+                self.game_state_attributes.append("seed_counts")
+                self.defaults.append(jnp.zeros(bs, dtype=BOARD_DTYPE))
+                self.game_state_attributes.append("pit_owner")
+                # -1 = store/neutral, 0 = P1, 1 = P2
+                self.defaults.append(jnp.full(bs, -1, dtype=BOARD_DTYPE))
 
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")

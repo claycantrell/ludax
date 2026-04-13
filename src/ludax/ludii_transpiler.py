@@ -83,6 +83,9 @@ class LudiiTranspiler:
         self.board_ldx = ""
         self.has_set_forward = False
         self.has_hand = False
+        self.is_mancala = False
+        self.mancala_rows = 0
+        self.mancala_cols = 0
         self.regions = []
         self.errors = []
 
@@ -102,6 +105,28 @@ class LudiiTranspiler:
         # Process each section
         self._process_players(tree)
         self._process_equipment(tree)
+
+        # Detect mancala: any game with sow + track is mancala even without mancalaBoard
+        full_lud = _get_text(tree)
+        if not self.is_mancala and "sow" in full_lud.lower() and "track" in full_lud.lower():
+            self.is_mancala = True
+            if not self.mancala_cols:
+                # Estimate board from existing board_ldx
+                if "square" in self.board_ldx:
+                    n = int(self.board_ldx.split()[-1])
+                    self.mancala_rows = 2
+                    self.mancala_cols = (n * n) // 2
+                elif "rectangle" in self.board_ldx:
+                    parts = self.board_ldx.split()
+                    self.mancala_cols = int(parts[1])
+                    self.mancala_rows = int(parts[2])
+                else:
+                    self.mancala_rows = 2
+                    self.mancala_cols = 6
+                # Override board to rectangle for mancala
+                self.board_ldx = f"rectangle {self.mancala_cols} {self.mancala_rows}"
+                self.board_shape = "rectangle"
+
         self._merge_symmetric_pieces()
         start_ldx = self._process_start(tree)
         play_ldx = self._process_rules(tree)
@@ -220,14 +245,22 @@ class LudiiTranspiler:
             if type_str == "board":
                 self._parse_board(content_str)
             elif type_str == "mancalaBoard" or type_str == "surakartaBoard":
-                # Mancala/special boards → approximate as rectangle
+                # Mancala: (mancalaBoard rows cols) → Ludax rectangle cols rows
+                self.is_mancala = True
                 nums = [int(t) for t in content_str.split() if t.isdigit()]
                 if len(nums) >= 2:
-                    self.board_ldx = f"rectangle {nums[0]} {nums[1]}"
+                    rows, cols = nums[0], nums[1]
+                    self.board_ldx = f"rectangle {cols} {rows}"
+                    self.mancala_rows = rows
+                    self.mancala_cols = cols
                 elif nums:
-                    self.board_ldx = f"rectangle 2 {nums[0]}"
+                    self.board_ldx = f"rectangle {nums[0]} 2"
+                    self.mancala_rows = 2
+                    self.mancala_cols = nums[0]
                 else:
-                    self.board_ldx = "rectangle 2 6"
+                    self.board_ldx = "rectangle 6 2"
+                    self.mancala_rows = 2
+                    self.mancala_cols = 6
                 self.board_shape = "rectangle"
             elif type_str == "hand":
                 self.has_hand = True
@@ -262,18 +295,26 @@ class LudiiTranspiler:
                 self.board_shape = "hex_rectangle"
             return
 
-        if shape in ("square", "rectangle", "hex", "hexagon"):
+        if shape in ("square", "rectangle", "hex", "hexagon", "tri"):
             args = [t for t in tokens[1:] if t.isdigit()]
-            if shape == "hex" or shape == "hexagon":
-                if args:
+            if shape in ("hex", "hexagon", "tri"):
+                if len(args) >= 3:
+                    # Variable-width hex/tri: {3 4 3 4 3} → hex_rectangle max_width num_rows
+                    row_widths = [int(a) for a in args]
+                    max_w = max(row_widths)
+                    num_rows = len(row_widths)
+                    self.board_ldx = f"hex_rectangle {max_w} {num_rows}"
+                    self.board_shape = "hex_rectangle"
+                elif args:
                     size = int(args[0])
                     if size % 2 == 0:
                         size += 1  # Ludax requires odd hex diameter
                     self._set_hex_board(size)
                 return
             if shape == "rectangle" and len(args) >= 2:
-                h, w = max(int(args[0]), 1), max(int(args[1]), 2)
-                self.board_ldx = f"rectangle {h} {w}"
+                # Ludii: (rectangle rows cols), Ludax: (rectangle width height)
+                rows, cols = max(int(args[0]), 1), max(int(args[1]), 2)
+                self.board_ldx = f"rectangle {cols} {rows}"
                 self.board_shape = "rectangle"
                 return
             if args:
@@ -309,18 +350,19 @@ class LudiiTranspiler:
             self.board_shape = "square"
             return
 
-        # Fallback: try to find a recognizable shape keyword with adjacent numbers
+        # Fallback: find the LARGEST recognizable shape in the content (for merge boards)
         import re as _re
         for shape_name in ["square", "rectangle", "hex", "hexagon"]:
-            # Find the shape keyword and grab numbers immediately after it
-            m = _re.search(rf'\b{shape_name}\s+(\d+)(?:\s+(\d+))?', content, _re.IGNORECASE)
-            if m:
-                n1 = max(int(m.group(1)), 3)
+            # Find ALL instances and pick the largest
+            matches = _re.findall(rf'\b{shape_name}\s+(\d+)(?:\s+(\d+))?', content, _re.IGNORECASE)
+            if matches:
+                best = max(matches, key=lambda m: int(m[0]))
+                n1 = max(int(best[0]), 3)
                 if shape_name in ("hex", "hexagon"):
                     self._set_hex_board(n1)
-                elif shape_name == "rectangle" and m.group(2):
-                    n2 = max(int(m.group(2)), 3)
-                    self.board_ldx = f"rectangle {max(n1, 2)} {max(n2, 2)}"
+                elif shape_name == "rectangle" and best[1]:
+                    n2 = max(int(best[1]), 3)
+                    self.board_ldx = f"rectangle {max(n2, 2)} {max(n1, 2)}"
                     self.board_shape = "rectangle"
                 else:
                     self.board_ldx = f"square {n1}"
@@ -392,6 +434,10 @@ class LudiiTranspiler:
 
     def _process_start(self, tree: Tree) -> str:
         """Extract start positions from Ludii rules."""
+        # Mancala games: seed_counts initialized by engine, no piece placement needed
+        if self.is_mancala:
+            return ""
+
         rules = _find_child(tree, "rules")
         if not rules:
             return ""
@@ -428,7 +474,8 @@ class LudiiTranspiler:
             board_h = int(self.board_ldx.split()[-1])
         elif "rectangle" in self.board_ldx:
             parts = self.board_ldx.split()
-            board_h = int(parts[-2]) if len(parts) >= 3 else int(parts[-1])
+            # Ludax rectangle W H — height is last arg, rows index by height
+            board_h = int(parts[-1]) if len(parts) >= 3 else int(parts[-2])
         elif "hexagon" in self.board_ldx:
             board_h = int(self.board_ldx.split()[-1])
         board_h = max(board_h, 2)  # Ensure at least 2 rows
@@ -437,7 +484,8 @@ class LudiiTranspiler:
         board_w = board_h
         if "rectangle" in self.board_ldx:
             parts = self.board_ldx.split()
-            board_w = int(parts[-1]) if len(parts) >= 3 else board_h
+            # Ludax rectangle W H — width is first arg
+            board_w = int(parts[1]) if len(parts) >= 3 else board_h
 
         # Pattern: (sites Row N) — most common (163 games)
         # Note: _get_text strips parentheses, so match with or without them
@@ -560,9 +608,11 @@ class LudiiTranspiler:
             return result
 
         # No extracted start — use opposite-end fallback for movement games
+        # But only if the original game actually has piece placement in its start section
+        has_place_in_start = "place" in full_text.split("play")[0] if "play" in full_text else "place" in full_text
 
-        # Fallback: if it's a movement game, auto-place on first/last rows
-        if "forEach Piece" in full_text or "move Step" in full_text or "move Hop" in full_text or "move Slide" in full_text:
+        # Fallback: if it's a movement game WITH piece placement, auto-place on first/last rows
+        if has_place_in_start and ("forEach Piece" in full_text or "move Step" in full_text or "move Hop" in full_text or "move Slide" in full_text):
             if "square" in self.board_ldx:
                 size = int(self.board_ldx.split()[-1])
                 if size <= 4:
@@ -583,12 +633,22 @@ class LudiiTranspiler:
 
     def _process_rules(self, tree: Tree) -> str:
         """Extract and transpile play rules."""
+        # Mancala games always use sow mechanic regardless of Ludii phases
+        if self.is_mancala:
+            import re
+            rules = _find_child(tree, "rules")
+            full = _get_text(rules) if rules else ""
+            seeds = 4
+            m = re.search(r'set Count (\d+)', full)
+            if m:
+                seeds = int(m.group(1))
+            return f'(play (repeat (P1 P2) (sow seeds:{seeds} capture_opposite)))'
+
         rules = _find_child(tree, "rules")
         if not rules:
             self.errors.append("No rules section")
             return ""
 
-        # Find the play section
         rules_content = _find_child(rules, "rules_content")
         if not rules_content:
             return ""
@@ -601,7 +661,6 @@ class LudiiTranspiler:
                 break
 
         if not play:
-            # Check for phases
             for item in _find_all(rules_content, "rules_item"):
                 phases = _find_child(item, "phases")
                 if phases:
@@ -630,13 +689,39 @@ class LudiiTranspiler:
 
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
+        # Mancala games use sow mechanic
+        if self.is_mancala:
+            # Extract initial seed count from Ludii start section
+            seeds = 4  # default
+            if hasattr(self, '_tree'):
+                import re
+                rules = _find_child(self._tree, "rules")
+                if rules:
+                    full = _get_text(rules)
+                    m = re.search(r'set Count (\d+)', full)
+                    if m:
+                        seeds = int(m.group(1))
+            return f'(play (repeat (P1 P2) (sow seeds:{seeds} capture_opposite)))'
+
         # For forEach Piece, include piece definitions to find movement keywords
         is_foreach = "forEach Piece" in play_text
         movement_text = self._get_movement_text(play_text, include_pieces=is_foreach)
 
         if is_foreach:
-            if "move Add" in movement_text and "move Step" not in movement_text and "move Hop" not in movement_text and "move Slide" not in movement_text:
+            has_add = "move Add" in movement_text or "move Add" in play_text
+            has_movement = "move Step" in movement_text or "move Hop" in movement_text or "move Slide" in movement_text
+            if has_add and not has_movement:
                 return self._transpile_placement(play_text)
+            if has_add and has_movement:
+                # Combined placement + movement game: place first, then move
+                piece_name = self.pieces[0][0] if self.pieces else "token"
+                movement = self._transpile_foreach_piece(play_text)
+                # Strip (play ...) wrapper from movement
+                if movement.startswith("(play "):
+                    movement_inner = movement[6:-1]
+                else:
+                    movement_inner = movement
+                return f'(play\n            (repeat (P1 P2) (place "{piece_name}" (destination (empty))))\n        )'
             return self._transpile_foreach_piece(play_text)
         elif "move Add" in play_text:
             return self._transpile_placement(play_text)
@@ -761,9 +846,11 @@ class LudiiTranspiler:
                 if last.startswith("(play "):
                     ldx_phases[-1] = last[6:-1]  # remove (play and trailing )
             else:
-                # Default: movement with step
-                piece = self.pieces[0][0] if self.pieces else "token"
-                ldx_phases.append(f'(repeat (P1 P2) (move (step "{piece}" direction:any)))')
+                # Default: movement with step for all piece types
+                ldx_phases.append(self._transpile_foreach_piece(phase_content))
+                last = ldx_phases[-1]
+                if last.startswith("(play "):
+                    ldx_phases[-1] = last[6:-1]
 
         if not ldx_phases:
             self.errors.append("No valid phases found")
