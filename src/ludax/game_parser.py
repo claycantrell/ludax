@@ -26,8 +26,46 @@ class GameRuleParser(Transformer):
         if "extra_turn_fn_idx" in self.game_info.game_state_attributes:
             self.extra_turn_fns = []
 
-    # Stacking-aware helpers are created as closures below, not methods,
-    # because they need to be captured by JAX-compiled apply_action_fn closures.
+    def _make_apply_fn(self, piece, side_effect_fn=None):
+        """Build an apply_action_fn for any FROM_TO movement type.
+
+        Every move type does: pop source, optional side effect, push destination.
+        The side_effect_fn (if any) takes (state, board, src, dst) and returns board.
+        """
+        board_size = self.game_info.board_size
+        num_players = self.num_players
+
+        if side_effect_fn is None:
+            def apply_action_fn(state, action):
+                src, dst = action // board_size, action % board_size
+                board = state.board.at[piece, src].set(EMPTY)
+                board = board.at[piece, dst].set(state.current_player)
+                pa = state.previous_actions.at[jnp.array([state.current_player, num_players])].set(ACTION_DTYPE(dst))
+                return state._replace(board=board, previous_actions=pa)
+        else:
+            def apply_action_fn(state, action):
+                src, dst = action // board_size, action % board_size
+                board = state.board.at[piece, src].set(EMPTY)
+                board = side_effect_fn(state, board, src, dst)
+                board = board.at[piece, dst].set(state.current_player)
+                pa = state.previous_actions.at[jnp.array([state.current_player, num_players])].set(ACTION_DTYPE(dst))
+                return state._replace(board=board, previous_actions=pa)
+
+        return apply_action_fn
+
+    def _make_legal_fn(self, piece, reachability_fn):
+        """Build a legal_action_fn for any FROM_TO movement type.
+
+        reachability_fn(state) returns (board_size, board_size) mask of
+        reachable (src, dst) pairs regardless of piece ownership.
+        This function filters to only the current player's pieces.
+        """
+        def legal_action_fn(state):
+            reachable = reachability_fn(state)
+            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            return jnp.where(piece_mask[:, jnp.newaxis], reachable, jnp.zeros_like(reachable))
+
+        return legal_action_fn
 
     def __default__(self, data, children, meta):
         if len(children) == 1:
@@ -734,73 +772,35 @@ class GameRuleParser(Transformer):
 
 
     def move_leap(self, children):
-        '''
-        Move a piece by leaping to a non-adjacent cell using offset patterns (e.g., knight L-shape).
-        Uses precomputed leap lookup table for valid destinations.
-        '''
+        '''Leap to non-adjacent cell via offset patterns (knight, camel, etc.).'''
         piece, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
-
-        leap_offsets_raw = optional_args[OptionalArgs.LEAP_OFFSETS]
         capture = optional_args[OptionalArgs.CAPTURE]
         priority = optional_args[OptionalArgs.PRIORITY]
+        leap_offsets_raw = optional_args[OptionalArgs.LEAP_OFFSETS]
 
-        # Resolve offsets — either a named pattern or explicit (dr, dc) pairs
-        if isinstance(leap_offsets_raw, str):
-            offsets = utils.LEAP_PATTERNS.get(leap_offsets_raw, utils.LEAP_PATTERNS['knight'])
-        else:
-            offsets = leap_offsets_raw
-
-        # Precompute leap destinations: shape (num_offsets, board_size)
+        offsets = utils.LEAP_PATTERNS.get(leap_offsets_raw, utils.LEAP_PATTERNS['knight']) if isinstance(leap_offsets_raw, str) else leap_offsets_raw
         leap_lookup = utils._get_leap_lookup(self.game_info, offsets)
-        num_offsets = len(offsets)
         board_size = self.game_info.board_size
 
-        # Leap uses FROM_TO action space: action = start * board_size + destination
-        def legal_action_fn(state):
-            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
-            occupied_by_mover = (state.board == state.current_player).any(axis=0).astype(BOARD_DTYPE)
-
-            # For each start position and offset, check if destination is valid
-            # leap_lookup shape: (num_offsets, board_size), values are dest or board_size (invalid)
+        def reachability_fn(state):
+            friendly = (state.board == state.current_player).any(axis=0).astype(BOARD_DTYPE)
             mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
-            for oi in range(num_offsets):
-                dests = leap_lookup[oi]  # shape: (board_size,)
+            for oi in range(len(offsets)):
+                dests = leap_lookup[oi]
                 valid = (dests < board_size).astype(BOARD_DTYPE)
-                # Can't land on own piece
-                dest_friendly = occupied_by_mover.at[dests.clip(0, board_size - 1)].get()
-                valid = valid & ~dest_friendly
-                # Set mask[start, dest] = 1 for valid leaps
-                mask = mask.at[jnp.arange(board_size), dests.clip(0, board_size - 1)].add(
-                    valid * piece_mask
-                )
+                valid = valid & ~friendly.at[dests.clip(0, board_size - 1)].get()
+                mask = mask.at[jnp.arange(board_size), dests.clip(0, board_size - 1)].add(valid)
+            return (mask > 0).astype(BOARD_DTYPE)
 
-            # Clip to binary
-            mask = (mask > 0).astype(BOARD_DTYPE)
-            return mask
+        legal_action_fn = self._make_legal_fn(piece, reachability_fn)
 
         if capture:
-            def apply_action_fn(state, action):
-                start_idx = action // board_size
-                end_idx = action % board_size
-
-                board = state.board.at[piece, start_idx].set(EMPTY)
-                # Remove any enemy at destination
-                board = board.at[:, end_idx].set(EMPTY)
-                board = board.at[piece, end_idx].set(state.current_player)
-
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
-                return state._replace(board=board, previous_actions=previous_actions)
+            def capture_side_effect(state, board, src, dst):
+                return board.at[:, dst].set(EMPTY)
+            apply_action_fn = self._make_apply_fn(piece, side_effect_fn=capture_side_effect)
         else:
-            def apply_action_fn(state, action):
-                start_idx = action // board_size
-                end_idx = action % board_size
-
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
-
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
-                return state._replace(board=board, previous_actions=previous_actions)
+            apply_action_fn = self._make_apply_fn(piece)
 
         def can_move_again_fn(state):
             return state
@@ -964,17 +964,9 @@ class GameRuleParser(Transformer):
 
             return mask
         
-        def apply_action_fn(state, action):
-            start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-            
-            board = state.board.at[piece, end_idx].set(state.current_player)
-            board = board.at[piece, start_idx].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
-            
-            return state._replace(board=board, previous_actions=previous_actions)
-        
-        # By definition, a slide will always result in at least one legal slide for the moving piece
-        # (i.e. back to its original position), so we can set this to True without checking
+        # Slide's legal_action_fn already filters by piece ownership
+        apply_action_fn = self._make_apply_fn(piece)
+
         move_type_idx = list(MoveTypes).index(MoveTypes.SLIDE)
         def can_move_again_fn(state):
             return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(1))
@@ -982,65 +974,45 @@ class GameRuleParser(Transformer):
         return piece, MoveTypes.SLIDE, legal_action_fn, apply_action_fn, can_move_again_fn, priority
     
     def move_step(self, children):
-        '''
-        Step a piece by exactly `distance` cells (default 1) in a straight line.
-        Always produces (board_size, board_size) FROM_TO mask.
-        '''
+        '''Step a piece exactly `distance` cells in a straight line.'''
         piece, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
-
         priority = optional_args[OptionalArgs.PRIORITY]
         direction = optional_args[OptionalArgs.DIRECTION]
-        distance = optional_args[OptionalArgs.DISTANCE]
-        if distance is None:
-            distance = 1
+        distance = optional_args[OptionalArgs.DISTANCE] or 1
 
         board_size = self.game_info.board_size
-        p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
-        all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
-        indices = jnp.repeat(jnp.arange(board_size, dtype=BOARD_DTYPE), len(p1_direction_indices))
+        p1_dir, p2_dir = utils._get_direction_indices(self.game_info, direction)
+        all_dirs = jnp.array([p1_dir, p2_dir], dtype=BOARD_DTYPE)
+        src_indices = jnp.repeat(jnp.arange(board_size, dtype=BOARD_DTYPE), len(p1_dir))
 
-        def legal_action_fn(state):
-            direction_indices = all_direction_indices[state.current_player]
-            step_indices = self.slide_lookup[direction_indices, :, distance].T
-            occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-
-            valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
+        def reachability_fn(state):
+            dirs = all_dirs[state.current_player]
+            dests = self.slide_lookup[dirs, :, distance].T
+            occupied = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
+            valid = jnp.stack([src_indices, dests.flatten()], axis=1)
             mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
-            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
-
-            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
-            mask = jnp.where(piece_mask[:, jnp.newaxis], mask, jnp.zeros_like(mask))
-            mask = jnp.where(occupied_mask[jnp.newaxis, :], jnp.zeros_like(mask), mask)
-
+            mask = mask.at[valid[:, 0], valid[:, 1]].set(1)
+            mask = jnp.where(occupied[jnp.newaxis, :], jnp.zeros_like(mask), mask)
             if distance > 1:
                 for d in range(1, distance):
-                    intermediate = self.slide_lookup[direction_indices, :, d].T
-                    inter_occ = occupied_mask.at[intermediate.clip(0, board_size - 1)].get()
-                    inter_valid = (intermediate < board_size).astype(BOARD_DTYPE)
-                    blocked = (inter_occ * inter_valid).astype(BOARD_DTYPE)
+                    inter = self.slide_lookup[dirs, :, d].T
+                    blocked = occupied.at[inter.clip(0, board_size - 1)].get() * (inter < board_size).astype(BOARD_DTYPE)
                     mask = jnp.where(blocked[:, jnp.newaxis], jnp.zeros_like(mask), mask)
-
             return mask
 
-        def apply_action_fn(state, action):
-            src, dst = action // board_size, action % board_size
-            board = state.board.at[piece, dst].set(state.current_player)
-            board = board.at[piece, src].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
-            return state._replace(board=board, previous_actions=previous_actions)
-        
+        legal_action_fn = self._make_legal_fn(piece, reachability_fn)
+        apply_action_fn = self._make_apply_fn(piece)
+
         move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
         def can_move_again_fn(state):
-            direction_indices = all_direction_indices[state.current_player]
+            dirs = all_dirs[state.current_player]
             end_idx = state.previous_actions[state.current_player]
-
-            empty_mask = (state.board == EMPTY).all(axis=0).astype(BOARD_DTYPE)
-            step_indices = self.slide_lookup[direction_indices, end_idx, 1].T
-
-            can_step = (empty_mask.at[step_indices].get(mode='fill', fill_value=0) == 1).any()
+            empty = (state.board == EMPTY).all(axis=0).astype(BOARD_DTYPE)
+            steps = self.slide_lookup[dirs, end_idx, 1].T
+            can_step = (empty.at[steps].get(mode='fill', fill_value=0) == 1).any()
             return state._replace(can_move_again=state.can_move_again.at[state.current_player, piece, move_type_idx].set(can_step))
-        
+
         return piece, MoveTypes.STEP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
 
     '''
