@@ -102,6 +102,7 @@ class LudiiTranspiler:
         # Process each section
         self._process_players(tree)
         self._process_equipment(tree)
+        self._merge_symmetric_pieces()
         start_ldx = self._process_start(tree)
         play_ldx = self._process_rules(tree)
         end_ldx = self._process_end(tree)
@@ -151,6 +152,48 @@ class LudiiTranspiler:
             content = _get_text(players)
             if "player N" in content or "player S" in content:
                 self.has_set_forward = True
+
+    def _merge_symmetric_pieces(self):
+        """Merge P1+P2 piece pairs with same movement into a single 'both' piece.
+
+        E.g., ("toad" P1) + ("frog" P2) with same step/hop → ("marker" both)
+        This allows Ludax to handle forEach Piece games where P1/P2 have
+        different-named but functionally identical pieces.
+        """
+        if len(self.pieces) < 2:
+            return
+
+        # Find P1/P2 pairs
+        p1_pieces = [(i, name) for i, (name, owner) in enumerate(self.pieces) if owner == "P1"]
+        p2_pieces = [(i, name) for i, (name, owner) in enumerate(self.pieces) if owner == "P2"]
+
+        if not p1_pieces or not p2_pieces:
+            return
+
+        # Check if the movement keywords are the same for each pair
+        def _movement_keywords(content: str) -> set:
+            kws = set()
+            for kw in ["Step", "Hop", "Slide", "Leap", "Forward", "Orthogonal", "Diagonal"]:
+                if kw in content:
+                    kws.add(kw)
+            return kws
+
+        merged_indices = set()
+        for p1_idx, p1_name in p1_pieces:
+            p1_kws = _movement_keywords(self.piece_movements.get(p1_name, ""))
+            for p2_idx, p2_name in p2_pieces:
+                if p2_idx in merged_indices:
+                    continue
+                p2_kws = _movement_keywords(self.piece_movements.get(p2_name, ""))
+                if p1_kws == p2_kws:
+                    # Same movement — merge to "both" using first piece's name
+                    self.pieces[p1_idx] = (p1_name, "both")
+                    merged_indices.add(p2_idx)
+                    break
+
+        # Remove merged P2 pieces (iterate in reverse to preserve indices)
+        for idx in sorted(merged_indices, reverse=True):
+            self.pieces.pop(idx)
 
     def _process_equipment(self, tree: Tree):
         """Extract board, pieces, regions from equipment."""
@@ -360,6 +403,22 @@ class LudiiTranspiler:
         import re
         piece_name = self.pieces[0][0] if self.pieces else "token"
 
+        # Use first piece for most start positions. Only use different names
+        # when pieces are explicitly P1/P2-specific with no "both" pieces.
+        p1_piece = piece_name
+        p2_piece = piece_name
+        has_both = any(o == "both" for _, o in self.pieces)
+        if not has_both:
+            # All pieces are player-specific — use appropriate piece per player
+            for pname, powner in self.pieces:
+                if powner == "P1":
+                    p1_piece = pname
+                    break
+            for pname, powner in self.pieces:
+                if powner == "P2":
+                    p2_piece = pname
+                    break
+
         # Look for (place "X" ...) patterns in the start section
         start_ldx = []
 
@@ -394,21 +453,28 @@ class LudiiTranspiler:
         # Pattern: (expand (sites Bottom/Top))
         if not start_ldx and "expand" in full_text:
             if "sites Bottom" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row {_row(1)})))')
+                start_ldx.append(f'(place "{p1_piece}" P1 ((row 0) (row {_row(1)})))')
             if "sites Top" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-2)}) (row {_row(board_h-1)})))')
+                start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-2)}) (row {_row(board_h-1)})))')
+
+        # Pattern: (sites Left/Right) — horizontal layout (1-row boards)
+        if not start_ldx and ("sites Left" in full_text or "sites Right" in full_text):
+            if "sites Left" in full_text:
+                start_ldx.append(f'(place "{p1_piece}" P1 ((row 0)))')
+            if "sites Right" in full_text:
+                start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-1)})))')
 
         # Pattern: (sites Bottom/Top) without expand
         if not start_ldx:
             if "sites Bottom" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
+                start_ldx.append(f'(place "{p1_piece}" P1 ((row 0)))')
             if "sites Top" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-1)})))')
+                start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-1)})))')
 
         # Pattern: (sites Phase N) — checkerboard
         if not start_ldx and "sites Phase" in full_text:
-            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row {_row(1)}) (row {_row(2)})))')
-            start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-3)}) (row {_row(board_h-2)}) (row {_row(board_h-1)})))')
+            start_ldx.append(f'(place "{p1_piece}" P1 ((row 0) (row {_row(1)}) (row {_row(2)})))')
+            start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-3)}) (row {_row(board_h-2)}) (row {_row(board_h-1)})))')
 
         # Pattern: direct index placement (place "X" N)
         # Skip — Ludii indices don't map to Ludax indices on different board types
@@ -437,9 +503,9 @@ class LudiiTranspiler:
             has_p1 = any("P1" in s for s in start_ldx)
             has_p2 = any("P2" in s for s in start_ldx)
             if has_p1 and not has_p2:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-1)})))')
+                start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-1)})))')
             elif has_p2 and not has_p1:
-                start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
+                start_ldx.append(f'(place "{p1_piece}" P1 ((row 0)))')
             # Check for overlap — if P1 and P2 use same rows, use opposite ends instead
             result = "(start " + " ".join(start_ldx) + ")"
             return result
@@ -448,22 +514,21 @@ class LudiiTranspiler:
 
         # Fallback: if it's a movement game, auto-place on first/last rows
         if "forEach Piece" in full_text or "move Step" in full_text or "move Hop" in full_text or "move Slide" in full_text:
-            piece_name = self.pieces[0][0] if self.pieces else "token"
             if "square" in self.board_ldx:
                 size = int(self.board_ldx.split()[-1])
                 if size <= 4:
-                    return f'(start (place "{piece_name}" P1 ((row 0))) (place "{piece_name}" P2 ((row {size-1}))))'
-                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {size-2}) (row {size-1}))))'
+                    return f'(start (place "{p1_piece}" P1 ((row 0))) (place "{p2_piece}" P2 ((row {size-1}))))'
+                return f'(start (place "{p1_piece}" P1 ((row 0) (row 1))) (place "{p2_piece}" P2 ((row {size-2}) (row {size-1}))))'
             elif "hexagon" in self.board_ldx:
                 size = int(self.board_ldx.split()[-1])
                 last_row = size - 1
-                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {last_row-1}) (row {last_row}))))'
+                return f'(start (place "{p1_piece}" P1 ((row 0) (row 1))) (place "{p2_piece}" P2 ((row {last_row-1}) (row {last_row}))))'
             elif "rectangle" in self.board_ldx:
                 parts = self.board_ldx.split()
                 h = int(parts[-2]) if len(parts) >= 3 else int(parts[-1]) if len(parts) >= 2 else 8
                 if h <= 4:
-                    return f'(start (place "{piece_name}" P1 ((row 0))) (place "{piece_name}" P2 ((row {h-1}))))'
-                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {h-2}) (row {h-1}))))'
+                    return f'(start (place "{p1_piece}" P1 ((row 0))) (place "{p2_piece}" P2 ((row {h-1}))))'
+                return f'(start (place "{p1_piece}" P1 ((row 0) (row 1))) (place "{p2_piece}" P2 ((row {h-2}) (row {h-1}))))'
 
         return ""
 
