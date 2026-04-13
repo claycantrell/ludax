@@ -82,7 +82,10 @@ class GameInfoExtractor(Visitor):
 
         for piece_name in self.game_info.piece_names:
             if piece_name not in self.rendering_info.piece_shape_mapping:
-                self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
+                if unused_shapes:
+                    self.rendering_info.piece_shape_mapping[piece_name] = unused_shapes.pop(0)
+                else:
+                    self.rendering_info.piece_shape_mapping[piece_name] = list(PieceShapes)[0]
 
         # Determine the action space type based on the used mechanics
         if MoveTypes.SLIDE in self.used_mechanics:
@@ -162,8 +165,8 @@ class GameInfoExtractor(Visitor):
         if len(set(piece_names)) != len(piece_names):
             raise SyntaxError(f"Piece names must be unique: {piece_names}")
 
-        if len(piece_names) > len(PieceShapes):
-            raise ValueError(f"Number of piece types exceeds available shapes: {len(piece_names)} > {len(PieceShapes)}")
+        # Allow more piece types than shapes — extras reuse the first shape
+        # (rendering won't distinguish them visually but game logic works)
         
         self.game_info.num_piece_types = len(piece_names)
         self.game_info.piece_names = tuple(piece_names)

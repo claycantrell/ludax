@@ -99,6 +99,7 @@ class LudiiTranspiler:
         # Process each section
         self._process_players(tree)
         self._process_equipment(tree)
+        start_ldx = self._process_start(tree)
         play_ldx = self._process_rules(tree)
         end_ldx = self._process_end(tree)
 
@@ -125,6 +126,8 @@ class LudiiTranspiler:
 
         # Rules
         parts.append(f"    (rules")
+        if start_ldx:
+            parts.append(f"        {start_ldx}")
         if play_ldx:
             parts.append(f"        {play_ldx}")
         if end_ldx:
@@ -194,7 +197,10 @@ class LudiiTranspiler:
             args = [t for t in tokens[1:] if t.isdigit()]
             if shape == "hex" or shape == "hexagon":
                 if args:
-                    self.board_ldx = f"hexagon {args[0]}"
+                    size = int(args[0])
+                    if size % 2 == 0:
+                        size += 1  # Ludax requires odd hex diameter
+                    self.board_ldx = f"hexagon {size}"
                     self.board_shape = "hexagon"
                 return
             if shape == "rectangle" and len(args) >= 2:
@@ -269,6 +275,11 @@ class LudiiTranspiler:
 
         # First token is the piece name (quoted string)
         name = tokens[0].strip('"').lower()
+        # Strip trailing player numbers (Pawn1 → pawn, Marker2 → marker)
+        import re
+        base_name = re.sub(r'\d+$', '', name)
+        if not base_name:
+            base_name = name
 
         # Find owner
         owner = "both"
@@ -282,16 +293,85 @@ class LudiiTranspiler:
             elif t == "P2":
                 owner = "P2"
                 break
-            elif t == "Neutral":
+            elif t in ("Neutral", "Shared"):
                 owner = "both"
                 break
 
-        self.pieces.append((name, owner))
+        # Deduplicate: if we already have this base name, merge to "both"
+        for i, (existing_name, existing_owner) in enumerate(self.pieces):
+            if existing_name == base_name:
+                if existing_owner != owner:
+                    self.pieces[i] = (base_name, "both")
+                return
+
+        self.pieces.append((base_name, owner))
 
     def _parse_regions(self, content: str):
         """Parse region definitions."""
         # Regions are complex — skip for now, they're rarely needed
         pass
+
+    def _process_start(self, tree: Tree) -> str:
+        """Extract start positions from Ludii rules."""
+        rules = _find_child(tree, "rules")
+        if not rules:
+            return ""
+
+        full_text = _get_text(rules)
+        if "start" not in full_text:
+            return ""
+
+        import re
+        piece_name = self.pieces[0][0] if self.pieces else "token"
+
+        # Look for (place "X" ...) patterns in the start section
+        start_ldx = []
+
+        # Pattern: (expand (sites Bottom)) or (expand (sites Top))
+        if "expand" in full_text and "sites Bottom" in full_text:
+            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
+        if "expand" in full_text and "sites Top" in full_text:
+            # Need board height — estimate from board size
+            if "square" in self.board_ldx:
+                size = int(self.board_ldx.split()[-1])
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-2}) (row {size-1})))')
+            else:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row 6) (row 7)))')
+
+        # Pattern: (sites Phase N) — checkerboard placement
+        if "sites Phase" in full_text:
+            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1) (row 2)))')
+            if "square" in self.board_ldx:
+                size = int(self.board_ldx.split()[-1])
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-3}) (row {size-2}) (row {size-1})))')
+            else:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row 5) (row 6) (row 7)))')
+
+        # Pattern: (sites Bottom) without expand
+        if "sites Bottom" in full_text and "expand" not in full_text:
+            start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
+        if "sites Top" in full_text and "expand" not in full_text:
+            if "square" in self.board_ldx:
+                size = int(self.board_ldx.split()[-1])
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-1})))')
+
+        if start_ldx:
+            return "(start " + " ".join(start_ldx) + ")"
+
+        # Fallback: if it's a movement game, auto-place on first/last rows
+        if "forEach Piece" in full_text or "move Step" in full_text or "move Hop" in full_text or "move Slide" in full_text:
+            piece_name = self.pieces[0][0] if self.pieces else "token"
+            if "square" in self.board_ldx:
+                size = int(self.board_ldx.split()[-1])
+                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {size-2}) (row {size-1}))))'
+            elif "hexagon" in self.board_ldx:
+                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row 6) (row 7))))'
+            elif "rectangle" in self.board_ldx:
+                parts = self.board_ldx.split()
+                h = int(parts[-1]) if len(parts) >= 2 else 8
+                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {h-2}) (row {h-1}))))'
+
+        return ""
 
     def _process_rules(self, tree: Tree) -> str:
         """Extract and transpile play rules."""
@@ -355,20 +435,49 @@ class LudiiTranspiler:
 
     def _transpile_foreach_piece(self, play_text: str) -> str:
         """Transpile a forEach Piece movement game."""
-        # For now: generate movement from the piece definitions
-        # The actual movement was defined in the piece (move Step/Slide/Hop)
-        # We need to extract those and put them in the Ludax play block
-
+        # Detect movement types from the Ludii play text
         moves = []
-        for piece_name, owner in self.pieces:
-            # Default: step in any direction
+        piece_name = self.pieces[0][0] if self.pieces else "token"
+
+        if "move Step" in play_text or "Step" in play_text:
+            if "Forward" in play_text:
+                self.has_set_forward = True
+                moves.append(f'(step "{piece_name}" direction:(forward_left forward_right) priority:1)')
+            else:
+                moves.append(f'(step "{piece_name}" direction:any priority:1)')
+
+        if "move Hop" in play_text or "Hop" in play_text:
+            if "Forward" in play_text or "FR" in play_text or "FL" in play_text:
+                self.has_set_forward = True
+                moves.append(f'(hop "{piece_name}" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)')
+            else:
+                moves.append(f'(hop "{piece_name}" direction:diagonal hop_over:opponent capture:true priority:0)')
+
+        if "move Slide" in play_text or "Slide" in play_text:
+            if "Orthogonal" in play_text:
+                moves.append(f'(slide "{piece_name}" direction:orthogonal)')
+            else:
+                moves.append(f'(slide "{piece_name}" direction:any)')
+
+        if not moves:
             moves.append(f'(step "{piece_name}" direction:any)')
 
+        # Add effects
+        effects = []
+        if "remove" in play_text.lower() and ("between" in play_text or "custodial" in play_text):
+            effects.append(f'(capture (custodial "{piece_name}" 1 orientation:orthogonal))')
+        if "moveAgain" in play_text:
+            effects.append(f'(if (and (action_was mover hop) (can_move_again hop)) (extra_turn mover same_piece:true))')
+
+        effects_str = ""
+        if effects:
+            effects_str = " (effects " + " ".join(effects) + ")"
+
         if len(moves) == 1:
-            return f'(play (repeat (P1 P2) (move {moves[0]})))'
+            return f'(play (repeat (P1 P2) (move {moves[0]}{effects_str})))'
         else:
             or_moves = " ".join(moves)
-            return f'(play (repeat (P1 P2) (move (or {or_moves}))))'
+            return f'(play (repeat (P1 P2) (move (or {or_moves}){effects_str})))'
 
     def _transpile_phases(self, phases: Tree) -> str:
         """Transpile phase-based games to Ludax multi-phase play."""
@@ -465,15 +574,34 @@ class LudiiTranspiler:
 
         # No pieces
         if "no Pieces" in full_text:
-            pass  # Complex — skip for now
+            import re
+            for m in re.finditer(r'no Pieces (\w+).*?result (\w+) (\w+)', full_text):
+                target, player, outcome = m.group(1), m.group(2), m.group(3)
+                if outcome == "Win":
+                    conditions.append(f"(if (no_legal_actions) (mover win))")
+                elif outcome == "Loss":
+                    conditions.append(f"(if (no_legal_actions) (mover lose))")
+
+        # Reach edge / is In (sites Mover)
+        if "is In" in full_text and ("sites Mover" in full_text or "sites Top" in full_text or "sites Bottom" in full_text):
+            piece = self.pieces[0][0] if self.pieces else "token"
+            if self.has_set_forward:
+                conditions.append(f'(if (exists (and (occupied mover) (edge forward))) (mover win))')
+            else:
+                conditions.append(f'(if (no_legal_actions) (mover lose))')
+
+        # Count-based win
+        import re
+        for m in re.finditer(r'<=\s+count Pieces (\w+)\s+(\d+).*?result (\w+) (\w+)', full_text):
+            conditions.append(f"(if (no_legal_actions) (mover win))")
 
         # Full board draw
         if "is Full" in full_text or "full_board" in full_text.lower():
             conditions.append("(if (full_board) (draw))")
 
         if not conditions:
-            # Default fallback
-            conditions.append("(if (full_board) (draw))")
+            # Default: no legal actions = loss (covers most movement games)
+            conditions.append("(if (no_legal_actions) (mover lose))")
 
         return "(end " + " ".join(conditions) + ")"
 
