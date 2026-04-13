@@ -1,0 +1,11 @@
+(game "Mancala"
+    (players 2)
+    (equipment
+        (board (rectangle 7 2))
+        (pieces ("seed" both))
+    )
+    (rules
+        (play (repeat (P1 P2) (sow seeds:4 capture_opposite)))
+        (end (if (no_legal_actions) (mover lose)))
+    )
+)
