@@ -824,35 +824,38 @@ class GameRuleParser(Transformer):
         hop_over_friendly = (hop_over_player == PlayerAndMoverRefs.MOVER)
 
         board_size = self.game_info.board_size
-        hop_between = self.hop_between_lookup  # (board_size, board_size) -> between cell
+        hop_between = self.hop_between_lookup
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
-        indices = jnp.repeat(jnp.arange(board_size, dtype=ACTION_DTYPE), len(p1_direction_indices))
+        num_dirs = len(p1_direction_indices)
+        arange_bs = jnp.arange(board_size, dtype=jnp.int32)
 
         def legal_action_fn(state):
-            direction_indices = all_direction_indices[state.current_player]
-            occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
+            dirs = all_direction_indices[state.current_player]
+            owned = (state.board[piece] == state.current_player)  # (board_size,)
             hop_over_mask = hop_over_mask_fn(state)
 
-            step_indices = self.slide_lookup[direction_indices, :, 1].T
-            can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(ACTION_DTYPE)
-            hop_indices = self.slide_lookup[direction_indices, :, 2].T
-            valid_hops = jnp.where(can_hop, hop_indices, board_size + 1).astype(ACTION_DTYPE)
+            # Between cells and hop destinations: (num_dirs, board_size)
+            between = self.slide_lookup[dirs, :, 1]  # (num_dirs, board_size)
+            dests = self.slide_lookup[dirs, :, 2]    # (num_dirs, board_size)
 
-            valid_indices = jnp.stack([indices, valid_hops.flatten()], axis=1)
-            mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
-            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
-
-            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
-            mask = jnp.where(piece_mask[:, jnp.newaxis], mask, jnp.zeros_like(mask))
+            on_board = dests < board_size
+            has_hop_piece = hop_over_mask.at[between.clip(0, board_size - 1)].get()  # (num_dirs, board_size)
+            valid = owned[jnp.newaxis, :] & on_board & has_hop_piece.astype(jnp.bool_)
 
             if hop_over_friendly:
-                enemy_mask = (state.board == (state.current_player + 1) % self.num_players).any(axis=0).astype(BOARD_DTYPE)
-                mask = jnp.where(enemy_mask[jnp.newaxis, :], mask, jnp.zeros_like(mask))
+                enemy = ((state.board != EMPTY) & (state.board != state.current_player)).any(axis=0)
+                dest_has_enemy = enemy.at[dests.clip(0, board_size - 1)].get()
+                valid = valid & dest_has_enemy
             else:
-                mask = jnp.where(occupied_mask[jnp.newaxis, :], jnp.zeros_like(mask), mask)
+                occupied = (state.board != EMPTY).any(axis=0)
+                dest_empty = ~occupied.at[dests.clip(0, board_size - 1)].get()
+                valid = valid & dest_empty
 
-            return mask
+            flat_idx = arange_bs[jnp.newaxis, :] * board_size + dests.clip(0, board_size - 1)
+            mask = jnp.zeros(board_size * board_size, dtype=BOARD_DTYPE)
+            mask = mask.at[flat_idx.flatten()].set(valid.flatten().astype(BOARD_DTYPE))
+            return mask.reshape(board_size, board_size)
 
         if capture:
             def apply_action_fn(state, action):
@@ -983,24 +986,33 @@ class GameRuleParser(Transformer):
         board_size = self.game_info.board_size
         p1_dir, p2_dir = utils._get_direction_indices(self.game_info, direction)
         all_dirs = jnp.array([p1_dir, p2_dir], dtype=BOARD_DTYPE)
-        src_indices = jnp.repeat(jnp.arange(board_size, dtype=BOARD_DTYPE), len(p1_dir))
+        num_dirs = len(p1_dir)
+        # Precompute source indices for all (src, dir) pairs: shape (num_dirs, board_size)
+        arange_bs = jnp.arange(board_size, dtype=jnp.int32)
 
-        def reachability_fn(state):
+        def legal_action_fn(state):
             dirs = all_dirs[state.current_player]
-            dests = self.slide_lookup[dirs, :, distance].T
-            occupied = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-            valid = jnp.stack([src_indices, dests.flatten()], axis=1)
-            mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
-            mask = mask.at[valid[:, 0], valid[:, 1]].set(1)
-            mask = jnp.where(occupied[jnp.newaxis, :], jnp.zeros_like(mask), mask)
+            owned = (state.board[piece] == state.current_player)  # (board_size,)
+            empty = (state.board == EMPTY).all(axis=0)  # (board_size,)
+
+            # All destinations: (num_dirs, board_size)
+            all_dests = self.slide_lookup[dirs, :, distance]  # (num_dirs, board_size)
+            on_board = all_dests < board_size
+            dest_empty = empty.at[all_dests.clip(0, board_size - 1)].get()  # (num_dirs, board_size)
+
+            valid = owned[jnp.newaxis, :] & dest_empty & on_board  # (num_dirs, board_size)
+
             if distance > 1:
                 for d in range(1, distance):
-                    inter = self.slide_lookup[dirs, :, d].T
-                    blocked = occupied.at[inter.clip(0, board_size - 1)].get() * (inter < board_size).astype(BOARD_DTYPE)
-                    mask = jnp.where(blocked[:, jnp.newaxis], jnp.zeros_like(mask), mask)
-            return mask
+                    inter = self.slide_lookup[dirs, :, d]
+                    inter_empty = empty.at[inter.clip(0, board_size - 1)].get()
+                    valid = valid & (inter_empty | (inter >= board_size))
 
-        legal_action_fn = self._make_legal_fn(piece, reachability_fn)
+            # Scatter into flat mask: action = src * board_size + dst
+            flat_idx = arange_bs[jnp.newaxis, :] * board_size + all_dests.clip(0, board_size - 1)
+            mask = jnp.zeros(board_size * board_size, dtype=BOARD_DTYPE)
+            mask = mask.at[flat_idx.flatten()].set(valid.flatten().astype(BOARD_DTYPE))
+            return mask.reshape(board_size, board_size)
         apply_action_fn = self._make_apply_fn(piece)
 
         move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
