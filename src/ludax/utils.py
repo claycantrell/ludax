@@ -337,6 +337,58 @@ def _get_slide_lookup(game_info: GameInfo):
     
     return slide_lookup
 
+
+# Named leap offset patterns (row_offset, col_offset pairs)
+LEAP_PATTERNS = {
+    'knight': [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)],
+    'camel': [(-3, -1), (-3, 1), (-1, -3), (-1, 3), (1, -3), (1, 3), (3, -1), (3, 1)],
+    'zebra': [(-3, -2), (-3, 2), (-2, -3), (-2, 3), (2, -3), (2, 3), (3, -2), (3, 2)],
+}
+
+
+def _get_leap_lookup(game_info: GameInfo, offsets: list):
+    """Precompute leap destinations for each board position.
+
+    Returns array of shape (num_offsets, board_size) where each entry is
+    the destination cell index, or board_size (invalid sentinel) if the
+    leap goes off-board.
+
+    Args:
+        game_info: GameInfo with board dimensions
+        offsets: list of (row_offset, col_offset) tuples
+    """
+    board_size = game_info.board_size
+    sentinel = board_size  # invalid destination
+
+    mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
+
+    lookup = np.full((len(offsets), board_size), sentinel, dtype=np.int16)
+
+    for offset_idx, (dr, dc) in enumerate(offsets):
+        for cell in range(board_size):
+            row, col = idx_to_pos(cell)
+            new_row, new_col = row + dr, col + dc
+
+            # Check bounds
+            if game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE, Shapes.HEX_RECTANGLE]:
+                if 0 <= new_row < game_info.board_dims[0] and 0 <= new_col < game_info.board_dims[1]:
+                    dest = np.ravel_multi_index((new_row, new_col), game_info.board_dims)
+                    if dest < board_size:
+                        lookup[offset_idx, cell] = dest
+
+            elif game_info.board_shape == Shapes.HEXAGON:
+                # For hex boards, validate via board_to_mask round-trip
+                dummy = np.zeros(game_info.board_dims, dtype=np.int8)
+                if 0 <= new_row < game_info.board_dims[0] and 0 <= new_col < game_info.board_dims[1]:
+                    dummy[new_row, new_col] = 1
+                    flat = board_to_mask(jnp.array(dummy))
+                    dest_cells = np.argwhere(np.array(flat) == 1).flatten()
+                    if len(dest_cells) == 1:
+                        lookup[offset_idx, cell] = dest_cells[0]
+
+    return jnp.array(lookup, dtype=ACTION_DTYPE)
+
+
 def _get_mask_board_conversion_fns(game_info: GameInfo):
     '''
     Return functions for the current game that can be used to convert between a flattened

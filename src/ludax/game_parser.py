@@ -847,6 +847,80 @@ class GameRuleParser(Transformer):
         return piece, move_type, legal_action_fn, new_apply_action_fn, can_move_again_fn, priority
 
 
+    def move_leap(self, children):
+        '''
+        Move a piece by leaping to a non-adjacent cell using offset patterns (e.g., knight L-shape).
+        Uses precomputed leap lookup table for valid destinations.
+        '''
+        piece, *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
+
+        leap_offsets_raw = optional_args[OptionalArgs.LEAP_OFFSETS]
+        capture = optional_args[OptionalArgs.CAPTURE]
+        priority = optional_args[OptionalArgs.PRIORITY]
+
+        # Resolve offsets — either a named pattern or explicit (dr, dc) pairs
+        if isinstance(leap_offsets_raw, str):
+            offsets = utils.LEAP_PATTERNS.get(leap_offsets_raw, utils.LEAP_PATTERNS['knight'])
+        else:
+            offsets = leap_offsets_raw
+
+        # Precompute leap destinations: shape (num_offsets, board_size)
+        leap_lookup = utils._get_leap_lookup(self.game_info, offsets)
+        num_offsets = len(offsets)
+        board_size = self.game_info.board_size
+
+        # Leap uses FROM_TO action space: action = start * board_size + destination
+        def legal_action_fn(state):
+            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            occupied_by_mover = (state.board == state.current_player).any(axis=0).astype(BOARD_DTYPE)
+
+            # For each start position and offset, check if destination is valid
+            # leap_lookup shape: (num_offsets, board_size), values are dest or board_size (invalid)
+            mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
+            for oi in range(num_offsets):
+                dests = leap_lookup[oi]  # shape: (board_size,)
+                valid = (dests < board_size).astype(BOARD_DTYPE)
+                # Can't land on own piece
+                dest_friendly = occupied_by_mover.at[dests.clip(0, board_size - 1)].get()
+                valid = valid & ~dest_friendly
+                # Set mask[start, dest] = 1 for valid leaps
+                mask = mask.at[jnp.arange(board_size), dests.clip(0, board_size - 1)].add(
+                    valid * piece_mask
+                )
+
+            # Clip to binary
+            mask = (mask > 0).astype(BOARD_DTYPE)
+            return mask
+
+        if capture:
+            def apply_action_fn(state, action):
+                start_idx = action // board_size
+                end_idx = action % board_size
+
+                board = state.board.at[piece, start_idx].set(EMPTY)
+                # Remove any enemy at destination
+                board = board.at[:, end_idx].set(EMPTY)
+                board = board.at[piece, end_idx].set(state.current_player)
+
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+                return state._replace(board=board, previous_actions=previous_actions)
+        else:
+            def apply_action_fn(state, action):
+                start_idx = action // board_size
+                end_idx = action % board_size
+
+                board = state.board.at[piece, end_idx].set(state.current_player)
+                board = board.at[piece, start_idx].set(EMPTY)
+
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+                return state._replace(board=board, previous_actions=previous_actions)
+
+        def can_move_again_fn(state):
+            return state
+
+        return piece, MoveTypes.LEAP, legal_action_fn, apply_action_fn, can_move_again_fn, priority
+
     def move_hop(self, children):
         '''
         Move a piece from one position to another by jumping over a piece. Optional arguments can specify a direction,

@@ -53,10 +53,12 @@ place_result_constraint: "(" "result" super_predicate ")"
 play_move: "(" "move" move_type_definition play_effects? ")"
 move_type_definition: move_type | "(" "or" move_type+ ")"
 move_type: move_hop
+         | move_leap
          | move_slide
          | move_step
 
 move_hop: "(" "hop" piece_reference direction_arg? piece_arg? hop_over_arg? capture_arg? priority_arg? ")"
+move_leap: "(" "leap" piece_reference leap_offsets_arg? capture_arg? priority_arg? ")"
 move_slide: "(" "slide" piece_reference direction_arg? distance_arg? priority_arg? ")"
 move_step: "(" "step" piece_reference direction_arg? priority_arg? ")"
 
@@ -205,6 +207,13 @@ predicate_passed: "(" "passed" (mover_reference | BOTH) ")"
 capture_arg: "capture:" boolean
 custodial_length_arg: ANY | positive_int
 direction_arg: "direction:" (direction | multi_direction)
+// Leap offsets: named patterns or explicit (row_offset, col_offset) pairs
+leap_offsets_arg: "offsets:" (leap_pattern | "(" leap_offset+ ")")
+leap_pattern: KNIGHT | CAMEL | ZEBRA
+KNIGHT: "knight"
+CAMEL: "camel"
+ZEBRA: "zebra"
+leap_offset: "(" SIGNED_NUMBER SIGNED_NUMBER ")"
 distance_arg: "distance:" positive_int
 exact_arg: "exact:" boolean
 exclude_arg: "exclude:" multi_mask_arg

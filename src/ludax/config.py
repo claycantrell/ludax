@@ -159,6 +159,7 @@ class Masks(StrEnum):
 class MoveTypes(StrEnum):
     PLACE = 'move_place'
     HOP = 'move_hop'
+    LEAP = 'move_leap'
     SLIDE = 'move_slide'
     STEP = 'move_step'
 
@@ -185,6 +186,7 @@ class OptionalArgs(StrEnum):
     HOP_OVER = 'hop_over_arg'
     INCREMENT_SCORE = 'increment_score_arg'
     INDICES = 'indices_arg'
+    LEAP_OFFSETS = 'leap_offsets_arg'
     ORIENTATION = 'orientation_arg'
     MOVER = 'mover_arg'
     MULTI_MASK = 'multi_mask_arg'
@@ -208,6 +210,7 @@ DEFAULT_ARGUMENTS = {
     Masks.OCCUPIED: {OptionalArgs.MOVER: 'mover'},
 
     MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
+    MoveTypes.LEAP: {OptionalArgs.LEAP_OFFSETS: 'knight', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
     MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
 

@@ -88,7 +88,7 @@ class GameInfoExtractor(Visitor):
                     self.rendering_info.piece_shape_mapping[piece_name] = list(PieceShapes)[0]
 
         # Determine the action space type based on the used mechanics
-        if MoveTypes.SLIDE in self.used_mechanics:
+        if MoveTypes.SLIDE in self.used_mechanics or MoveTypes.LEAP in self.used_mechanics:
             self.game_info.action_type = ActionTypes.FROM_TO
         elif MoveTypes.HOP in self.used_mechanics or MoveTypes.STEP in self.used_mechanics:
             self.game_info.action_type = ActionTypes.FROM_DIR
@@ -237,6 +237,9 @@ class GameInfoExtractor(Visitor):
             if value == "true" and "captured" not in self.game_state_attributes:
                 self.game_state_attributes.append("captured")
                 self.defaults.append(jnp.zeros(self.game_info.board_size, dtype=jnp.bool_))
+
+    def move_leap(self, tree):
+        self.used_mechanics.add(MoveTypes.LEAP)
 
     def move_step(self, tree):
         self.used_mechanics.add(MoveTypes.STEP)
