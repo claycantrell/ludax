@@ -235,16 +235,14 @@ class LudiiTranspiler:
             nums = [t for t in tokens if t.isdigit()]
             if "hex" in tokens or "hexagon" in tokens:
                 size = nums[-1] if nums else "9"
-                self.board_ldx = f"hexagon {size}"
-                self.board_shape = "hexagon"
+                self._set_hex_board(size)
                 return
 
         # Triangular boards → approximate as hexagon
         if shape == "tri" or "tri" in content.lower().split():
             nums = [t for t in tokens if t.isdigit()]
             size = nums[0] if nums else "7"
-            self.board_ldx = f"hexagon {size}"
-            self.board_shape = "hexagon"
+            self._set_hex_board(size)
             return
 
         # Graph boards → approximate as square based on vertex count
@@ -380,12 +378,18 @@ class LudiiTranspiler:
             piece_name = self.pieces[0][0] if self.pieces else "token"
             if "square" in self.board_ldx:
                 size = int(self.board_ldx.split()[-1])
+                if size <= 4:
+                    return f'(start (place "{piece_name}" P1 ((row 0))) (place "{piece_name}" P2 ((row {size-1}))))'
                 return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {size-2}) (row {size-1}))))'
             elif "hexagon" in self.board_ldx:
-                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row 6) (row 7))))'
+                size = int(self.board_ldx.split()[-1])
+                last_row = size - 1
+                return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {last_row-1}) (row {last_row}))))'
             elif "rectangle" in self.board_ldx:
                 parts = self.board_ldx.split()
-                h = int(parts[-1]) if len(parts) >= 2 else 8
+                h = int(parts[-2]) if len(parts) >= 3 else int(parts[-1]) if len(parts) >= 2 else 8
+                if h <= 4:
+                    return f'(start (place "{piece_name}" P1 ((row 0))) (place "{piece_name}" P2 ((row {h-1}))))'
                 return f'(start (place "{piece_name}" P1 ((row 0) (row 1))) (place "{piece_name}" P2 ((row {h-2}) (row {h-1}))))'
 
         return ""
