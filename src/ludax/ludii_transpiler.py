@@ -88,6 +88,7 @@ class LudiiTranspiler:
         """Convert Ludii text to Ludax text. Returns None if not transpilable."""
         parser = _get_parser()
         tree = parser.parse(lud_text)
+        self._tree = tree
 
         # Extract game name — find the ESCAPED_STRING token
         name = "Unknown"
@@ -403,6 +404,14 @@ class LudiiTranspiler:
                 pass  # Can't easily convert coords to indices — skip
 
         if start_ldx:
+            # Validate: ensure we have both P1 and P2 placements
+            has_p1 = any("P1" in s for s in start_ldx)
+            has_p2 = any("P2" in s for s in start_ldx)
+            if has_p1 and not has_p2:
+                # Add P2 on opposite end
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
+            elif has_p2 and not has_p1:
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
             return "(start " + " ".join(start_ldx) + ")"
 
         # Fallback: if it's a movement game, auto-place on first/last rows
@@ -458,7 +467,13 @@ class LudiiTranspiler:
 
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
+        # Check full game text for whether pieces use Add (placement) or Step/Hop/Slide (movement)
+        full = _get_text(_find_child(self._tree, "rules")) if hasattr(self, '_tree') else play_text
+
         if "forEach Piece" in play_text:
+            # Check if the piece definitions use move Add (placement) — common pattern
+            if "move Add" in full and "move Step" not in full and "move Hop" not in full and "move Slide" not in full:
+                return self._transpile_placement(play_text)
             return self._transpile_foreach_piece(play_text)
         elif "move Add" in play_text:
             return self._transpile_placement(play_text)
