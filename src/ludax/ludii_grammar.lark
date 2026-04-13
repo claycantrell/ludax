@@ -8,23 +8,41 @@ game: "(" "game" ESCAPED_STRING game_players game_equipment game_rules ")"
 // Players
 game_players: "(" "players" (INT | player_list) ")"
 player_list: "{" player_def+ "}"
-player_def: "(" "player" DIRECTION ")"
+player_def: "(" "player" (DIRECTION | NAME) ")"
 
 // Equipment
 game_equipment: "(" "equipment" "{" equipment_item+ "}" ")"
-equipment_item: board_def | piece_def | regions_def
+equipment_item: board_def | piece_def | regions_def | hand_def | dice_def | map_def | card_def
+hand_def: "(" "hand" hand_owner hand_size? ")"
+hand_owner: "Each" | "P1" | "P2" | "Shared"
+hand_size: INT
+dice_def: "(" "dice" dice_args ")"
+dice_args: (ESCAPED_STRING | INT | NAME)*
+map_def: "(" "map" ESCAPED_STRING map_body ")"
+map_body: "{" map_pair* "}"
+map_pair: "(" INT INT ")"
+card_def: "(" "card" ESCAPED_STRING card_args ")"
+card_args: (ESCAPED_STRING | INT | NAME)*
 
 // Board
 board_def: "(" "board" board_type board_option* ")"
 board_type: "(" board_shape board_args ")"
-board_shape: "square" | "rectangle" | "hex" | "tri" | "rotate" | "Diamond" | "Star" | "concentric"
-board_args: (INT | board_type)+
-board_option: "use:" NAME
+board_shape: "square" | "Square" | "rectangle" | "Rectangle" | "hex" | "Hex" | "Hexagon"
+           | "tri" | "Triangle" | "rotate" | "Diamond" | "Star" | "concentric"
+           | "merge" | "add" | "remove" | "graph" | "dual" | "splitCrossings"
+           | "shift" | "scale" | "renumber" | "trim" | "keep" | "subdivide"
+           | "tiling" | "limping" | "morris" | "alquerque" | "cross" | "kints"
+           | "regular" | "spiral" | "circle"
+board_args: (INT | FLOAT | board_type | NAME | ESCAPED_STRING | sites_expr | "{" board_arg_item* "}")*
+board_arg_item: INT | FLOAT | board_type | NAME | ESCAPED_STRING | "{" board_arg_item* "}"
+board_option: "use:" NAME | "diagonals:" BOARD_OPT_VAL | "largeStack:" BOOL | "numColumns:" INT | "numRows:" INT
+BOARD_OPT_VAL: NAME | INT | /\{\{[^}]*\}\}/ | /\{[^}]*\}/
 
 // Pieces
-piece_def: "(" "piece" ESCAPED_STRING piece_owner piece_moves? ")"
+piece_def: "(" "piece" ESCAPED_STRING piece_owner piece_moves? piece_options* ")"
 piece_owner: "Each" | "P1" | "P2" | "Neutral" | "Shared"
 piece_moves: move_rule | "(" "or" "{" move_rule+ "}" ")"
+piece_options: "(" "flips" INT INT ")" | "maxState:" INT | "maxCount:" INT | "maxValue:" INT
 
 // Regions
 regions_def: "(" "regions" region_owner region_sites ")"
@@ -33,9 +51,15 @@ region_sites: sites_expr | "{" sites_expr+ "}"
 
 // Sites expressions
 sites_expr: "(" "sites" sites_type sites_args? ")"
-sites_type: "Empty" | "Side" | "Top" | "Bottom" | "Corners" | "Centre" | "Phase" | "Around"
-          | "Board" | "Outer" | "Inner" | "Mover"
-sites_args: (DIRECTION | INT | sites_expr | name_ref)*
+          | "(" "expand" sites_expr expand_args? ")"
+          | "(" "intersection" sites_expr+ ")"
+          | "(" "union" sites_expr+ ")"
+          | "(" "difference" sites_expr+ ")"
+sites_type: "Empty" | "Side" | "Top" | "Bottom" | "Corners" | "Centre" | "Center" | "Phase" | "Around"
+          | "Board" | "Outer" | "Inner" | "Mover" | "Next" | "Hand" | "Occupied"
+sites_args: (DIRECTION | INT | sites_expr | name_ref | "Own" | "Orthogonal" | "Diagonal" | "Adjacent" | "All"
+           | "by:" NAME | "of:" NAME | "if:" condition | "on:" NAME | "fromVertex:" INT | "toVertex:" INT)*
+expand_args: "steps:" INT
 
 // Rules
 game_rules: "(" "rules" meta_rule? start_rules? play_rules phase_rules? end_rules ")"
@@ -50,13 +74,20 @@ start_location: sites_expr | "(" "expand" sites_expr ")" | "(" "expand" sites_ex
 
 // Play
 play_rules: "(" "play" play_action ")"
-play_action: foreach_piece | move_rule | if_action
+play_action: foreach_piece | move_rule | if_action | priority_play | do_action
+do_action: "(" "do" play_action then_clause? ")"
 
 foreach_piece: "(" "forEach" "Piece" piece_name? ")"
             | "(" "forEach" "Piece" piece_name? move_rule ")"
+            | "(" "forEach" foreach_type foreach_args ")"
 
-// Phase rules (Ludii-style)
-phase_rules: "phases:" "{" phase_def+ "}"
+foreach_type: "Site" | "Level" | "Direction" | "Value" | "NonMover" | "Player" | "Team"
+foreach_args: (condition | sites_expr | move_rule | if_action | "if:" condition | ESCAPED_STRING | INT | NAME)*
+
+priority_play: "(" "priority" play_action+ ")"
+
+// Phase rules (Ludii-style — note colon before braces)
+phase_rules: "phases:" "{" phase_def+ "}" | "phases" ":" "{" phase_def+ "}"
 phase_def: "(" "phase" ESCAPED_STRING phase_player? "(" "play" play_action ")" phase_next? ")"
 phase_player: "P1" | "P2"
 phase_next: "(" "nextPhase" phase_target ESCAPED_STRING ")"
@@ -106,11 +137,20 @@ then_clause: "(" "then" effect+ ")"
 // Effects
 effect: "(" "remove" remove_target ")"
       | "(" "moveAgain" ")"
+      | "(" "addScore" score_player count_expr ")"
+      | "(" "set" set_target set_args* ")"
+      | "(" "add" add_args ")"
+      | "(" "trigger" ESCAPED_STRING trigger_player ")"
+      | "(" "and" effect+ ")"
       | custodial_effect
       | surround_effect
       | "(" "if" condition effect ")"
       | "(" "or" effect+ ")"
-      | "(" "set" set_target ")"
+
+score_player: "Mover" | "Next" | "P1" | "P2"
+trigger_player: "Mover" | "Next" | "P1" | "P2"
+set_args: (NAME | INT | count_expr | condition | "at:" "(" location ")" | "to:" INT)*
+add_args: "(" "piece" name_ref ")" "(" "to" sites_expr ")"
 
 remove_target: "(" "to" ")" | "(" "between" ")" | "(" "from" ")" | "(" "last" "To" ")"
              | sites_expr
@@ -128,9 +168,16 @@ condition_inner: is_condition | and_condition | or_condition | not_condition
 
 is_condition: "is" is_type is_args*
 is_type: "Empty" | "Enemy" | "Friend" | "Line" | "Connected" | "In" | "Mover" | "Prev"
-is_args: INT | "exact:" BOOL | "All" | "Mover" | "Next" | condition | sites_expr | "(" name_ref ")"
+       | "Loop" | "Full" | "Occupied" | "Pending" | "Proposed" | "Decided"
+       | "Triggered" | "Within" | "RegularGraph" | "SidesMatch"
+is_args: INT | "exact:" BOOL | "All" | "Mover" | "Next" | "P1" | "P2"
+       | "Orthogonal" | "Diagonal" | "Adjacent" | "All"
+       | "through:" INT | "whats:" condition
+       | condition | sites_expr
+       | "(" location ")"
        | "(" "who" "at:" "(" location ")" ")"
        | "(" "what" "at:" "(" location ")" ")"
+       | "(" name_ref ")"
 
 and_condition: "and" condition+
 or_condition: "or" condition+
@@ -143,7 +190,7 @@ count_expr: "(" "count" count_type ")" | INT
 count_type: "Pieces" count_player? | "Moves" | "Sites" "in:" sites_expr
 count_player: "Mover" | "Next" | "P1" | "P2"
 
-location: "to" | "from" | "between" | "last" "To"
+location: "to" | "from" | "between" | "last" "To" | "last" "From"
 
 // End conditions
 end_rules: "(" "end" end_items ")"
@@ -168,6 +215,7 @@ NAME: /[A-Za-z_]\w*/
 
 %import common.ESCAPED_STRING
 %import common.INT
+%import common.FLOAT
 %import common.WS
 %ignore WS
 %ignore /\/\/.*/
