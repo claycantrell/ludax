@@ -34,6 +34,7 @@ class GameInfo:
     region_mask_fns: list[callable] = None
 
     max_stack_height: int = 1
+    max_hand_size: int = 0
     actions_per_turn: int = 1
 
     forward_directions: tuple[str] = ()
@@ -204,6 +205,15 @@ class GameInfoExtractor(Visitor):
                 self.game_state_attributes.append("stack_heights")
                 self.defaults.append(jnp.zeros(bs, dtype=BOARD_DTYPE))
 
+    def hand_config(self, tree):
+        max_hand = int(tree.children[0])
+        self.game_info.max_hand_size = max_hand
+        if max_hand > 0 and "hand_pieces" not in self.game_state_attributes:
+            npt = self.game_info.num_piece_types
+            # hand_pieces[player, piece_type] = count of that piece type in hand
+            self.game_state_attributes.append("hand_pieces")
+            self.defaults.append(jnp.zeros((2, npt), dtype=BOARD_DTYPE))
+
     def actions_per_turn(self, tree):
         n = int(tree.children[0])
         self.game_info.actions_per_turn = n
@@ -243,6 +253,9 @@ class GameInfoExtractor(Visitor):
         elif child.data == "play_move":
             self.game_info.move_type = "move"
             self.game_info.uses_slide_logic = True
+
+        elif child.data == "play_drop":
+            self.game_info.move_type = "place"  # drop uses same action space as place
 
         else:
             raise NotImplementedError(f"Play mechanic {child.data} not implemented yet!")

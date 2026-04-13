@@ -484,6 +484,31 @@ class GameRuleParser(Transformer):
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
     
+    def play_drop(self, children):
+        '''
+        Drop a piece from the player's hand onto the board.
+        Only legal if the player has that piece type in hand and destination is valid.
+        '''
+        piece, (destination_constraint_fn, _) = children
+
+        board_size = self.game_info.board_size
+
+        def legal_action_mask_fn(state):
+            base_mask = destination_constraint_fn(state)
+            # Only legal if player has this piece in hand
+            has_piece = state.hand_pieces[state.current_player, piece] > 0
+            return jnp.where(has_piece, base_mask, jnp.zeros_like(base_mask))
+
+        def apply_action_fn(state, action):
+            board = state.board.at[piece, action].set(state.current_player)
+            hand_pieces = state.hand_pieces.at[state.current_player, piece].add(-1)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+            return state._replace(board=board, hand_pieces=hand_pieces, previous_actions=previous_actions)
+
+        apply_effects_fn = lambda state, original_player: state
+
+        return board_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
     def place_result_constraint(self, children):
         '''
         Result constraints refer to things that must be true about the board
@@ -1483,6 +1508,53 @@ class GameRuleParser(Transformer):
             return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % 2,
                                   extra_turn_fn_idx=extra_turn_fn_idx)
         
+        return apply_effects_fn
+
+    def effect_capture_to_hand(self, children):
+        '''
+        Capture pieces matching a mask and add them to the capturing player's hand.
+        Like effect_capture but pieces go to hand instead of being removed.
+        '''
+        (child_mask_fn, _), *optional_args = children
+        optional_args = self._parse_optional_args(optional_args)
+        mover_ref = optional_args[OptionalArgs.MOVER]
+        offset = 0 if mover_ref == PlayerAndMoverRefs.MOVER else 1
+
+        def apply_effects_fn(state, original_player):
+            updated_state = state._replace(current_player=original_player)
+            capture_mask = child_mask_fn(updated_state)
+            captor = (original_player + offset) % 2
+
+            # For each piece type, count captured pieces and add to hand
+            hand_pieces = state.hand_pieces
+            board = state.board
+            for pt in range(self.game_info.num_piece_types):
+                # Pieces of this type that match the capture mask and belong to opponent
+                target_player = (captor + 1) % 2
+                occupied = (board[pt] == target_player).astype(BOARD_DTYPE)
+                to_capture = occupied * capture_mask
+                count = to_capture.sum()
+                hand_pieces = hand_pieces.at[captor, pt].add(count)
+                # Remove captured pieces from board
+                board = jnp.where(
+                    to_capture[jnp.newaxis, :],
+                    jnp.full_like(board[:, :1], EMPTY).broadcast_to(board.shape[0], 1) * jnp.ones_like(board),
+                    board
+                )
+
+            # Simpler: just clear captured positions
+            capture_positions = jnp.argwhere(capture_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size + 1).flatten()
+            board = state.board.at[:, capture_positions].set(EMPTY)
+
+            # Count what was captured per piece type
+            for pt in range(self.game_info.num_piece_types):
+                target_player = (captor + 1) % 2
+                was_occupied = (state.board[pt] == target_player).astype(BOARD_DTYPE)
+                captured_count = (was_occupied * capture_mask).sum()
+                hand_pieces = hand_pieces.at[captor, pt].add(captured_count)
+
+            return state._replace(board=board, hand_pieces=hand_pieces)
+
         return apply_effects_fn
 
     def effect_flip(self, children):
