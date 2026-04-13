@@ -40,7 +40,8 @@ class GameRuleParser(Transformer):
                 src, dst = action // board_size, action % board_size
                 board = state.board.at[piece, src].set(EMPTY)
                 board = board.at[piece, dst].set(state.current_player)
-                pa = state.previous_actions.at[jnp.array([state.current_player, num_players])].set(ACTION_DTYPE(dst))
+                dst_idx = ACTION_DTYPE(dst)
+                pa = state.previous_actions.at[state.current_player].set(dst_idx).at[num_players].set(dst_idx)
                 return state._replace(board=board, previous_actions=pa)
         else:
             def apply_action_fn(state, action):
@@ -48,7 +49,8 @@ class GameRuleParser(Transformer):
                 board = state.board.at[piece, src].set(EMPTY)
                 board = side_effect_fn(state, board, src, dst)
                 board = board.at[piece, dst].set(state.current_player)
-                pa = state.previous_actions.at[jnp.array([state.current_player, num_players])].set(ACTION_DTYPE(dst))
+                dst_idx = ACTION_DTYPE(dst)
+                pa = state.previous_actions.at[state.current_player].set(dst_idx).at[num_players].set(dst_idx)
                 return state._replace(board=board, previous_actions=pa)
 
         return apply_action_fn
@@ -514,12 +516,12 @@ class GameRuleParser(Transformer):
             def apply_action_fn(state, action):
                 owner = (state.current_player + offset) % self.num_players
                 state = utils._push_stack(state, action, BOARD_DTYPE(piece), owner)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
+                previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(action)).at[self.num_players].set(ACTION_DTYPE(action))
                 return state._replace(previous_actions=previous_actions)
         else:
             def apply_action_fn(state, action):
                 board = state.board.at[piece, action].set((state.current_player + offset) % self.num_players)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
+                previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(action)).at[self.num_players].set(ACTION_DTYPE(action))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
@@ -542,7 +544,7 @@ class GameRuleParser(Transformer):
         def apply_action_fn(state, action):
             board = state.board.at[piece, action].set(state.current_player)
             hand_pieces = state.hand_pieces.at[state.current_player, piece].add(-1)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
+            previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(action)).at[self.num_players].set(ACTION_DTYPE(action))
             return state._replace(board=board, hand_pieces=hand_pieces, previous_actions=previous_actions)
 
         apply_effects_fn = lambda state, original_player: state
@@ -571,7 +573,7 @@ class GameRuleParser(Transformer):
             def apply_action(state, action):
                 pred_val = predicate_fn(state._replace(
                     board=state.board.at[action].set(state.current_player),
-                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
+                    previous_actions=state.previous_actions.at[state.current_player].set(ACTION_DTYPE(action)).at[self.num_players].set(ACTION_DTYPE(action))
                 ))
                 return pred_val
             
@@ -627,10 +629,7 @@ class GameRuleParser(Transformer):
             all_masks = collect_legal_masks(state)
             src = action // board_size
             dst = action % board_size
-            # Dispatch to the first move type whose mask contains this action
-            move_idx = 0
-            for i in range(len(apply_action_fns)):
-                move_idx = jax.lax.select(all_masks[i, src, dst] == 1, i, move_idx)
+            move_idx = jnp.argmax(all_masks[:, src, dst])
             return jax.lax.switch(move_idx, apply_action_fns, state, action)
 
         return legal_action_mask_fn, apply_action_fn
@@ -870,14 +869,14 @@ class GameRuleParser(Transformer):
                     board = board.at[:, between].set(EMPTY)
                     captured_mask = jnp.zeros_like(state.captured).at[between].set(True)
 
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
+                previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(dst)).at[self.num_players].set(ACTION_DTYPE(dst))
                 return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
         else:
             def apply_action_fn(state, action):
                 src, dst = action // board_size, action % board_size
                 board = state.board.at[piece, dst].set(state.current_player)
                 board = board.at[piece, src].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
+                previous_actions = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(dst)).at[self.num_players].set(ACTION_DTYPE(dst))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
@@ -1189,9 +1188,8 @@ class GameRuleParser(Transformer):
                     board
                 )
 
-            # Simpler: just clear captured positions
-            capture_positions = jnp.argwhere(capture_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size + 1).flatten()
-            board = state.board.at[:, capture_positions].set(EMPTY)
+            # Clear all board cells where capture_mask is True
+            board = jnp.where(capture_mask[jnp.newaxis, :], EMPTY, state.board)
 
             # Count what was captured per piece type
             for pt in range(self.game_info.num_piece_types):
@@ -1271,11 +1269,13 @@ class GameRuleParser(Transformer):
             child_mask = child_mask_fn(updated_state)
             occupied_mask = (updated_state.board[promotee] == (original_player + offset) % self.num_players)
 
-            to_promote = jnp.argwhere(occupied_mask * child_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size+1).flatten()
-            new_board = updated_state.board.at[:, to_promote].set(EMPTY)
-            new_board = new_board.at[piece, to_promote].set((original_player + offset) % self.num_players)
+            promote_mask = (occupied_mask * child_mask).astype(jnp.bool_)
+            owner = (original_player + offset) % self.num_players
+            # Clear old piece type at promote positions, set new piece type
+            new_board = jnp.where(promote_mask[jnp.newaxis, :], EMPTY, updated_state.board)
+            new_board = jnp.where(promote_mask[jnp.newaxis, :] & (jnp.arange(self.game_info.num_piece_types)[:, jnp.newaxis] == piece), owner, new_board)
 
-            return state._replace(board=new_board, promoted=(occupied_mask * child_mask).astype(jnp.bool_))
+            return state._replace(board=new_board, promoted=promote_mask)
 
         return apply_effects_fn
 
