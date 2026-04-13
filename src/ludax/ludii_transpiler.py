@@ -185,6 +185,14 @@ class LudiiTranspiler:
             elif type_str == "regions":
                 self._parse_regions(content_str)
 
+    def _set_hex_board(self, size):
+        """Set board to hexagon with odd diameter (Ludax requirement)."""
+        size = int(size)
+        if size % 2 == 0:
+            size += 1
+        self.board_ldx = f"hexagon {size}"
+        self.board_shape = "hexagon"
+
     def _parse_board(self, content: str):
         """Parse board definition."""
         # Extract board shape and size from content like "( square 8 )"
@@ -210,8 +218,7 @@ class LudiiTranspiler:
                     size = int(args[0])
                     if size % 2 == 0:
                         size += 1  # Ludax requires odd hex diameter
-                    self.board_ldx = f"hexagon {size}"
-                    self.board_shape = "hexagon"
+                    self._set_hex_board(size)
                 return
             if shape == "rectangle" and len(args) >= 2:
                 self.board_ldx = f"rectangle {args[0]} {args[1]}"
@@ -257,7 +264,7 @@ class LudiiTranspiler:
                 nums = [t for t in content.split() if t.isdigit()]
                 if nums:
                     if shape_name in ("hex", "hexagon"):
-                        self.board_ldx = f"hexagon {nums[0]}"
+                        self._set_hex_board(nums[0])
                     elif shape_name == "rectangle" and len(nums) >= 2:
                         self.board_ldx = f"rectangle {nums[0]} {nums[1]}"
                     else:
