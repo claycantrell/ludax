@@ -478,19 +478,7 @@ class LudiiTranspiler:
             return ""
 
         play_text = _get_text(play)
-        play_ldx = self._transpile_play(play_text)
-
-        # If game has hand storage, wrap in multi-phase: placement → movement
-        if self.has_hand and "move" in play_ldx and "place" not in play_ldx:
-            piece = self.pieces[0][0] if self.pieces else "token"
-            placement_phase = f'(once_through (P1 P2 P1 P2 P1 P2) (place "{piece}" (destination (empty))))'
-            # Extract the inner play content
-            if play_ldx.startswith("(play "):
-                inner = play_ldx[6:-1]  # strip (play and )
-                return f"(play {placement_phase} {inner})"
-            return f"(play {placement_phase} {play_ldx})"
-
-        return play_ldx
+        return self._transpile_play(play_text)
 
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
