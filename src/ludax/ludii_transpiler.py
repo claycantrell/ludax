@@ -170,6 +170,16 @@ class LudiiTranspiler:
 
             if type_str == "board":
                 self._parse_board(content_str)
+            elif type_str == "mancalaBoard" or type_str == "surakartaBoard":
+                # Mancala/special boards → approximate as rectangle
+                nums = [int(t) for t in content_str.split() if t.isdigit()]
+                if len(nums) >= 2:
+                    self.board_ldx = f"rectangle {nums[0]} {nums[1]}"
+                elif nums:
+                    self.board_ldx = f"rectangle 2 {nums[0]}"
+                else:
+                    self.board_ldx = "rectangle 2 6"
+                self.board_shape = "rectangle"
             elif type_str == "piece":
                 self._parse_piece(content_str)
             elif type_str == "regions":
