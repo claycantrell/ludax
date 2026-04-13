@@ -3,7 +3,7 @@
     (players 2 (set_forward (P1 up) (P2 down)))     
     (equipment         (board (hex_rectangle 7 7))         (pieces             ("plow" both)             ("post" both)             ("snow" both)             ("road" both)         )     )     
     (rules         
-    (start             (place "snow" P1 (7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33))             (place "plow" P1 (0 1 2 3 4 5 6))             (place "plow" P2 (42 43 44 45 46 47 48))         )         
+    (start             (place "snow" P1 (7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33))             (place "plow" P1 (42 43 44 45 46 47 48))             (place "plow" P2 (0 1 2 3 4 5 6))         )         
     (play             (repeat (P1 P2)                 (move                     (or                         (step "plow" direction:forward priority:1)                         (step "plow" direction:forward_left priority:2)                         (step "plow" direction:forward_right priority:2)                         (step "post" direction:any priority:1)                     )                     
     (effects                         (capture (and (occupied opponent) (not (or (row 0) (row 6)))))                         (promote "plow" "post" (or (corners) (center)))                         (flip (and (occupied opponent) (adjacent (empty) direction:orthogonal)))                         (increment_score mover (count (occupied mover)))                     )                 )                 (force_pass)             )         )         
     (end             (if (no_legal_actions) (mover lose))             (if (full_board) (by_score))         )     ) )
