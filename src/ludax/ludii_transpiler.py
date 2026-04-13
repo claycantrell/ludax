@@ -118,6 +118,9 @@ class LudiiTranspiler:
         # Equipment
         parts.append(f"    (equipment")
         parts.append(f"        (board ({self.board_ldx}))")
+        # Ensure at least one piece type
+        if not self.pieces:
+            self.pieces.append(("token", "both"))
         pieces_str = " ".join(f'("{p}" {o})' for p, o in self.pieces)
         parts.append(f"        (pieces {pieces_str})")
         for rname, rdef in self.regions:
@@ -221,11 +224,13 @@ class LudiiTranspiler:
                     self._set_hex_board(size)
                 return
             if shape == "rectangle" and len(args) >= 2:
-                self.board_ldx = f"rectangle {args[0]} {args[1]}"
+                h, w = max(int(args[0]), 2), max(int(args[1]), 2)
+                self.board_ldx = f"rectangle {h} {w}"
                 self.board_shape = "rectangle"
                 return
             if args:
-                self.board_ldx = f"square {args[0]}"
+                size = max(int(args[0]), 3)
+                self.board_ldx = f"square {size}"
                 self.board_shape = "square"
                 return
 
