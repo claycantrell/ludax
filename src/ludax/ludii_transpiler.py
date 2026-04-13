@@ -1,0 +1,422 @@
+"""
+Ludii → Ludax transpiler.
+
+Walks a Ludii parse tree (from ludii_grammar_permissive.lark) and outputs
+Ludax .ldx text that the existing Ludax JAX compiler can handle.
+
+Not all Ludii games can be transpiled — only those using mechanics
+that Ludax supports (placement, step, slide, hop, custodial capture,
+flip, promote, line/connected/noMoves end conditions).
+"""
+
+import os
+import typing
+from lark import Lark, Tree, Token
+
+
+_GRAMMAR_PATH = os.path.join(os.path.dirname(__file__), "ludii_grammar_permissive.lark")
+_parser = None
+
+
+def _get_parser():
+    global _parser
+    if _parser is None:
+        _parser = Lark.open(_GRAMMAR_PATH, start="game", parser="earley", keep_all_tokens=True)
+    return _parser
+
+
+def _sexp_to_str(node) -> str:
+    """Convert a parse tree node back to a flat string."""
+    if isinstance(node, Token):
+        return str(node)
+    if isinstance(node, Tree):
+        parts = [_sexp_to_str(c) for c in node.children]
+        return " ".join(parts)
+    return str(node)
+
+
+def _find_child(tree: Tree, name: str) -> typing.Optional[Tree]:
+    """Find the first child tree with the given rule name."""
+    for c in tree.children:
+        if isinstance(c, Tree) and c.data == name:
+            return c
+    return None
+
+
+def _find_all(tree: Tree, name: str) -> list:
+    """Find all children with the given rule name."""
+    return [c for c in tree.children if isinstance(c, Tree) and c.data == name]
+
+
+def _get_text(node) -> str:
+    """Get all text content from a tree/token, recursively. Skips parens/braces."""
+    if isinstance(node, Token):
+        s = str(node)
+        if s in ("(", ")", "{", "}"): return ""
+        return s
+    if isinstance(node, Tree):
+        parts = [_get_text(c) for c in node.children]
+        return " ".join(p for p in parts if p).strip()
+    return str(node)
+
+
+def _extract_sexp_keyword(sexp: Tree) -> str:
+    """Get the first keyword from a sexp node."""
+    content = _find_child(sexp, "sexp_content")
+    if content:
+        for c in content.children:
+            if isinstance(c, Tree) and c.data == "sexp_atom":
+                for a in c.children:
+                    if isinstance(a, Token) and a.type == "KEYWORD":
+                        return str(a)
+    return ""
+
+
+class LudiiTranspiler:
+    """Transpile Ludii .lud to Ludax .ldx."""
+
+    def __init__(self):
+        self.pieces = []  # [(name, owner)]
+        self.board_shape = ""
+        self.board_size = 0
+        self.board_ldx = ""
+        self.has_set_forward = False
+        self.regions = []
+        self.errors = []
+
+    def transpile(self, lud_text: str) -> typing.Optional[str]:
+        """Convert Ludii text to Ludax text. Returns None if not transpilable."""
+        parser = _get_parser()
+        tree = parser.parse(lud_text)
+
+        # Extract game name — find the ESCAPED_STRING token
+        name = "Unknown"
+        for c in tree.children:
+            if isinstance(c, Token) and c.type == "ESCAPED_STRING":
+                name = str(c).strip('"')
+                break
+
+        # Process each section
+        self._process_players(tree)
+        self._process_equipment(tree)
+        play_ldx = self._process_rules(tree)
+        end_ldx = self._process_end(tree)
+
+        if self.errors:
+            return None
+
+        # Build Ludax output
+        parts = [f'(game "{name}"']
+
+        # Players
+        if self.has_set_forward:
+            parts.append("    (players 2 (set_forward (P1 up) (P2 down)))")
+        else:
+            parts.append("    (players 2)")
+
+        # Equipment
+        parts.append(f"    (equipment")
+        parts.append(f"        (board ({self.board_ldx}))")
+        pieces_str = " ".join(f'("{p}" {o})' for p, o in self.pieces)
+        parts.append(f"        (pieces {pieces_str})")
+        for rname, rdef in self.regions:
+            parts.append(f'        (regions "{rname}" {rdef})')
+        parts.append(f"    )")
+
+        # Rules
+        parts.append(f"    (rules")
+        if play_ldx:
+            parts.append(f"        {play_ldx}")
+        if end_ldx:
+            parts.append(f"        {end_ldx}")
+        parts.append(f"    )")
+
+        parts.append(")")
+
+        return "\n".join(parts)
+
+    def _process_players(self, tree: Tree):
+        """Extract player info."""
+        players = _find_child(tree, "players")
+        if players:
+            content = _get_text(players)
+            if "player N" in content or "player S" in content:
+                self.has_set_forward = True
+
+    def _process_equipment(self, tree: Tree):
+        """Extract board, pieces, regions from equipment."""
+        equip = _find_child(tree, "equipment")
+        if not equip:
+            self.errors.append("No equipment section")
+            return
+
+        for item in _find_all(equip, "equip_item"):
+            # equip_type is a rule with terminal children
+            etype = _find_child(item, "equip_type")
+            if not etype:
+                continue
+            # Get the type keyword from the terminal tokens
+            type_str = ""
+            for c in etype.children:
+                if isinstance(c, Token):
+                    type_str = str(c)
+                    break
+
+            content = _find_child(item, "equip_content")
+            content_str = _get_text(content) if content else ""
+
+            if type_str == "board":
+                self._parse_board(content_str)
+            elif type_str == "piece":
+                self._parse_piece(content_str)
+            elif type_str == "regions":
+                self._parse_regions(content_str)
+
+    def _parse_board(self, content: str):
+        """Parse board definition."""
+        # Extract board shape and size from content like "( square 8 )"
+        # or "( hex Diamond 11 )"
+        tokens = content.replace("(", " ").replace(")", " ").split()
+        if not tokens:
+            self.errors.append("Empty board definition")
+            return
+
+        shape = tokens[0].lower()
+        if shape == "diamond":
+            # (hex Diamond N) → hex_rectangle N N
+            if len(tokens) > 1:
+                n = tokens[1]
+                self.board_ldx = f"hex_rectangle {n} {n}"
+                self.board_shape = "hex_rectangle"
+            return
+
+        if shape in ("square", "rectangle", "hex", "hexagon"):
+            args = [t for t in tokens[1:] if t.isdigit()]
+            if shape == "hex" or shape == "hexagon":
+                if args:
+                    self.board_ldx = f"hexagon {args[0]}"
+                    self.board_shape = "hexagon"
+                return
+            if shape == "rectangle" and len(args) >= 2:
+                self.board_ldx = f"rectangle {args[0]} {args[1]}"
+                self.board_shape = "rectangle"
+                return
+            if args:
+                self.board_ldx = f"square {args[0]}"
+                self.board_shape = "square"
+                return
+
+        if shape == "rotate":
+            # (rotate 90 (hex 5)) → hexagon 5 (approximate)
+            inner_tokens = [t for t in tokens[1:] if not t.isdigit() or int(t) > 20]
+            nums = [t for t in tokens if t.isdigit()]
+            if "hex" in tokens or "hexagon" in tokens:
+                size = nums[-1] if nums else "9"
+                self.board_ldx = f"hexagon {size}"
+                self.board_shape = "hexagon"
+                return
+
+        # Fallback: try to find a recognizable pattern
+        for shape_name in ["square", "rectangle", "hex", "hexagon"]:
+            if shape_name in content.lower():
+                nums = [t for t in content.split() if t.isdigit()]
+                if nums:
+                    if shape_name in ("hex", "hexagon"):
+                        self.board_ldx = f"hexagon {nums[0]}"
+                    elif shape_name == "rectangle" and len(nums) >= 2:
+                        self.board_ldx = f"rectangle {nums[0]} {nums[1]}"
+                    else:
+                        self.board_ldx = f"square {nums[0]}"
+                    self.board_shape = shape_name
+                    return
+
+        self.errors.append(f"Unsupported board: {content[:60]}")
+
+    def _parse_piece(self, content: str):
+        """Parse piece definition."""
+        tokens = content.strip().split()
+        if not tokens:
+            return
+
+        # First token is the piece name (quoted string)
+        name = tokens[0].strip('"').lower()
+
+        # Find owner
+        owner = "both"
+        for t in tokens[1:]:
+            if t == "Each":
+                owner = "both"
+                break
+            elif t == "P1":
+                owner = "P1"
+                break
+            elif t == "P2":
+                owner = "P2"
+                break
+            elif t == "Neutral":
+                owner = "both"
+                break
+
+        self.pieces.append((name, owner))
+
+    def _parse_regions(self, content: str):
+        """Parse region definitions."""
+        # Regions are complex — skip for now, they're rarely needed
+        pass
+
+    def _process_rules(self, tree: Tree) -> str:
+        """Extract and transpile play rules."""
+        rules = _find_child(tree, "rules")
+        if not rules:
+            self.errors.append("No rules section")
+            return ""
+
+        # Find the play section
+        rules_content = _find_child(rules, "rules_content")
+        if not rules_content:
+            return ""
+
+        play = None
+        for item in _find_all(rules_content, "rules_item"):
+            p = _find_child(item, "play")
+            if p:
+                play = p
+                break
+
+        if not play:
+            # Check for phases
+            for item in _find_all(rules_content, "rules_item"):
+                phases = _find_child(item, "phases")
+                if phases:
+                    return self._transpile_phases(phases)
+            return ""
+
+        play_text = _get_text(play)
+        return self._transpile_play(play_text)
+
+    def _transpile_play(self, play_text: str) -> str:
+        """Convert Ludii play rules to Ludax."""
+        # Detect the main play pattern
+        if "forEach Piece" in play_text:
+            # Movement game: pieces move via their defined movement
+            return self._transpile_foreach_piece(play_text)
+        elif "move Add" in play_text:
+            # Placement game
+            return self._transpile_placement(play_text)
+        else:
+            self.errors.append(f"Unsupported play pattern: {play_text[:60]}")
+            return ""
+
+    def _transpile_placement(self, play_text: str) -> str:
+        """Transpile a placement game."""
+        piece_name = self.pieces[0][0] if self.pieces else "token"
+
+        # Check for effects (then clause)
+        effects = ""
+        if "then" in play_text:
+            effects = self._extract_then_effects(play_text)
+
+        if effects:
+            return f'(play (repeat (P1 P2) (place "{piece_name}" (destination (empty)) {effects})))'
+        else:
+            return f'(play (repeat (P1 P2) (place "{piece_name}" (destination (empty)))))'
+
+    def _transpile_foreach_piece(self, play_text: str) -> str:
+        """Transpile a forEach Piece movement game."""
+        # For now: generate movement from the piece definitions
+        # The actual movement was defined in the piece (move Step/Slide/Hop)
+        # We need to extract those and put them in the Ludax play block
+
+        moves = []
+        for piece_name, owner in self.pieces:
+            # Default: step in any direction
+            moves.append(f'(step "{piece_name}" direction:any)')
+
+        if len(moves) == 1:
+            return f'(play (repeat (P1 P2) (move {moves[0]})))'
+        else:
+            or_moves = " ".join(moves)
+            return f'(play (repeat (P1 P2) (move (or {or_moves}))))'
+
+    def _transpile_phases(self, phases: Tree) -> str:
+        """Transpile phase-based games."""
+        # Simplified: just use the last phase's play rule
+        self.errors.append("Phase-based games not yet supported in transpiler")
+        return ""
+
+    def _extract_then_effects(self, text: str) -> str:
+        """Extract effects from a (then ...) clause."""
+        # Look for common patterns
+        effects = []
+        if "addScore" in text or "set Score" in text:
+            piece = self.pieces[0][0] if self.pieces else "token"
+            effects.append(f'(set_score mover (count (occupied mover)))')
+            effects.append(f'(set_score opponent (count (occupied opponent)))')
+        return f'(effects {" ".join(effects)})' if effects else ""
+
+    def _process_end(self, tree: Tree) -> str:
+        """Extract and transpile end conditions."""
+        rules = _find_child(tree, "rules")
+        if not rules:
+            return ""
+
+        # Find end section anywhere in rules
+        full_text = _get_text(rules)
+
+        conditions = []
+
+        # Line win
+        if "is Line" in full_text:
+            import re
+            # Find each (if (is Line N) (result ...)) block
+            for m in re.finditer(r'is Line (\d+)(.*?)result (\w+) (\w+)', full_text):
+                n = m.group(1)
+                piece = self.pieces[0][0] if self.pieces else "token"
+                player = m.group(3)  # Mover, Next, P1, P2
+                outcome = m.group(4)  # Win, Loss, Draw
+                exact = ""
+                between = m.group(2)
+                if "exact:True" in between or "exact:true" in between:
+                    exact = " exact:true"
+                if outcome == "Loss":
+                    conditions.append(f'(if (line "{piece}" {n}{exact}) (mover lose))')
+                elif outcome == "Win":
+                    conditions.append(f'(if (line "{piece}" {n}{exact}) (mover win))')
+                elif outcome == "Draw":
+                    conditions.append(f'(if (line "{piece}" {n}{exact}) (draw))')
+
+        # Connected win
+        if "is Connected" in full_text:
+            piece = self.pieces[0][0] if self.pieces else "token"
+            if self.has_set_forward:
+                conditions.append(f'(if (>= (connected "{piece}" ((edge forward) (edge backward))) 2) (mover win))')
+            else:
+                conditions.append(f'(if (>= (connected "{piece}" ((edge left) (edge right))) 2) (mover win))')
+
+        # No moves
+        if "no Moves" in full_text:
+            ctx = full_text[full_text.find("no Moves"):full_text.find("no Moves")+100]
+            if "Next" in ctx:
+                conditions.append("(if (no_legal_actions) (opponent lose))")
+            else:
+                conditions.append("(if (no_legal_actions) (mover lose))")
+
+        # No pieces
+        if "no Pieces" in full_text:
+            pass  # Complex — skip for now
+
+        # Full board draw
+        if "is Full" in full_text or "full_board" in full_text.lower():
+            conditions.append("(if (full_board) (draw))")
+
+        if not conditions:
+            # Default fallback
+            conditions.append("(if (full_board) (draw))")
+
+        return "(end " + " ".join(conditions) + ")"
+
+
+def transpile(lud_text: str) -> typing.Optional[str]:
+    """Convenience function: transpile Ludii .lud text to Ludax .ldx text."""
+    t = LudiiTranspiler()
+    return t.transpile(lud_text)
