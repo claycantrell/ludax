@@ -733,7 +733,25 @@ class GameRuleParser(Transformer):
                 sub_shape = (1, self.game_info.board_size, self.num_directions)
 
             else:
-                raise NotImplementedError("Combining multiple move types with FROM_TO action type not implemented yet!")
+                # General case: combine multiple FROM_TO move types by OR-ing masks
+                # and dispatching apply by which mask contains the action
+                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
+                def sub_legal_action_mask_fn(state):
+                    all_masks = collect_legal_masks(state)
+                    return all_masks.any(axis=0).astype(BOARD_DTYPE)
+
+                def sub_apply_action_fn(state, action):
+                    all_masks = collect_legal_masks(state)
+                    # Find which move type this action belongs to
+                    start_idx = action // self.game_info.board_size
+                    end_idx = action % self.game_info.board_size
+                    # Check each mask — first match wins
+                    move_idx = 0
+                    for i in range(len(apply_action_fns)):
+                        move_idx = jax.lax.select(all_masks[i, start_idx, end_idx] == 1, i, move_idx)
+                    return jax.lax.switch(move_idx, apply_action_fns, state, action)
+
+                sub_shape = (1, self.game_info.board_size, self.game_info.board_size)
 
             # Now check whether we need to inflate the legal mask to match the overall action space shape
             # If it doesn't match the argument, we can assume that it is strictly smaller in the first dimension
