@@ -26,13 +26,14 @@ card_args: (ESCAPED_STRING | INT | NAME)*
 
 // Board
 board_def: "(" "board" board_type board_option* ")"
-board_type: "(" board_shape board_args ")"
+board_type: "(" board_shape board_args board_option* ")"
 board_shape: "square" | "Square" | "rectangle" | "Rectangle" | "hex" | "Hex" | "Hexagon"
            | "tri" | "Triangle" | "rotate" | "Diamond" | "Star" | "concentric"
            | "merge" | "add" | "remove" | "graph" | "dual" | "splitCrossings"
            | "shift" | "scale" | "renumber" | "trim" | "keep" | "subdivide"
            | "tiling" | "limping" | "morris" | "alquerque" | "cross" | "kints"
            | "regular" | "spiral" | "circle"
+           | "wedge" | "makeFaces" | "poly" | "diGraph" | "complete"
 board_args: (INT | FLOAT | board_type | NAME | ESCAPED_STRING | sites_expr | "{" board_arg_item* "}")*
 board_arg_item: INT | FLOAT | board_type | NAME | ESCAPED_STRING | "{" board_arg_item* "}"
 board_option: "use:" NAME | "diagonals:" BOARD_OPT_VAL | "largeStack:" BOOL | "numColumns:" INT | "numRows:" INT
@@ -56,7 +57,9 @@ sites_expr: "(" "sites" sites_type sites_args? ")"
           | "(" "union" sites_expr+ ")"
           | "(" "difference" sites_expr+ ")"
 sites_type: "Empty" | "Side" | "Top" | "Bottom" | "Corners" | "Centre" | "Center" | "Phase" | "Around"
-          | "Board" | "Outer" | "Inner" | "Mover" | "Next" | "Hand" | "Occupied"
+          | "Board" | "Outer" | "Inner" | "Mover" | "Next" | "Hand" | "Occupied" | "From"
+          | "Start" | "End" | "Left" | "Right" | "Row" | "Column" | "ToClear"
+          | "Incident" | "Distance" | "Direction" | "Hidden" | "Pending" | "Random"
 sites_args: (DIRECTION | INT | sites_expr | name_ref | "Own" | "Orthogonal" | "Diagonal" | "Adjacent" | "All"
            | "by:" NAME | "of:" NAME | "if:" condition | "on:" NAME | "fromVertex:" INT | "toVertex:" INT)*
 expand_args: "steps:" INT
@@ -69,8 +72,12 @@ meta_rule: "(" "meta" "(" "swap" ")" ")"
 // Start
 start_rules: "(" "start" "{" start_action+ "}" ")"
            | "(" "start" start_action+ ")"
-start_action: "(" "place" ESCAPED_STRING start_location ")"
-start_location: sites_expr | "(" "expand" sites_expr ")" | "(" "expand" sites_expr "steps:" INT ")"
+start_action: "(" "place" ESCAPED_STRING start_location start_options* ")"
+            | "(" "set" set_target set_args* ")"
+start_location: sites_expr | "(" "expand" sites_expr expand_args? ")" | "coord:" ESCAPED_STRING
+             | "(" "difference" sites_expr+ ")" | "(" "union" sites_expr+ ")"
+             | "(" "intersection" sites_expr+ ")"
+start_options: "count:" INT | "counts:" "{" INT+ "}" | "state:" INT | "value:" INT
 
 // Play
 play_rules: "(" "play" play_action ")"
@@ -94,10 +101,14 @@ phase_next: "(" "nextPhase" phase_target ESCAPED_STRING ")"
 phase_target: "Mover" | "All"
 
 // Move rules
-move_rule: move_step | move_slide | move_hop | move_add | move_remove | move_from_to | move_pass
+move_rule: move_step | move_slide | move_hop | move_add | move_remove | move_from_to | move_pass | move_leap
          | "(" "or" "{" move_rule+ "}" ")"
          | "(" "or" move_rule+ ")"
          | "(" "if" condition move_rule move_rule? ")"
+
+move_leap: "(" "move" "Leap" leap_offsets? to_clause? then_clause? ")"
+leap_offsets: "{" "{" INT INT "}" "}" | "(" INT INT ")" | "{" leap_offset+ "}"
+leap_offset: "{" INT INT "}"
 
 move_step: "(" "move" "Step" step_direction? to_clause? then_clause? ")"
 move_slide: "(" "move" "Slide" slide_direction? slide_range? to_clause? then_clause? ")"
@@ -197,9 +208,18 @@ end_rules: "(" "end" end_items ")"
 end_items: "{" end_item+ "}" | end_item+
 end_item: "(" "if" condition result ")"
         | "(" "if" "(" "no" no_type no_target ")" result ")"
+        | "(" "if" "(" comparison ")" result ")"
+        | "(" "if" "(" "all" all_type all_args ")" result ")"
+        | "(" "forEach" foreach_end_type foreach_end_args ")"
 
 no_type: "Moves" | "Pieces"
 no_target: "Mover" | "Next" | "P1" | "P2" | name_ref
+
+all_type: "Sites" | "Passed"
+all_args: (sites_expr | "if:" condition | condition | INT | NAME)*
+
+foreach_end_type: "NonMover" | "Player" | "Team"
+foreach_end_args: ("if:" condition | condition | result)*
 
 result: "(" "result" result_player result_outcome ")"
 result_player: "Mover" | "Next" | "P1" | "P2"
