@@ -1,6 +1,9 @@
 // ---Root---
 game: "(" "game" name players equipment rules rendering? ")"
 
+// ---Stacking---
+stack_config: "(" "stack" positive_int ")"
+
 // ---Players---
 players: "(" "players" positive_int forward_assignments? ")"
 forward_assignments: "(" "set_forward" p1_assignment p2_assignment ")"
@@ -8,7 +11,7 @@ p1_assignment: "(" P1 (UP | DOWN | LEFT | RIGHT) ")"
 p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 
 // ---Equipment---
-equipment: "(" "equipment" board pieces regions? ")"
+equipment: "(" "equipment" board pieces stack_config? regions? ")"
 board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
 ?board_square: square_shape
 ?board_rectangle: rectangle_shape

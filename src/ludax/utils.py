@@ -389,6 +389,42 @@ def _get_leap_lookup(game_info: GameInfo, offsets: list):
     return jnp.array(lookup, dtype=ACTION_DTYPE)
 
 
+def _push_stack(state, cell, piece_type, owner):
+    """Push a piece onto the stack at a cell. Updates board (top view) + stack arrays."""
+    height = state.stack_heights[cell]
+    stack_pieces = state.stack_pieces.at[cell, height].set(piece_type)
+    stack_owners = state.stack_owners.at[cell, height].set(owner)
+    stack_heights = state.stack_heights.at[cell].set(height + 1)
+    board = state.board.at[piece_type, cell].set(owner)
+    return state._replace(board=board, stack_pieces=stack_pieces,
+                          stack_owners=stack_owners, stack_heights=stack_heights)
+
+
+def _pop_stack(state, cell):
+    """Pop the top piece from a stack. Returns (new_state, piece_type, owner)."""
+    height = state.stack_heights[cell]
+    top_idx = jnp.maximum(height - 1, 0)
+    piece_type = state.stack_pieces[cell, top_idx]
+    owner = state.stack_owners[cell, top_idx]
+    # Clear the popped slot
+    stack_pieces = state.stack_pieces.at[cell, top_idx].set(BOARD_DTYPE(-1))
+    stack_owners = state.stack_owners.at[cell, top_idx].set(BOARD_DTYPE(-1))
+    new_height = jnp.maximum(height - 1, 0)
+    stack_heights = state.stack_heights.at[cell].set(new_height)
+    # Update board to reflect new top (or empty)
+    board = state.board.at[piece_type, cell].set(BOARD_DTYPE(-1))
+    # If there's still a piece below, set it as the new top
+    below_idx = jnp.maximum(new_height - 1, 0)
+    below_piece = state.stack_pieces[cell, below_idx]
+    below_owner = state.stack_owners[cell, below_idx]
+    board = jnp.where(new_height > 0,
+                       board.at[below_piece, cell].set(below_owner),
+                       board)
+    new_state = state._replace(board=board, stack_pieces=stack_pieces,
+                               stack_owners=stack_owners, stack_heights=stack_heights)
+    return new_state, piece_type, owner
+
+
 def _get_mask_board_conversion_fns(game_info: GameInfo):
     '''
     Return functions for the current game that can be used to convert between a flattened

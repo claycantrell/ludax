@@ -33,6 +33,8 @@ class GameInfo:
     region_names: tuple[str] = ()
     region_mask_fns: list[callable] = None
 
+    max_stack_height: int = 1
+
     forward_directions: tuple[str] = ()
 
     def __repr__(self):
@@ -187,6 +189,19 @@ class GameInfoExtractor(Visitor):
 
         # Create a dummy set of region mask functions
         self.game_info.region_mask_fns = [lambda state: jnp.zeros_like(state.board[0], dtype=jnp.bool_) for _ in range(self.game_info.num_regions)]
+
+    def stack_config(self, tree):
+        max_height = int(tree.children[0])
+        self.game_info.max_stack_height = max_height
+        if max_height > 1:
+            bs = self.game_info.board_size
+            if "stack_pieces" not in self.game_state_attributes:
+                self.game_state_attributes.append("stack_pieces")
+                self.defaults.append(jnp.full((bs, max_height), -1, dtype=BOARD_DTYPE))
+                self.game_state_attributes.append("stack_owners")
+                self.defaults.append(jnp.full((bs, max_height), -1, dtype=BOARD_DTYPE))
+                self.game_state_attributes.append("stack_heights")
+                self.defaults.append(jnp.zeros(bs, dtype=BOARD_DTYPE))
 
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:
