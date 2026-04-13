@@ -433,8 +433,15 @@ class LudiiTranspiler:
             board_h = int(self.board_ldx.split()[-1])
         board_h = max(board_h, 2)  # Ensure at least 2 rows
 
+        # Get board width for coordinate conversion
+        board_w = board_h
+        if "rectangle" in self.board_ldx:
+            parts = self.board_ldx.split()
+            board_w = int(parts[-1]) if len(parts) >= 3 else board_h
+
         # Pattern: (sites Row N) — most common (163 games)
-        row_matches = re.findall(r'place\s+"([^"]+)"\s+\(sites Row (\d+)\)', full_text)
+        # Note: _get_text strips parentheses, so match with or without them
+        row_matches = re.findall(r'place\s+"([^"]+)"\s+(?:\(?sites )?Row (\d+)\)?', full_text)
         if row_matches:
             for pname_raw, row_num in row_matches:
                 pname = re.sub(r'\d+$', '', pname_raw).lower()
@@ -445,6 +452,37 @@ class LudiiTranspiler:
                 if row >= board_h:
                     row = board_h - 1
                 start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
+
+        # Pattern: coord-based placement — both single coord:"X" and coordinate lists "A1" "H1"
+        # Only use for chess-like games (multiple piece types with forEach Piece)
+        # to avoid breaking simpler games that happen to have coordinate strings.
+        is_chess_like = len(self.pieces) > 2 and "forEach Piece" in full_text
+        if is_chess_like and ("square" in self.board_ldx or "rectangle" in self.board_ldx):
+            def _coord_to_idx(coord_str):
+                """Convert chess notation like 'A1' to cell index."""
+                coord_str = coord_str.strip('"')
+                if len(coord_str) >= 2 and coord_str[0].isalpha() and coord_str[1:].isdigit():
+                    col = ord(coord_str[0].upper()) - ord('A')
+                    row = int(coord_str[1:]) - 1
+                    idx = row * board_w + col
+                    if 0 <= idx < board_h * board_w:
+                        return idx
+                return None
+
+            # Match: place "Name" coord:"X" or place "Name" "A1" "B2" ...
+            for m in re.finditer(r'place\s+"([^"]+)"\s+((?:coord:)?"[A-Za-z]\d+"(?:\s+"[A-Za-z]\d+")*)', full_text):
+                pname_raw = m.group(1)
+                coords_str = m.group(2)
+                pname = re.sub(r'\d+$', '', pname_raw).lower()
+                if not pname: pname = piece_name
+                player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
+                # Extract all coordinate values
+                coord_values = re.findall(r'"([A-Za-z]\d+)"', coords_str)
+                indices = [_coord_to_idx(c) for c in coord_values]
+                indices = [i for i in indices if i is not None]
+                if indices:
+                    idx_str = " ".join(str(i) for i in indices)
+                    start_ldx.append(f'(place "{pname}" {player} ({idx_str}))')
 
         # Helper to clamp row indices to valid range
         def _row(r):
@@ -639,22 +677,30 @@ class LudiiTranspiler:
             has_slide = False
             has_step = True
 
+        # For games with multiple piece types, generate movement for ALL types
+        # so that all pieces can move (not just the first type).
+        piece_names = [piece_name]
+        if len(self.pieces) > 1:
+            piece_names = [p for p, _ in self.pieces]
+
         # Always use direction:any — specific directions cause more failures than they fix
-        # because play_text often contains direction keywords from unrelated clauses.
-        if has_step:
-            moves.append(f'(step "{piece_name}" direction:any)')
+        for pn in piece_names:
+            if has_step:
+                moves.append(f'(step "{pn}" direction:any)')
+            if has_hop:
+                moves.append(f'(hop "{pn}" direction:any hop_over:opponent capture:true)')
 
-        if has_hop:
-            moves.append(f'(hop "{piece_name}" direction:any hop_over:opponent capture:true)')
-
+        # Only add slide for the first piece (to avoid action space explosion)
         if has_slide:
             moves.append(f'(slide "{piece_name}" direction:any)')
 
         if has_leap and not has_step:
-            moves.append(f'(step "{piece_name}" direction:any)')
+            for pn in piece_names:
+                moves.append(f'(step "{pn}" direction:any)')
 
         if not moves:
-            moves.append(f'(step "{piece_name}" direction:any)')
+            for pn in piece_names:
+                moves.append(f'(step "{pn}" direction:any)')
 
         # Add effects — only from play_text (not piece defs) to avoid false positives
         effects = []
