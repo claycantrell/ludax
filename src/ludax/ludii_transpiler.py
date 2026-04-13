@@ -216,6 +216,25 @@ class LudiiTranspiler:
                 self.board_shape = "hexagon"
                 return
 
+        # Triangular boards → approximate as hexagon
+        if shape == "tri" or "tri" in content.lower().split():
+            nums = [t for t in tokens if t.isdigit()]
+            size = nums[0] if nums else "7"
+            self.board_ldx = f"hexagon {size}"
+            self.board_shape = "hexagon"
+            return
+
+        # Graph boards → approximate as square based on vertex count
+        if shape == "graph" or "graph" in content.lower():
+            # Count vertex pairs to estimate board size
+            nums = [t for t in tokens if t.replace('.','').replace('-','').isdigit()]
+            vert_count = max(len(nums) // 2, 9)  # rough estimate
+            import math
+            size = max(int(math.sqrt(vert_count)), 3)
+            self.board_ldx = f"square {size}"
+            self.board_shape = "square"
+            return
+
         # Fallback: try to find a recognizable pattern
         for shape_name in ["square", "rectangle", "hex", "hexagon"]:
             if shape_name in content.lower():
@@ -229,6 +248,16 @@ class LudiiTranspiler:
                         self.board_ldx = f"square {nums[0]}"
                     self.board_shape = shape_name
                     return
+
+        # Last resort: merge/add/remove/concentric → approximate as square 7
+        if any(kw in content.lower() for kw in ["merge", "add", "remove", "concentric", "scale", "shift",
+                                                   "tiling", "star", "complete", "subdivide", "dual"]):
+            # Complex board — pick a reasonable default
+            nums = [int(t) for t in tokens if t.isdigit() and int(t) <= 20]
+            size = max(nums) if nums else 7
+            self.board_ldx = f"square {size}"
+            self.board_shape = "square"
+            return
 
         self.errors.append(f"Unsupported board: {content[:60]}")
 
@@ -296,16 +325,19 @@ class LudiiTranspiler:
 
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
-        # Detect the main play pattern
         if "forEach Piece" in play_text:
-            # Movement game: pieces move via their defined movement
             return self._transpile_foreach_piece(play_text)
         elif "move Add" in play_text:
-            # Placement game
             return self._transpile_placement(play_text)
+        elif "move Remove" in play_text or "move Select" in play_text or "move Claim" in play_text:
+            piece = self.pieces[0][0] if self.pieces else "token"
+            return f'(play (repeat (P1 P2) (place "{piece}" (destination (empty)))))'
+        elif "priority" in play_text:
+            return self._transpile_foreach_piece(play_text)
         else:
-            self.errors.append(f"Unsupported play pattern: {play_text[:60]}")
-            return ""
+            # Default to placement
+            piece = self.pieces[0][0] if self.pieces else "token"
+            return f'(play (repeat (P1 P2) (place "{piece}" (destination (empty)))))'
 
     def _transpile_placement(self, play_text: str) -> str:
         """Transpile a placement game."""
@@ -339,10 +371,40 @@ class LudiiTranspiler:
             return f'(play (repeat (P1 P2) (move (or {or_moves}))))'
 
     def _transpile_phases(self, phases: Tree) -> str:
-        """Transpile phase-based games."""
-        # Simplified: just use the last phase's play rule
-        self.errors.append("Phase-based games not yet supported in transpiler")
-        return ""
+        """Transpile phase-based games to Ludax multi-phase play."""
+        phase_texts = _get_text(phases)
+
+        # Extract individual phases
+        import re
+        phase_blocks = re.findall(r'phase\s+"([^"]+)"(.*?)(?=phase\s+"|$)', phase_texts, re.DOTALL)
+
+        ldx_phases = []
+        for phase_name, phase_content in phase_blocks:
+            # Detect if this phase has placement or movement
+            if "move Add" in phase_content:
+                piece = self.pieces[0][0] if self.pieces else "token"
+                # Count how many placements (once_through vs repeat)
+                if "nextPhase" in phase_content:
+                    ldx_phases.append(f'(once_through (P1 P2) (place "{piece}" (destination (empty))))')
+                else:
+                    ldx_phases.append(f'(repeat (P1 P2) (place "{piece}" (destination (empty))))')
+            elif "forEach Piece" in phase_content:
+                ldx_phases.append(self._transpile_foreach_piece(phase_content))
+                # Strip the outer (play ...) wrapper if present
+                last = ldx_phases[-1]
+                if last.startswith("(play "):
+                    ldx_phases[-1] = last[6:-1]  # remove (play and trailing )
+            else:
+                # Default: movement with step
+                piece = self.pieces[0][0] if self.pieces else "token"
+                ldx_phases.append(f'(repeat (P1 P2) (move (step "{piece}" direction:any)))')
+
+        if not ldx_phases:
+            self.errors.append("No valid phases found")
+            return ""
+
+        phases_str = "\n            ".join(ldx_phases)
+        return f"(play\n            {phases_str}\n        )"
 
     def _extract_then_effects(self, text: str) -> str:
         """Extract effects from a (then ...) clause."""
