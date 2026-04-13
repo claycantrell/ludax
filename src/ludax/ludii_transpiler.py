@@ -502,47 +502,31 @@ class LudiiTranspiler:
 
     def _transpile_foreach_piece(self, play_text: str) -> str:
         """Transpile a forEach Piece movement game."""
-        # Get the full game text for movement detection
-        full = _get_text(self._tree) if hasattr(self, '_tree') else play_text
-
+        # Detect movement types from the Ludii play text
         moves = []
-        # Check each piece for movement
-        for piece_name, owner in self.pieces:
-            # Detect movement from full game text
-            has_step = "move Step" in full or f"Step" in full
-            has_hop = "move Hop" in full or f"Hop" in full
-            has_slide = "move Slide" in full or f"Slide" in full
+        piece_name = self.pieces[0][0] if self.pieces else "token"
 
-            if has_hop:
-                if "Forward" in full or "FR" in full or "FL" in full:
-                    self.has_set_forward = True
-                    moves.append(f'(hop "{piece_name}" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)')
-                elif "Orthogonal" in full:
-                    moves.append(f'(hop "{piece_name}" direction:orthogonal hop_over:opponent capture:true priority:0)')
-                else:
-                    moves.append(f'(hop "{piece_name}" direction:diagonal hop_over:opponent capture:true priority:0)')
+        if "move Step" in play_text or "Step" in play_text:
+            if "Forward" in play_text:
+                self.has_set_forward = True
+                moves.append(f'(step "{piece_name}" direction:(forward_left forward_right) priority:1)')
+            else:
+                moves.append(f'(step "{piece_name}" direction:any priority:1)')
 
-            if has_step:
-                if "Forward" in full:
-                    self.has_set_forward = True
-                    moves.append(f'(step "{piece_name}" direction:(forward_left forward_right) priority:1)')
-                elif "Orthogonal" in full:
-                    moves.append(f'(step "{piece_name}" direction:orthogonal priority:1)')
-                elif "Diagonal" in full:
-                    moves.append(f'(step "{piece_name}" direction:diagonal priority:1)')
-                else:
-                    moves.append(f'(step "{piece_name}" direction:any priority:1)')
+        if "move Hop" in play_text or "Hop" in play_text:
+            if "Forward" in play_text or "FR" in play_text or "FL" in play_text:
+                self.has_set_forward = True
+                moves.append(f'(hop "{piece_name}" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)')
+            else:
+                moves.append(f'(hop "{piece_name}" direction:diagonal hop_over:opponent capture:true priority:0)')
 
-            if has_slide and not has_step:
-                if "Orthogonal" in full:
-                    moves.append(f'(slide "{piece_name}" direction:orthogonal)')
-                else:
-                    moves.append(f'(slide "{piece_name}" direction:any)')
-
-            break  # Only use first piece's movement (all pieces usually move the same)
+        if "move Slide" in play_text or "Slide" in play_text:
+            if "Orthogonal" in play_text:
+                moves.append(f'(slide "{piece_name}" direction:orthogonal)')
+            else:
+                moves.append(f'(slide "{piece_name}" direction:any)')
 
         if not moves:
-            piece_name = self.pieces[0][0] if self.pieces else "token"
             moves.append(f'(step "{piece_name}" direction:any)')
 
         # Add effects
