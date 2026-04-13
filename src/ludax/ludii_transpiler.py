@@ -77,6 +77,7 @@ class LudiiTranspiler:
 
     def __init__(self):
         self.pieces = []  # [(name, owner)]
+        self.piece_movements = {}  # {base_name: content_text} — raw movement text from piece definitions
         self.board_shape = ""
         self.board_size = 0
         self.board_ldx = ""
@@ -228,7 +229,7 @@ class LudiiTranspiler:
                     self._set_hex_board(size)
                 return
             if shape == "rectangle" and len(args) >= 2:
-                h, w = max(int(args[0]), 2), max(int(args[1]), 2)
+                h, w = max(int(args[0]), 1), max(int(args[1]), 2)
                 self.board_ldx = f"rectangle {h} {w}"
                 self.board_shape = "rectangle"
                 return
@@ -265,25 +266,29 @@ class LudiiTranspiler:
             self.board_shape = "square"
             return
 
-        # Fallback: try to find a recognizable pattern
+        # Fallback: try to find a recognizable shape keyword with adjacent numbers
+        import re as _re
         for shape_name in ["square", "rectangle", "hex", "hexagon"]:
-            if shape_name in content.lower():
-                nums = [t for t in content.split() if t.isdigit()]
-                if nums:
-                    if shape_name in ("hex", "hexagon"):
-                        self._set_hex_board(nums[0])
-                    elif shape_name == "rectangle" and len(nums) >= 2:
-                        self.board_ldx = f"rectangle {nums[0]} {nums[1]}"
-                    else:
-                        self.board_ldx = f"square {nums[0]}"
-                    self.board_shape = shape_name
-                    return
+            # Find the shape keyword and grab numbers immediately after it
+            m = _re.search(rf'\b{shape_name}\s+(\d+)(?:\s+(\d+))?', content, _re.IGNORECASE)
+            if m:
+                n1 = max(int(m.group(1)), 3)
+                if shape_name in ("hex", "hexagon"):
+                    self._set_hex_board(n1)
+                elif shape_name == "rectangle" and m.group(2):
+                    n2 = max(int(m.group(2)), 3)
+                    self.board_ldx = f"rectangle {max(n1, 2)} {max(n2, 2)}"
+                    self.board_shape = "rectangle"
+                else:
+                    self.board_ldx = f"square {n1}"
+                    self.board_shape = "square"
+                return
 
         # Last resort: merge/add/remove/concentric → approximate as square 7
         if any(kw in content.lower() for kw in ["merge", "add", "remove", "concentric", "scale", "shift",
                                                    "tiling", "star", "complete", "subdivide", "dual"]):
             # Complex board — pick a reasonable default
-            nums = [int(t) for t in tokens if t.isdigit() and int(t) <= 20]
+            nums = [int(t) for t in tokens if t.isdigit() and 3 <= int(t) <= 20]
             size = max(nums) if nums else 7
             self.board_ldx = f"square {size}"
             self.board_shape = "square"
@@ -320,6 +325,13 @@ class LudiiTranspiler:
             elif t in ("Neutral", "Shared"):
                 owner = "both"
                 break
+
+        # Store movement text from piece definition (for forEach Piece games)
+        if base_name not in self.piece_movements:
+            self.piece_movements[base_name] = content
+        else:
+            # Merge movement text from multiple definitions of same base name
+            self.piece_movements[base_name] += " " + content
 
         # Deduplicate: if we already have this base name, merge to "both"
         for i, (existing_name, existing_owner) in enumerate(self.pieces):
@@ -360,6 +372,7 @@ class LudiiTranspiler:
             board_h = int(parts[-2]) if len(parts) >= 3 else int(parts[-1])
         elif "hexagon" in self.board_ldx:
             board_h = int(self.board_ldx.split()[-1])
+        board_h = max(board_h, 2)  # Ensure at least 2 rows
 
         # Pattern: (sites Row N) — most common (163 games)
         row_matches = re.findall(r'place\s+"([^"]+)"\s+\(sites Row (\d+)\)', full_text)
@@ -374,24 +387,28 @@ class LudiiTranspiler:
                     row = board_h - 1
                 start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
 
+        # Helper to clamp row indices to valid range
+        def _row(r):
+            return max(0, min(r, board_h - 1))
+
         # Pattern: (expand (sites Bottom/Top))
         if not start_ldx and "expand" in full_text:
             if "sites Bottom" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row {_row(1)})))')
             if "sites Top" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-2}) (row {board_h-1})))')
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-2)}) (row {_row(board_h-1)})))')
 
         # Pattern: (sites Bottom/Top) without expand
         if not start_ldx:
             if "sites Bottom" in full_text:
                 start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
             if "sites Top" in full_text:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-1)})))')
 
         # Pattern: (sites Phase N) — checkerboard
         if not start_ldx and "sites Phase" in full_text:
-            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1) (row 2)))')
-            start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-3}) (row {board_h-2}) (row {board_h-1})))')
+            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row {_row(1)}) (row {_row(2)})))')
+            start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-3)}) (row {_row(board_h-2)}) (row {_row(board_h-1)})))')
 
         # Pattern: direct index placement (place "X" N)
         # Skip — Ludii indices don't map to Ludax indices on different board types
@@ -420,7 +437,7 @@ class LudiiTranspiler:
             has_p1 = any("P1" in s for s in start_ldx)
             has_p2 = any("P2" in s for s in start_ldx)
             if has_p1 and not has_p2:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {_row(board_h-1)})))')
             elif has_p2 and not has_p1:
                 start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
             # Check for overlap — if P1 and P2 use same rows, use opposite ends instead
@@ -480,14 +497,31 @@ class LudiiTranspiler:
         play_text = _get_text(play)
         return self._transpile_play(play_text)
 
+    def _get_movement_text(self, play_text: str, include_pieces: bool = False) -> str:
+        """Get text to search for movement keywords.
+
+        When include_pieces=True, also searches piece definitions from equipment
+        (critical for forEach Piece games where movement is defined per-piece).
+        """
+        parts = [play_text]
+        if include_pieces:
+            for content in self.piece_movements.values():
+                parts.append(content)
+        # Add full rules text as fallback
+        if hasattr(self, '_tree'):
+            rules = _find_child(self._tree, "rules")
+            if rules:
+                parts.append(_get_text(rules))
+        return " ".join(parts)
+
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
-        # Check full game text for whether pieces use Add (placement) or Step/Hop/Slide (movement)
-        full = _get_text(_find_child(self._tree, "rules")) if hasattr(self, '_tree') else play_text
+        # For forEach Piece, include piece definitions to find movement keywords
+        is_foreach = "forEach Piece" in play_text
+        movement_text = self._get_movement_text(play_text, include_pieces=is_foreach)
 
-        if "forEach Piece" in play_text:
-            # Check if the piece definitions use move Add (placement) — common pattern
-            if "move Add" in full and "move Step" not in full and "move Hop" not in full and "move Slide" not in full:
+        if is_foreach:
+            if "move Add" in movement_text and "move Step" not in movement_text and "move Hop" not in movement_text and "move Slide" not in movement_text:
                 return self._transpile_placement(play_text)
             return self._transpile_foreach_piece(play_text)
         elif "move Add" in play_text:
@@ -518,38 +552,46 @@ class LudiiTranspiler:
 
     def _transpile_foreach_piece(self, play_text: str) -> str:
         """Transpile a forEach Piece movement game."""
-        # Detect movement types from the Ludii play text
+        # Get combined text including piece definitions for movement keyword detection
+        mt = self._get_movement_text(play_text, include_pieces=True)
+
         moves = []
         piece_name = self.pieces[0][0] if self.pieces else "token"
 
-        if "move Step" in play_text or "Step" in play_text:
-            if "Forward" in play_text:
-                self.has_set_forward = True
-                moves.append(f'(step "{piece_name}" direction:(forward_left forward_right) priority:1)')
-            else:
-                moves.append(f'(step "{piece_name}" direction:any priority:1)')
+        # Detect which movement types are present (from piece defs + play/rules text)
+        has_step = "move Step" in mt or ("Step" in mt and "move" in mt)
+        has_hop = "move Hop" in mt or ("Hop" in mt and "move" in mt)
+        has_slide = "move Slide" in mt or ("Slide" in mt and "move" in mt)
+        has_leap = "Leap" in mt
 
-        if "move Hop" in play_text or "Hop" in play_text:
-            if "Forward" in play_text or "FR" in play_text or "FL" in play_text:
-                self.has_set_forward = True
-                moves.append(f'(hop "{piece_name}" direction:(forward_left forward_right) hop_over:opponent capture:true priority:0)')
-            else:
-                moves.append(f'(hop "{piece_name}" direction:diagonal hop_over:opponent capture:true priority:0)')
+        # IMPORTANT: Don't mix step/hop (FROM_DIR action space) with slide (FROM_TO action space).
+        # Slide detection from piece defs is unreliable and can cause shape errors,
+        # so only use slide when it's the ONLY movement and was in play_text directly.
+        if has_slide and (has_step or has_hop):
+            has_slide = False
+        elif has_slide and "Slide" not in play_text:
+            # Slide detected only from piece defs — fall back to step (safer)
+            has_slide = False
+            has_step = True
 
-        if "move Slide" in play_text or "Slide" in play_text:
-            if "Orthogonal" in play_text:
-                moves.append(f'(slide "{piece_name}" direction:orthogonal)')
-            else:
-                moves.append(f'(slide "{piece_name}" direction:any)')
+        # Always use direction:any — specific directions cause more failures than they fix
+        # because play_text often contains direction keywords from unrelated clauses.
+        if has_step:
+            moves.append(f'(step "{piece_name}" direction:any)')
 
-        if "Leap" in play_text:
-            # Leap (knight-like) → approximate as step any
-            moves.append(f'(step "{piece_name}" direction:any priority:1)')
+        if has_hop:
+            moves.append(f'(hop "{piece_name}" direction:any hop_over:opponent capture:true)')
+
+        if has_slide:
+            moves.append(f'(slide "{piece_name}" direction:any)')
+
+        if has_leap and not has_step:
+            moves.append(f'(step "{piece_name}" direction:any)')
 
         if not moves:
             moves.append(f'(step "{piece_name}" direction:any)')
 
-        # Add effects
+        # Add effects — only from play_text (not piece defs) to avoid false positives
         effects = []
         if "remove" in play_text.lower() and ("between" in play_text or "custodial" in play_text):
             effects.append(f'(capture (custodial "{piece_name}" 1 orientation:orthogonal))')
