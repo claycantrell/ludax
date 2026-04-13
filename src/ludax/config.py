@@ -212,7 +212,7 @@ DEFAULT_ARGUMENTS = {
     MoveTypes.HOP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PIECE: 'any', OptionalArgs.HOP_OVER: 'both', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.LEAP: {OptionalArgs.LEAP_OFFSETS: 'knight', OptionalArgs.CAPTURE: False, OptionalArgs.PRIORITY: 0},
     MoveTypes.SLIDE: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: None, OptionalArgs.PRIORITY: 0},
-    MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.PRIORITY: 0},
+    MoveTypes.STEP: {OptionalArgs.DIRECTION: 'any', OptionalArgs.DISTANCE: 1, OptionalArgs.PRIORITY: 0},
 
     PlayEffects.CAPTURE: {OptionalArgs.MOVER: 'opponent', OptionalArgs.INCREMENT_SCORE: False},
     PlayEffects.EXTRA_TURN: {OptionalArgs.SAME_PIECE: False},

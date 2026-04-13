@@ -280,10 +280,17 @@ class GameRuleParser(Transformer):
         '''
         sequence = jnp.array([P1 if child == PlayerAndMoverRefs.P1 else P2 for child in children])
         n = len(sequence)
+        apt = self.game_info.actions_per_turn
 
-        def next_player_fn(state):
-            return sequence[state.phase_step_count % n]
-        
+        if apt > 1:
+            def next_player_fn(state):
+                # Each player takes apt actions before advancing
+                turn_idx = state.phase_step_count // apt
+                return sequence[turn_idx % n]
+        else:
+            def next_player_fn(state):
+                return sequence[state.phase_step_count % n]
+
         return next_player_fn, n
 
     '''
@@ -296,8 +303,9 @@ class GameRuleParser(Transformer):
         determine legal actions, and apply effects before making any high-level modifications
         (e.g. applying a "force pass") rule
         '''
-        (action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn), *force_pass = children
-        force_pass = True if len(force_pass) > 0 else False
+        (action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn), *optional = children
+        # force_pass returns True (from grammar), actions_per_turn returns an int
+        force_pass = any(v is True for v in optional)
         
         # The "force_pass" rule adds an additional action which passes the turn to the next player
         # that can only be taken (and must be taken) when no other legal moves are available
@@ -1202,7 +1210,9 @@ class GameRuleParser(Transformer):
     
     def move_step(self, children):
         '''
-        Step a piece in one of the specified directions (default to any) by exactly one space
+        Step a piece in one of the specified directions by exactly distance spaces (default 1).
+        With distance:N, the piece moves exactly N cells in a straight line (all intermediate
+        cells must be empty). Uses slide_lookup[dir, pos, distance] for the destination.
         '''
 
         piece, *optional_args = children
@@ -1210,6 +1220,9 @@ class GameRuleParser(Transformer):
 
         priority = optional_args[OptionalArgs.PRIORITY]
         direction = optional_args[OptionalArgs.DIRECTION]
+        distance = optional_args[OptionalArgs.DISTANCE]
+        if distance is None:
+            distance = 1
 
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
@@ -1217,7 +1230,7 @@ class GameRuleParser(Transformer):
         # The legal action function and apply action function depend on the action space structure
         # Case 1: action space is (board_size, num_directions)
         if self.game_info.action_type == ActionTypes.FROM_DIR:
-            
+
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
                 piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
@@ -1225,9 +1238,16 @@ class GameRuleParser(Transformer):
                 occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
                 occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
 
-                step_indices = self.slide_lookup[direction_indices, :, 1].T
+                # Destination is exactly 'distance' cells away
+                step_indices = self.slide_lookup[direction_indices, :, distance].T
                 valid_steps = (step_indices < self.game_info.board_size).astype(BOARD_DTYPE)
                 valid_steps = valid_steps & ~jnp.isin(step_indices, occupied_idxs).astype(BOARD_DTYPE)
+
+                # For distance > 1, check all intermediate cells are empty
+                if distance > 1:
+                    for d in range(1, distance):
+                        intermediate = self.slide_lookup[direction_indices, :, d].T
+                        valid_steps = valid_steps & ~jnp.isin(intermediate, occupied_idxs).astype(BOARD_DTYPE)
 
                 mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=BOARD_DTYPE)
                 mask = mask.at[:, direction_indices].set(valid_steps)
@@ -1238,11 +1258,11 @@ class GameRuleParser(Transformer):
                 )
 
                 return mask
-             
+
             def apply_action_fn(state, action):
                 start_idx = action // self.num_directions
                 direction_idx = action % self.num_directions
-                end_idx = self.slide_lookup[direction_idx, start_idx, 1]
+                end_idx = self.slide_lookup[direction_idx, start_idx, distance]
 
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
@@ -1256,15 +1276,14 @@ class GameRuleParser(Transformer):
 
             def legal_action_fn(state):
                 direction_indices = all_direction_indices[state.current_player]
-                step_indices = self.slide_lookup[direction_indices, :, 1].T
+                step_indices = self.slide_lookup[direction_indices, :, distance].T
                 occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
 
                 valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
-                
+
                 mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=BOARD_DTYPE)
                 mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
 
-                # Keep only the rows corresponding to pieces belonging to the current player (but keep the shape)
                 piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
                 mask = jnp.where(
                     piece_mask[:, jnp.newaxis],
@@ -1278,15 +1297,29 @@ class GameRuleParser(Transformer):
                     mask
                 )
 
+                # For distance > 1, check intermediate cells are empty
+                if distance > 1:
+                    for d in range(1, distance):
+                        intermediate = self.slide_lookup[direction_indices, :, d].T
+                        inter_occ = occupied_mask.at[intermediate.clip(0, self.game_info.board_size - 1)].get()
+                        inter_valid = (intermediate < self.game_info.board_size).astype(BOARD_DTYPE)
+                        blocked = (inter_occ * inter_valid).astype(BOARD_DTYPE)
+                        # Zero out mask rows where intermediate is blocked
+                        mask = jnp.where(
+                            blocked[:, jnp.newaxis],
+                            jnp.zeros_like(mask),
+                            mask
+                        )
+
                 return mask
-            
+
             def apply_action_fn(state, action):
                 start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-                
+
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
-                
+
                 return state._replace(board=board, previous_actions=previous_actions)
 
         else:
@@ -1547,6 +1580,41 @@ class GameRuleParser(Transformer):
             scores = state.scores.at[idx].set(amount)
             return state._replace(scores=scores)
         
+        return apply_effects_fn
+
+    def effect_swap(self, children):
+        '''
+        Swap the piece at the last-moved position with adjacent pieces matching a mask.
+        The mover's piece and the target piece exchange board positions.
+        '''
+        (child_mask_fn, _) = children[0]
+
+        def apply_effects_fn(state, original_player):
+            updated_state = state._replace(current_player=original_player)
+            last_pos = state.previous_actions[2]  # last action position
+            swap_mask = child_mask_fn(updated_state)
+
+            # Find adjacent cells to last_pos that match the mask
+            adj_mask = self.adjacency_lookup[last_pos]
+            targets = swap_mask * adj_mask
+
+            # Swap with the first matching target
+            target_idx = jnp.argmax(targets)
+            should_swap = targets.sum() > 0
+
+            # Read pieces at both positions
+            src_pieces = state.board[:, last_pos]
+            dst_pieces = state.board[:, target_idx]
+
+            # Exchange
+            board = jax.lax.select(
+                should_swap,
+                state.board.at[:, last_pos].set(dst_pieces).at[:, target_idx].set(src_pieces),
+                state.board
+            )
+
+            return state._replace(board=board)
+
         return apply_effects_fn
 
     '''
@@ -2316,6 +2384,24 @@ class GameRuleParser(Transformer):
             info['lookahead_mask_fn'] = lookahead_mask_fn
 
         return predicate_fn, info
+
+    def predicate_captured_all(self, children):
+        '''
+        Return whether a player has no pieces left on the board.
+        (captured_all opponent) = opponent has 0 pieces
+        (captured_all mover) = mover has 0 pieces
+        '''
+        mover_ref = children[0]
+        if mover_ref == PlayerAndMoverRefs.MOVER:
+            offset = 0
+        else:
+            offset = 1
+
+        def predicate_fn(state):
+            target = (state.current_player + offset) % 2
+            return ~(state.board == target).any()
+
+        return predicate_fn, {}
 
     def predicate_exists(self, children):
         '''

@@ -34,6 +34,7 @@ class GameInfo:
     region_mask_fns: list[callable] = None
 
     max_stack_height: int = 1
+    actions_per_turn: int = 1
 
     forward_directions: tuple[str] = ()
 
@@ -202,6 +203,14 @@ class GameInfoExtractor(Visitor):
                 self.defaults.append(jnp.full((bs, max_height), -1, dtype=BOARD_DTYPE))
                 self.game_state_attributes.append("stack_heights")
                 self.defaults.append(jnp.zeros(bs, dtype=BOARD_DTYPE))
+
+    def actions_per_turn(self, tree):
+        n = int(tree.children[0])
+        self.game_info.actions_per_turn = n
+        # Track action count within a turn
+        if "turn_action_count" not in self.game_state_attributes:
+            self.game_state_attributes.append("turn_action_count")
+            self.defaults.append(jnp.zeros(1, dtype=BOARD_DTYPE))
 
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:
