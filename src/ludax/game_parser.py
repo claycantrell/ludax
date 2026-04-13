@@ -18,10 +18,14 @@ class GameRuleParser(Transformer):
 
         self.num_directions = 8 if self.game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE] else 6
         self.action_space_shape = None
+        self.stacking = game_info.max_stack_height > 1
 
         # Optional attributes
         if "extra_turn_fn_idx" in self.game_info.game_state_attributes:
             self.extra_turn_fns = []
+
+    # Stacking-aware helpers are created as closures below, not methods,
+    # because they need to be captured by JAX-compiled apply_action_fn closures.
 
     def __default__(self, data, children, meta):
         if len(children) == 1:
