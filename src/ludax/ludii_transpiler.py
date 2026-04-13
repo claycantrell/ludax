@@ -347,33 +347,60 @@ class LudiiTranspiler:
         # Look for (place "X" ...) patterns in the start section
         start_ldx = []
 
-        # Pattern: (expand (sites Bottom)) or (expand (sites Top))
-        if "expand" in full_text and "sites Bottom" in full_text:
-            start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
-        if "expand" in full_text and "sites Top" in full_text:
-            # Need board height — estimate from board size
-            if "square" in self.board_ldx:
-                size = int(self.board_ldx.split()[-1])
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-2}) (row {size-1})))')
-            else:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row 6) (row 7)))')
+        # Get board height for row calculations
+        board_h = 8
+        if "square" in self.board_ldx:
+            board_h = int(self.board_ldx.split()[-1])
+        elif "rectangle" in self.board_ldx:
+            parts = self.board_ldx.split()
+            board_h = int(parts[-2]) if len(parts) >= 3 else int(parts[-1])
+        elif "hexagon" in self.board_ldx:
+            board_h = int(self.board_ldx.split()[-1])
 
-        # Pattern: (sites Phase N) — checkerboard placement
-        if "sites Phase" in full_text:
+        # Pattern: (sites Row N) — most common (163 games)
+        row_matches = re.findall(r'place\s+"([^"]+)"\s+\(sites Row (\d+)\)', full_text)
+        if row_matches:
+            for pname_raw, row_num in row_matches:
+                # Map Ludii piece name to our piece name
+                pname = re.sub(r'\d+$', '', pname_raw).lower()
+                if not pname: pname = piece_name
+                # Determine player from the piece number suffix
+                player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
+                start_ldx.append(f'(place "{pname}" {player} ((row {row_num})))')
+
+        # Pattern: (expand (sites Bottom/Top))
+        if not start_ldx and "expand" in full_text:
+            if "sites Bottom" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
+            if "sites Top" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-2}) (row {board_h-1})))')
+
+        # Pattern: (sites Bottom/Top) without expand
+        if not start_ldx:
+            if "sites Bottom" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
+            if "sites Top" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
+
+        # Pattern: (sites Phase N) — checkerboard
+        if not start_ldx and "sites Phase" in full_text:
             start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1) (row 2)))')
-            if "square" in self.board_ldx:
-                size = int(self.board_ldx.split()[-1])
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-3}) (row {size-2}) (row {size-1})))')
-            else:
-                start_ldx.append(f'(place "{piece_name}" P2 ((row 5) (row 6) (row 7)))')
+            start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-3}) (row {board_h-2}) (row {board_h-1})))')
 
-        # Pattern: (sites Bottom) without expand
-        if "sites Bottom" in full_text and "expand" not in full_text:
-            start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
-        if "sites Top" in full_text and "expand" not in full_text:
-            if "square" in self.board_ldx:
-                size = int(self.board_ldx.split()[-1])
-                start_ldx.append(f'(place "{piece_name}" P2 ((row {size-1})))')
+        # Pattern: direct index placement (place "X" N)
+        if not start_ldx:
+            for m in re.finditer(r'place\s+"([^"]+)"\s+(\d+)', full_text[:500]):
+                pname_raw = m.group(1)
+                idx = m.group(2)
+                pname = re.sub(r'\d+$', '', pname_raw).lower()
+                if not pname: pname = piece_name
+                player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
+                start_ldx.append(f'(place "{pname}" {player} ({idx}))')
+
+        # Pattern: coord: placement
+        if not start_ldx:
+            for m in re.finditer(r'place\s+"([^"]+)"\s+coord:"([^"]+)"', full_text):
+                pass  # Can't easily convert coords to indices — skip
 
         if start_ldx:
             return "(start " + " ".join(start_ldx) + ")"
