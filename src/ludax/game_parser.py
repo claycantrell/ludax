@@ -447,10 +447,28 @@ class GameRuleParser(Transformer):
             legal_action_mask_fn = lambda state: destination_constraint_fn(state) & result_constraint_fn(state)
 
         action_size = self.game_info.board_size
-        def apply_action_fn(state, action):
-            board = state.board.at[piece, action].set((state.current_player + offset) % 2)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
-            return state._replace(board=board, previous_actions=previous_actions)
+        stacking = self.game_info.max_stack_height > 1
+
+        if stacking:
+            max_h = self.game_info.max_stack_height
+
+            # Override legal mask: allow placement where stack isn't full
+            base_legal = legal_action_mask_fn
+            def legal_action_mask_fn(state):
+                base = base_legal(state)
+                not_full = (state.stack_heights < max_h).astype(BOARD_DTYPE)
+                return base | not_full  # can place on empty OR non-full stacks
+
+            def apply_action_fn(state, action):
+                owner = (state.current_player + offset) % 2
+                state = utils._push_stack(state, action, BOARD_DTYPE(piece), owner)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+                return state._replace(previous_actions=previous_actions)
+        else:
+            def apply_action_fn(state, action):
+                board = state.board.at[piece, action].set((state.current_player + offset) % 2)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+                return state._replace(board=board, previous_actions=previous_actions)
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
     
