@@ -374,34 +374,19 @@ class LudiiTranspiler:
                     row = board_h - 1
                 start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
 
-        # Pattern: (sites Bottom/Top) — with or without expand
-        if not start_ldx:
-            # Check for player-specific placement: (place "Piece1" (sites Bottom))
-            has_p1_bottom = bool(re.search(r'place\s+"[^"]*1"\s+\((?:expand\s+)?\(sites Bottom', full_text))
-            has_p2_top = bool(re.search(r'place\s+"[^"]*2"\s+\((?:expand\s+)?\(sites Top', full_text))
-            has_p1_top = bool(re.search(r'place\s+"[^"]*1"\s+\((?:expand\s+)?\(sites Top', full_text))
-            has_p2_bottom = bool(re.search(r'place\s+"[^"]*2"\s+\((?:expand\s+)?\(sites Bottom', full_text))
-            has_generic_bottom = "sites Bottom" in full_text and not has_p1_bottom and not has_p2_bottom
-            has_generic_top = "sites Top" in full_text and not has_p1_top and not has_p2_top
+        # Pattern: (expand (sites Bottom/Top))
+        if not start_ldx and "expand" in full_text:
+            if "sites Bottom" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
+            if "sites Top" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-2}) (row {board_h-1})))')
 
-            if "expand" in full_text:
-                if has_p1_bottom or has_generic_bottom:
-                    start_ldx.append(f'(place "{piece_name}" P1 ((row 0) (row 1)))')
-                if has_p2_top or has_generic_top:
-                    start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-2}) (row {board_h-1})))')
-                if has_p1_top:
-                    start_ldx.append(f'(place "{piece_name}" P1 ((row {board_h-2}) (row {board_h-1})))')
-                if has_p2_bottom:
-                    start_ldx.append(f'(place "{piece_name}" P2 ((row 0) (row 1)))')
-            else:
-                if has_p1_bottom or has_generic_bottom:
-                    start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
-                if has_p2_top or has_generic_top:
-                    start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
-                if has_p1_top:
-                    start_ldx.append(f'(place "{piece_name}" P1 ((row {board_h-1})))')
-                if has_p2_bottom:
-                    start_ldx.append(f'(place "{piece_name}" P2 ((row 0)))')
+        # Pattern: (sites Bottom/Top) without expand
+        if not start_ldx:
+            if "sites Bottom" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
+            if "sites Top" in full_text:
+                start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
 
         # Pattern: (sites Phase N) — checkerboard
         if not start_ldx and "sites Phase" in full_text:
