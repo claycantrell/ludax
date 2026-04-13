@@ -18,6 +18,7 @@ class GameRuleParser(Transformer):
             self.hop_between_lookup = utils._get_hop_between_lookup(self.game_info, self.slide_lookup)
 
         self.num_directions = 8 if self.game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE] else 6
+        self.num_players = game_info.num_players
         self.action_space_shape = None
         self.stacking = game_info.max_stack_height > 1
 
@@ -473,14 +474,14 @@ class GameRuleParser(Transformer):
                 return base | not_full  # can place on empty OR non-full stacks
 
             def apply_action_fn(state, action):
-                owner = (state.current_player + offset) % 2
+                owner = (state.current_player + offset) % self.num_players
                 state = utils._push_stack(state, action, BOARD_DTYPE(piece), owner)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
                 return state._replace(previous_actions=previous_actions)
         else:
             def apply_action_fn(state, action):
-                board = state.board.at[piece, action].set((state.current_player + offset) % 2)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+                board = state.board.at[piece, action].set((state.current_player + offset) % self.num_players)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         return action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
@@ -503,7 +504,7 @@ class GameRuleParser(Transformer):
         def apply_action_fn(state, action):
             board = state.board.at[piece, action].set(state.current_player)
             hand_pieces = state.hand_pieces.at[state.current_player, piece].add(-1)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
             return state._replace(board=board, hand_pieces=hand_pieces, previous_actions=previous_actions)
 
         apply_effects_fn = lambda state, original_player: state
@@ -532,7 +533,7 @@ class GameRuleParser(Transformer):
             def apply_action(state, action):
                 pred_val = predicate_fn(state._replace(
                     board=state.board.at[action].set(state.current_player),
-                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(action))
+                    previous_actions=state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(action))
                 ))
                 return pred_val
             
@@ -788,7 +789,7 @@ class GameRuleParser(Transformer):
                 board = board.at[:, end_idx].set(EMPTY)
                 board = board.at[piece, end_idx].set(state.current_player)
 
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
                 return state._replace(board=board, previous_actions=previous_actions)
         else:
             def apply_action_fn(state, action):
@@ -798,7 +799,7 @@ class GameRuleParser(Transformer):
                 board = state.board.at[piece, end_idx].set(state.current_player)
                 board = board.at[piece, start_idx].set(EMPTY)
 
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         def can_move_again_fn(state):
@@ -847,7 +848,7 @@ class GameRuleParser(Transformer):
             mask = jnp.where(piece_mask[:, jnp.newaxis], mask, jnp.zeros_like(mask))
 
             if hop_over_friendly:
-                enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
+                enemy_mask = (state.board == (state.current_player + 1) % self.num_players).any(axis=0).astype(BOARD_DTYPE)
                 mask = jnp.where(enemy_mask[jnp.newaxis, :], mask, jnp.zeros_like(mask))
             else:
                 mask = jnp.where(occupied_mask[jnp.newaxis, :], jnp.zeros_like(mask), mask)
@@ -869,14 +870,14 @@ class GameRuleParser(Transformer):
                     board = board.at[:, between].set(EMPTY)
                     captured_mask = jnp.zeros_like(state.captured).at[between].set(True)
 
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
                 return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
         else:
             def apply_action_fn(state, action):
                 src, dst = action // board_size, action % board_size
                 board = state.board.at[piece, dst].set(state.current_player)
                 board = board.at[piece, src].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
@@ -968,7 +969,7 @@ class GameRuleParser(Transformer):
             
             board = state.board.at[piece, end_idx].set(state.current_player)
             board = board.at[piece, start_idx].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(end_idx))
             
             return state._replace(board=board, previous_actions=previous_actions)
         
@@ -1026,7 +1027,7 @@ class GameRuleParser(Transformer):
             src, dst = action // board_size, action % board_size
             board = state.board.at[piece, dst].set(state.current_player)
             board = board.at[piece, src].set(EMPTY)
-            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, self.num_players])].set(ACTION_DTYPE(dst))
             return state._replace(board=board, previous_actions=previous_actions)
         
         move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
@@ -1127,7 +1128,7 @@ class GameRuleParser(Transformer):
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             child_mask = child_mask_fn(updated_state)
-            occupied_mask = (updated_state.board == (original_player + offset) % 2).any(axis=0)
+            occupied_mask = (updated_state.board == (original_player + offset) % self.num_players).any(axis=0)
 
             to_capture = (occupied_mask * child_mask).astype(jnp.bool_)
             new_board = jnp.where(to_capture, EMPTY, updated_state.board)
@@ -1166,7 +1167,7 @@ class GameRuleParser(Transformer):
             action_shape = (self.game_info.board_size, self.game_info.board_size)
 
             def extra_turn_condition(state, legal_action_mask):
-                last_action = state.previous_actions[-1]
+                last_action = state.previous_actions[self.num_players]
                 start_mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE).at[last_action].set(1)[:, jnp.newaxis]
                 base_mask = legal_action_mask.reshape(action_shape)
                 new_legal_action_mask = jnp.where(start_mask, base_mask, 0).flatten()
@@ -1179,7 +1180,7 @@ class GameRuleParser(Transformer):
         self.extra_turn_fns.append(extra_turn_condition)
 
         def apply_effects_fn(state, original_player):
-            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % 2,
+            return state._replace(phase_step_count=jnp.maximum(state.phase_step_count - 1, 0), current_player=(original_player + offset) % self.num_players,
                                   extra_turn_fn_idx=extra_turn_fn_idx)
         
         return apply_effects_fn
@@ -1197,14 +1198,14 @@ class GameRuleParser(Transformer):
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             capture_mask = child_mask_fn(updated_state)
-            captor = (original_player + offset) % 2
+            captor = (original_player + offset) % self.num_players
 
             # For each piece type, count captured pieces and add to hand
             hand_pieces = state.hand_pieces
             board = state.board
             for pt in range(self.game_info.num_piece_types):
                 # Pieces of this type that match the capture mask and belong to opponent
-                target_player = (captor + 1) % 2
+                target_player = (captor + 1) % self.num_players
                 occupied = (board[pt] == target_player).astype(BOARD_DTYPE)
                 to_capture = occupied * capture_mask
                 count = to_capture.sum()
@@ -1222,7 +1223,7 @@ class GameRuleParser(Transformer):
 
             # Count what was captured per piece type
             for pt in range(self.game_info.num_piece_types):
-                target_player = (captor + 1) % 2
+                target_player = (captor + 1) % self.num_players
                 was_occupied = (state.board[pt] == target_player).astype(BOARD_DTYPE)
                 captured_count = (was_occupied * capture_mask).sum()
                 hand_pieces = hand_pieces.at[captor, pt].add(captured_count)
@@ -1249,10 +1250,10 @@ class GameRuleParser(Transformer):
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             child_mask = child_mask_fn(updated_state)
-            occupied_mask = (updated_state.board == (original_player + offset) % 2)
+            occupied_mask = (updated_state.board == (original_player + offset) % self.num_players)
 
             to_flip = (occupied_mask * child_mask).astype(BOARD_DTYPE)
-            new_board = jnp.where(to_flip, (updated_state.board + 1) % 2, updated_state.board)
+            new_board = jnp.where(to_flip, (updated_state.board + 1) % self.num_players, updated_state.board)
 
             return state._replace(board=new_board)
         
@@ -1272,7 +1273,7 @@ class GameRuleParser(Transformer):
         # in order to correctly increment the score
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
-            idx = (updated_state.current_player + offset) % 2
+            idx = (updated_state.current_player + offset) % self.num_players
             amount = amount_fn(updated_state)
 
             scores = state.scores.at[idx].set(state.scores[idx] + amount)
@@ -1296,11 +1297,11 @@ class GameRuleParser(Transformer):
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
             child_mask = child_mask_fn(updated_state)
-            occupied_mask = (updated_state.board[promotee] == (original_player + offset) % 2)
+            occupied_mask = (updated_state.board[promotee] == (original_player + offset) % self.num_players)
 
             to_promote = jnp.argwhere(occupied_mask * child_mask, size=self.game_info.board_size, fill_value=self.game_info.board_size+1).flatten()
             new_board = updated_state.board.at[:, to_promote].set(EMPTY)
-            new_board = new_board.at[piece, to_promote].set((original_player + offset) % 2)
+            new_board = new_board.at[piece, to_promote].set((original_player + offset) % self.num_players)
 
             return state._replace(board=new_board, promoted=(occupied_mask * child_mask).astype(jnp.bool_))
 
@@ -1320,7 +1321,7 @@ class GameRuleParser(Transformer):
         # in order to correctly increment the score
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
-            idx = (updated_state.current_player + offset) % 2
+            idx = (updated_state.current_player + offset) % self.num_players
             amount = amount_fn(updated_state)
 
             scores = state.scores.at[idx].set(amount)
@@ -1337,7 +1338,7 @@ class GameRuleParser(Transformer):
 
         def apply_effects_fn(state, original_player):
             updated_state = state._replace(current_player=original_player)
-            last_pos = state.previous_actions[2]  # last action position
+            last_pos = state.previous_actions[self.num_players]  # last action position
             swap_mask = child_mask_fn(updated_state)
 
             # Find adjacent cells to last_pos that match the mask
@@ -1381,7 +1382,7 @@ class GameRuleParser(Transformer):
             winners_by_rule, ends = jax.vmap(lambda i: jax.lax.switch(i, rules, state))(index)
 
             # Take winner(s) determined by the first active end rule
-            winners = jax.lax.select(ends.any(), winners_by_rule[jnp.argmax(ends)], EMPTY * jnp.ones(2, jnp.int8))
+            winners = jax.lax.select(ends.any(), winners_by_rule[jnp.argmax(ends)], EMPTY * jnp.ones(self.game_info.num_players, jnp.int8))
             end = ends.any()
             
             return winners, end
@@ -1401,7 +1402,7 @@ class GameRuleParser(Transformer):
 
         def end_rule_fn(state):
             pred_val = predicate_fn(state)
-            winner = jax.lax.select(pred_val, get_winner(state), EMPTY * jnp.ones(2, jnp.int8))
+            winner = jax.lax.select(pred_val, get_winner(state), EMPTY * jnp.ones(self.game_info.num_players, jnp.int8))
             termination = jax.lax.select(pred_val, TRUE, FALSE)
 
             return winner, termination
@@ -1417,7 +1418,7 @@ class GameRuleParser(Transformer):
         # In this case, both players win so we can effectively just ignore
         # the offset by setting the "base" to be all ones
         if mover_ref == PlayerAndMoverRefs.BOTH:
-            base = jnp.ones(2, jnp.int8)
+            base = jnp.ones(self.game_info.num_players, jnp.int8)
             offset = 0
 
         else:
@@ -1428,7 +1429,7 @@ class GameRuleParser(Transformer):
                 offset = 1
 
         def get_winner(state):
-            winners = base.at[(state.current_player + offset) % 2].set(1)
+            winners = base.at[(state.current_player + offset) % self.num_players].set(1)
             return winners
         
         info = {}
@@ -1448,14 +1449,14 @@ class GameRuleParser(Transformer):
             offset = 0
 
         else:
-            base = jnp.ones(2, jnp.int8)
+            base = jnp.ones(self.game_info.num_players, jnp.int8)
             if mover_ref == PlayerAndMoverRefs.MOVER:
                 offset = 0
             else:
                 offset = 1
 
         def get_winner(state):
-            winners = base.at[(state.current_player + offset) % 2].set(0)
+            winners = base.at[(state.current_player + offset) % self.num_players].set(0)
             return winners
         
         info = {}
@@ -1467,7 +1468,7 @@ class GameRuleParser(Transformer):
         The game ends in a draw
         '''
         def get_winner(state):
-            winners = EMPTY * jnp.ones(2, jnp.int8)
+            winners = EMPTY * jnp.ones(self.game_info.num_players, jnp.int8)
             return winners
         
         info = {}
@@ -1479,7 +1480,7 @@ class GameRuleParser(Transformer):
         The game is won by the player with the highest score (draw if scores are equal)
         '''
 
-        draw_result = EMPTY * jnp.ones(2, jnp.int8)
+        draw_result = EMPTY * jnp.ones(self.game_info.num_players, jnp.int8)
         p1_win_result = jnp.array([1, 0], dtype=BOARD_DTYPE)
         p2_win_result = jnp.array([0, 1], dtype=BOARD_DTYPE)
 
@@ -1663,8 +1664,8 @@ class GameRuleParser(Transformer):
         full_match_width = 3
 
         def mask_fn(state):
-            outer_player = (state.current_player + offset) % 2
-            inner_player = (outer_player + 1) % 2
+            outer_player = (state.current_player + offset) % self.num_players
+            inner_player = (outer_player + 1) % self.num_players
             outer_mask = (state.board[piece] == outer_player)
             inner_mask = (state.board[piece] == inner_player)
 
@@ -1749,8 +1750,8 @@ class GameRuleParser(Transformer):
         full_match_width = line_indices.shape[1]
         
         def mask_fn(state):
-            outer_player = (state.current_player + offset) % 2
-            inner_player = (outer_player + 1) % 2
+            outer_player = (state.current_player + offset) % self.num_players
+            inner_player = (outer_player + 1) % self.num_players
             outer_mask = (state.board[piece] == outer_player)
             inner_mask = (state.board[piece] == inner_player)
 
@@ -1776,8 +1777,8 @@ class GameRuleParser(Transformer):
         right_indices = outer_indices[:, 1]
 
         def lookahead_mask_fn(state):
-            outer_player = (state.current_player + offset) % 2
-            inner_player = (outer_player + 1) % 2
+            outer_player = (state.current_player + offset) % self.num_players
+            inner_player = (outer_player + 1) % self.num_players
 
             outer_mask = (state.board[piece] == outer_player)
             inner_mask = (state.board[piece] == inner_player)
@@ -1890,7 +1891,7 @@ class GameRuleParser(Transformer):
 
         def mask_fn(state):
             mask = jnp.zeros(self.game_info.board_size).astype(jnp.bool_)
-            prev_move = state.previous_actions[(state.current_player + offset) % 2]
+            prev_move = state.previous_actions[(state.current_player + offset) % self.num_players]
             mask = jax.lax.select(prev_move != -1, mask.at[prev_move].set(True), mask)
 
             return mask.astype(BOARD_DTYPE)
@@ -2083,7 +2084,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def predicate_fn(state):
-            player = (state.current_player + offset) % 2
+            player = (state.current_player + offset) % self.num_players
             return state.action_was[player] == move_type_idx
         
         return predicate_fn, {}
@@ -2144,7 +2145,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def predicate_fn(state):
-            target = (state.current_player + offset) % 2
+            target = (state.current_player + offset) % self.num_players
             return ~(state.board == target).any()
 
         return predicate_fn, {}
@@ -2370,7 +2371,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def function_fn(state):
-            mover = (state.current_player + offset) % 2
+            mover = (state.current_player + offset) % self.num_players
             target_masks = collect_masks(state)
 
             # The connected components are necessarily computed in the update_additional_info call
@@ -2629,7 +2630,7 @@ class GameRuleParser(Transformer):
             offset = 1
 
         def function_fn(state):
-            score = state.scores[(state.current_player + offset) % 2]
+            score = state.scores[(state.current_player + offset) % self.num_players]
             return score
         
         return function_fn, {}

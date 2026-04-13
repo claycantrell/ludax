@@ -212,7 +212,7 @@ class GameInfoExtractor(Visitor):
             npt = self.game_info.num_piece_types
             # hand_pieces[player, piece_type] = count of that piece type in hand
             self.game_state_attributes.append("hand_pieces")
-            self.defaults.append(jnp.zeros((2, npt), dtype=BOARD_DTYPE))
+            self.defaults.append(jnp.zeros((self.game_info.num_players, npt), dtype=BOARD_DTYPE))
 
     def actions_per_turn(self, tree):
         n = int(tree.children[0])
@@ -225,7 +225,7 @@ class GameInfoExtractor(Visitor):
     def force_pass(self, tree):
         if "passed" not in self.game_state_attributes:
             self.game_state_attributes.append("passed")
-            self.defaults.append(jnp.zeros(2, dtype=jnp.bool_))
+            self.defaults.append(jnp.zeros(self.game_info.num_players, dtype=jnp.bool_))
 
     def function_connected(self, tree):
         '''
@@ -242,7 +242,7 @@ class GameInfoExtractor(Visitor):
         '''
         if "scores" not in self.game_state_attributes:
             self.game_state_attributes.append("scores")
-            self.defaults.append(jnp.zeros(2, dtype=REWARD_DTYPE))
+            self.defaults.append(jnp.zeros(self.game_info.num_players, dtype=REWARD_DTYPE))
 
     def play_mechanic(self, tree):
         child = tree.children[0]
@@ -334,7 +334,7 @@ class GameInfoExtractor(Visitor):
             
             # The "can_move_again" array tracks for each player, piece type, and move type
             num_move_types = len(MoveTypes)
-            self.defaults.append(jnp.zeros((2, self.game_info.num_piece_types, num_move_types), dtype=jnp.bool_))
+            self.defaults.append(jnp.zeros((self.game_info.num_players, self.game_info.num_piece_types, num_move_types), dtype=jnp.bool_))
 
     '''
     Custom assignments for relative directions (i.e. "forward")

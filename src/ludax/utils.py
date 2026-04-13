@@ -1117,8 +1117,9 @@ def _get_occupied_mask_fn(piece, player_or_mover):
         
         elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
             def get_mask(state):
-                return (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
-        
+                # Any cell owned by a non-mover player (generalizes to N players)
+                return ((state.board != EMPTY) & (state.board != state.current_player)).any(axis=0).astype(BOARD_DTYPE)
+
         elif player_or_mover == PlayerAndMoverRefs.P1:
             def get_mask(state):
                 return (state.board == P1).any(axis=0).astype(BOARD_DTYPE)
@@ -1141,7 +1142,7 @@ def _get_occupied_mask_fn(piece, player_or_mover):
         
         elif player_or_mover == PlayerAndMoverRefs.OPPONENT:
             def get_mask(state):
-                return (state.board[piece] == (state.current_player + 1) % 2).astype(BOARD_DTYPE)
+                return ((state.board[piece] != EMPTY) & (state.board[piece] != state.current_player)).astype(BOARD_DTYPE)
         
         elif player_or_mover == PlayerAndMoverRefs.P1:
             def get_mask(state):

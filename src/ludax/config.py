@@ -49,8 +49,8 @@ class State():
     game_state: type
     current_player: Array
     legal_action_mask: Array
-    winners: Array = EMPTY * jnp.ones(2, BOARD_DTYPE)
-    rewards: Array = jnp.array([0.0, 0.0], dtype=REWARD_DTYPE)
+    winners: Array = EMPTY * jnp.ones(2, BOARD_DTYPE)  # overridden in environment.init for N>2 players
+    rewards: Array = jnp.array([0.0, 0.0], dtype=REWARD_DTYPE)  # overridden in environment.init for N>2 players
     mover_reward: Array = REWARD_DTYPE(0.0)
     terminated: Array = FALSE
     truncated: Array = FALSE

@@ -57,7 +57,7 @@ class LudaxEnvironment():
             current_player=temp_current_player,
             phase_idx=BOARD_DTYPE(0),
             phase_step_count=BOARD_DTYPE(0),
-            previous_actions=jnp.array([-1, -1, -1], dtype=ACTION_DTYPE),
+            previous_actions=-jnp.ones(self.game_info.num_players + 1, dtype=ACTION_DTYPE),
         )
 
         # Initialize the board using the game rules
@@ -72,10 +72,13 @@ class LudaxEnvironment():
         legal_action_mask = self._get_legal_action_mask(game_state).astype(jnp.bool_)
         game_state = game_state._replace(legal_action_mask=legal_action_mask)
 
+        np = self.game_info.num_players
         state = State(
             game_state=game_state,
             legal_action_mask=legal_action_mask,
-            current_player=current_player
+            current_player=current_player,
+            winners=EMPTY * jnp.ones(np, BOARD_DTYPE),
+            rewards=jnp.zeros(np, dtype=REWARD_DTYPE),
         )
 
         return state
