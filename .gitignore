@@ -1,7 +1,7 @@
 .DS_Store
 __pycache__/
 renders/
-.venv*/
+.venv/
 .vscode/
 .idea/
 *.egg-info/
@@ -9,10 +9,12 @@ dist/
 baselines/
 wandb/
 submit.sh
-
+checkpoints
 *.log
 core_*
 *.code-workspace
 constraints.txt
 interactive.sh
 jax.toml
+*.ckpt
+*.jar

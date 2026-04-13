@@ -139,6 +139,23 @@ def render_game(id):
     print(f"Rendering info: {ENV.rendering_info.color_mapping}, {ENV.rendering_info.piece_shape_mapping}")
 
     AVAILABLE_POLICIES = dict(app.config.get('POLICIES', {}))
+    # print(f"Loaded policies from config: {list(AVAILABLE_POLICIES.keys())}")
+
+    # Add built-in non-random policies that depend on the loaded environment
+    try:
+        from ludax.policies.simple import one_ply_policy, random_policy
+        from ludax.policies.mctx_v2 import MCTSPolicy
+
+        if 'random' not in AVAILABLE_POLICIES:
+            AVAILABLE_POLICIES['random'] = random_policy()
+
+        AVAILABLE_POLICIES['one_ply'] = one_ply_policy(jax.jit(ENV.step))
+        AVAILABLE_POLICIES['mctx_easy'] = MCTSPolicy(ENV, num_simulations=1000, max_depth=25)
+        AVAILABLE_POLICIES['mctx_hard'] = MCTSPolicy(ENV, num_simulations=15000, max_depth=50)
+
+    except Exception as e:
+        print(f"Failed to load built-in policies: {e}")
+
     P1_POLICY = None
     P2_POLICY = None
     RNG_KEY = jax.random.PRNGKey(0)

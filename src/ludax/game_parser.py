@@ -2054,16 +2054,9 @@ class GameRuleParser(Transformer):
             
             return mask_fn, {}
         
-        mover_ref = children[0]
-        
-        if mover_ref == PlayerAndMoverRefs.MOVER:
-            offset = 0
-        elif mover_ref == PlayerAndMoverRefs.OPPONENT:
-            offset = 1
-
-        def mask_fn(state):
-            return (state.board == ((state.current_player + offset)%2)).any(axis=0).astype(BOARD_DTYPE)
-        
+        player_or_mover = children[0]
+        mask_fn = utils._get_occupied_mask_fn(PieceRefs.ANY, player_or_mover)
+         
         return mask_fn, {}
 
     def mask_prev_move(self, children):
@@ -2550,7 +2543,7 @@ class GameRuleParser(Transformer):
 
             # The connected components are necessarily computed in the update_additional_info call
             set_val = state.previous_actions[mover] + 1
-            fill_mask = (state.connected_components[piece] == set_val).astype(BOARD_DTYPE)
+            fill_mask = (state.connected_components[piece] == set_val).astype(ACTION_DTYPE)
             
             target_intersections = jnp.sum(target_masks & fill_mask, axis=1)
             return jnp.sum(target_intersections > 0)

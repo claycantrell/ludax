@@ -6,7 +6,7 @@ from .value import zero_heuristic, construct_playout_heuristic
 from .beam import beam_search_policy
 from .negamax import negamax_policy
 from .simple import one_ply_policy, random_policy
-from .mctx import simple_mctx_policy, lookahead_mctx_policy
+from .mctx_original import simple_mctx_policy, lookahead_mctx_policy
 from .mcts import uct_mcts_policy
 
 
