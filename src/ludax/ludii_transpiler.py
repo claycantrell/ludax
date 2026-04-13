@@ -81,6 +81,7 @@ class LudiiTranspiler:
         self.board_size = 0
         self.board_ldx = ""
         self.has_set_forward = False
+        self.has_hand = False
         self.regions = []
         self.errors = []
 
@@ -184,6 +185,8 @@ class LudiiTranspiler:
                 else:
                     self.board_ldx = "rectangle 2 6"
                 self.board_shape = "rectangle"
+            elif type_str == "hand":
+                self.has_hand = True
             elif type_str == "piece":
                 self._parse_piece(content_str)
             elif type_str == "regions":
@@ -394,10 +397,23 @@ class LudiiTranspiler:
         # Skip — Ludii indices don't map to Ludax indices on different board types
         # Use row-based fallback instead
 
-        # Pattern: coord: placement
+        # Pattern: coord: placement — convert chess-style "C5" to index
         if not start_ldx:
             for m in re.finditer(r'place\s+"([^"]+)"\s+coord:"([^"]+)"', full_text):
-                pass  # Can't easily convert coords to indices — skip
+                pname_raw = m.group(1)
+                coord = m.group(2)
+                pname = re.sub(r'\d+$', '', pname_raw).lower()
+                if not pname: pname = piece_name
+                player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
+                # Convert "C5" → column * board_width + row
+                if len(coord) >= 2 and coord[0].isalpha() and coord[1:].isdigit():
+                    col = ord(coord[0].upper()) - ord('A')
+                    row = int(coord[1:]) - 1
+                    if "square" in self.board_ldx:
+                        width = int(self.board_ldx.split()[-1])
+                        idx = row * width + col
+                        if 0 <= idx < width * width:
+                            start_ldx.append(f'(place "{pname}" {player} ({idx}))')
 
         if start_ldx:
             # Validate: ensure we have both P1 and P2 placements
@@ -462,7 +478,19 @@ class LudiiTranspiler:
             return ""
 
         play_text = _get_text(play)
-        return self._transpile_play(play_text)
+        play_ldx = self._transpile_play(play_text)
+
+        # If game has hand storage, wrap in multi-phase: placement → movement
+        if self.has_hand and "move" in play_ldx and "place" not in play_ldx:
+            piece = self.pieces[0][0] if self.pieces else "token"
+            placement_phase = f'(once_through (P1 P2 P1 P2 P1 P2) (place "{piece}" (destination (empty))))'
+            # Extract the inner play content
+            if play_ldx.startswith("(play "):
+                inner = play_ldx[6:-1]  # strip (play and )
+                return f"(play {placement_phase} {inner})"
+            return f"(play {placement_phase} {play_ldx})"
+
+        return play_ldx
 
     def _transpile_play(self, play_text: str) -> str:
         """Convert Ludii play rules to Ludax."""
@@ -525,6 +553,10 @@ class LudiiTranspiler:
                 moves.append(f'(slide "{piece_name}" direction:orthogonal)')
             else:
                 moves.append(f'(slide "{piece_name}" direction:any)')
+
+        if "Leap" in play_text:
+            # Leap (knight-like) → approximate as step any
+            moves.append(f'(step "{piece_name}" direction:any priority:1)')
 
         if not moves:
             moves.append(f'(step "{piece_name}" direction:any)')
