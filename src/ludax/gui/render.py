@@ -31,7 +31,7 @@ class InteractiveBoardHandler():
 
         if self.game_info.board_shape == Shapes.SQUARE or self.game_info.board_shape == Shapes.RECTANGLE:
             self.cell_size *= 2
-            height, width = self.game_info.board_dims
+            width, height = self.game_info.board_dims
             self.action_indices = [(y, x) for y in range(height) for x in range(width)]
             self._action_map = {idx: i for i, idx in enumerate(self.action_indices)}
             self.action_to_pixel = lambda action: self._grid_to_pixel(self.action_indices[action])
@@ -78,7 +78,7 @@ class InteractiveBoardHandler():
         elif self.game_info.board_shape == Shapes.HEX_RECTANGLE:
             # The canonical 'hex rectangle' is always 'pointy'
             self.orientation = 'pointy'
-            height, width = self.game_info.board_dims
+            width, height = self.game_info.board_dims
             self.action_indices = [(y, x) for y in range(height) for x in range(width)]
             self._action_map = {idx: i for i, idx in enumerate(self.action_indices)}
             self.action_to_pixel = lambda action: self._hex_rectangle_to_pixel(self.action_indices[action])
