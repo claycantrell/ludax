@@ -1,7 +1,8 @@
 // Permissive Ludii grammar: validates top-level structure, accepts any S-expression inside.
 // Phase 1: parse everything, validate semantics during compilation.
 
-game: "(" "game" ESCAPED_STRING players equipment rules ")"
+game: "(" "game" ESCAPED_STRING players game_mode? equipment rules ")"
+game_mode: "(" "mode" KEYWORD ")"
 
 // Top-level sections — must be present
 players: "(" "players" player_content ")"
@@ -14,14 +15,15 @@ player_content: SIGNED_INT | "{" sexp+ "}"
 // Equipment items: board, piece, regions, hand, dice, map, etc.
 equip_item: "(" equip_type equip_content ")"
 equip_type: "board" | "piece" | "regions" | "hand" | "dice" | "map" | "card" | "domino" | "tile"
-          | "mancalaBoard" | "track" | "hints" | "values"
+          | "mancalaBoard" | "track" | "hints" | "values" | "surakartaBoard"
 equip_content: sexp_content
 
-// Rules: meta, start, play, phases, end
-rules_content: meta? start? play_or_phases end
+// Rules: meta, start, play, phases, end — flexible ordering
+// End can be at rules level OR inside the last phase
+rules_content: rules_item+
+rules_item: meta | start | play | phases | end
 meta: "(" "meta" sexp_content ")"
 start: "(" "start" sexp_content ")"
-play_or_phases: play phases? | phases
 play: "(" "play" sexp_content ")"
 phases: "phases:" "{" phase+ "}" | "phases" ":" "{" phase+ "}"
 phase: "(" "phase" sexp_content ")"
