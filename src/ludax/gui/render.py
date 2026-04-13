@@ -389,13 +389,17 @@ class InteractiveBoardHandler():
         if legal_actions is None and show_legal_actions:
             legal_actions = state.legal_action_mask
 
-        # The third index of previous_actions stores the last action taken (regardless of player)
+        # The last index of previous_actions stores the last action taken (regardless of player)
         last_action = state.game_state.previous_actions[-1]
 
-        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action, selected_action=selected_action)
+        # Pass seed_counts for mancala rendering
+        seed_counts = getattr(state.game_state, 'seed_counts', None)
+        pit_owner = getattr(state.game_state, 'pit_owner', None)
+
+        self.rendered_svg = self.render_fn(board, legal_actions=legal_actions, add_button=add_button, last_action=last_action, selected_action=selected_action, seed_counts=seed_counts, pit_owner=pit_owner)
 
 
-    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None, selected_action=None):
+    def render_fn(self, board, legal_actions=None, add_button=True, last_action=None, selected_action=None, seed_counts=None, pit_owner=None):
         # Initialize drawing and draw boarder
         drawing = svgwrite.Drawing(size=(self.total_width, self.total_height), id="game_board")
 
@@ -433,6 +437,28 @@ class InteractiveBoardHandler():
                 # Draw the legal action mask
                 if legal_actions is not None and legal_actions[i]:
                     drawing.add(drawing.circle(center=position, r=self.render_config['legal_radius'], fill=self.render_config['purple'], stroke=self.render_config['dark_grey'], stroke_width=1))
+
+        # Draw seed counts for mancala games
+        if seed_counts is not None:
+            import jax.numpy as jnp
+            for i in range(len(seed_counts)):
+                count = int(seed_counts[i])
+                if count > 0:
+                    position = self.action_to_pixel(i)
+                    owner = int(pit_owner[i]) if pit_owner is not None else -1
+                    # Color based on pit owner
+                    fill = self.render_config.get(self.rendering_info.color_mapping.get('P1', 'white'), '#333') if owner == 0 else \
+                           self.render_config.get(self.rendering_info.color_mapping.get('P2', 'black'), '#333') if owner == 1 else '#666'
+                    # Draw seed count as text
+                    drawing.add(drawing.text(
+                        str(count),
+                        insert=position,
+                        text_anchor='middle',
+                        dominant_baseline='central',
+                        font_size=str(max(self.render_config['piece_radius'] * 0.8, 12)),
+                        font_weight='bold',
+                        fill=fill
+                    ))
 
         # Draw a selection ring around the currently selected piece
         if selected_action is not None:
