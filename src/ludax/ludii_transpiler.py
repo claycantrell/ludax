@@ -362,12 +362,14 @@ class LudiiTranspiler:
         row_matches = re.findall(r'place\s+"([^"]+)"\s+\(sites Row (\d+)\)', full_text)
         if row_matches:
             for pname_raw, row_num in row_matches:
-                # Map Ludii piece name to our piece name
                 pname = re.sub(r'\d+$', '', pname_raw).lower()
                 if not pname: pname = piece_name
-                # Determine player from the piece number suffix
                 player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
-                start_ldx.append(f'(place "{pname}" {player} ((row {row_num})))')
+                row = int(row_num)
+                # Cap to board bounds
+                if row >= board_h:
+                    row = board_h - 1
+                start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
 
         # Pattern: (expand (sites Bottom/Top))
         if not start_ldx and "expand" in full_text:
@@ -389,14 +391,8 @@ class LudiiTranspiler:
             start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-3}) (row {board_h-2}) (row {board_h-1})))')
 
         # Pattern: direct index placement (place "X" N)
-        if not start_ldx:
-            for m in re.finditer(r'place\s+"([^"]+)"\s+(\d+)', full_text[:500]):
-                pname_raw = m.group(1)
-                idx = m.group(2)
-                pname = re.sub(r'\d+$', '', pname_raw).lower()
-                if not pname: pname = piece_name
-                player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
-                start_ldx.append(f'(place "{pname}" {player} ({idx}))')
+        # Skip — Ludii indices don't map to Ludax indices on different board types
+        # Use row-based fallback instead
 
         # Pattern: coord: placement
         if not start_ldx:
@@ -408,11 +404,14 @@ class LudiiTranspiler:
             has_p1 = any("P1" in s for s in start_ldx)
             has_p2 = any("P2" in s for s in start_ldx)
             if has_p1 and not has_p2:
-                # Add P2 on opposite end
                 start_ldx.append(f'(place "{piece_name}" P2 ((row {board_h-1})))')
             elif has_p2 and not has_p1:
                 start_ldx.append(f'(place "{piece_name}" P1 ((row 0)))')
-            return "(start " + " ".join(start_ldx) + ")"
+            # Check for overlap — if P1 and P2 use same rows, use opposite ends instead
+            result = "(start " + " ".join(start_ldx) + ")"
+            return result
+
+        # No extracted start — use opposite-end fallback for movement games
 
         # Fallback: if it's a movement game, auto-place on first/last rows
         if "forEach Piece" in full_text or "move Step" in full_text or "move Hop" in full_text or "move Slide" in full_text:
