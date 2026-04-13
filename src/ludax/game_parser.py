@@ -15,6 +15,7 @@ class GameRuleParser(Transformer):
         self.adjacency_lookup = utils._get_adjacency_lookup(self.game_info)
         if self.game_info.uses_slide_logic:
             self.slide_lookup = utils._get_slide_lookup(self.game_info)
+            self.hop_between_lookup = utils._get_hop_between_lookup(self.game_info, self.slide_lookup)
 
         self.num_directions = 8 if self.game_info.board_shape in [Shapes.SQUARE, Shapes.RECTANGLE] else 6
         self.action_space_shape = None
@@ -563,273 +564,84 @@ class GameRuleParser(Transformer):
         groups = [list(items) for key, items in grouped]
         return groups
 
-    def _determine_action_space_shape(self, move_infos):
+    def _combine_move_fns(self, move_types, legal_action_mask_fns, apply_action_fns):
         '''
-        Determine the overall action space shape based on the move information for each piece / move type
+        Combine multiple movement types into a single legal mask and apply function.
+
+        All movement types produce (board_size, board_size) masks in the unified FROM_TO
+        action model. Combining is always: OR the masks, dispatch by checking which mask matched.
         '''
+        board_size = self.game_info.board_size
 
-        # *TODO*: we want to detect (probably in game_info) whether a game will require us to inflate the
-        # action space into a move_type dimension. We should check the directions that are used for each
-        # piece / move type to determine this. For instance, it's OK to have a step and slide action if
-        # they apply to disjoint directions, but if they overlap then there's ambiguity. Analogously,
-        # having step and hop is OK even if they overlap directions
+        if len(legal_action_mask_fns) == 1:
+            def legal_action_mask_fn(state):
+                return legal_action_mask_fns[0](state).flatten().astype(BOARD_DTYPE)
+            return legal_action_mask_fn, apply_action_fns[0]
 
-        action_space, action_size = None, -1
-        for group_by_prio in self._group_by_index(move_infos, -1): # priority is last element
-            for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
-                _, move_types, _, _, _, _ = zip(*list(group_by_piece))
+        collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
 
-                if self.game_info.action_type == ActionTypes.FROM_DIR:
-                    if list(sorted(move_types)) == [MoveTypes.HOP, MoveTypes.STEP] or len(move_types) == 1:
-                        shape = (1, self.game_info.board_size, self.num_directions)
-                    else:
-                        shape = (len(move_types), self.game_info.board_size, self.num_directions)
+        def legal_action_mask_fn(state):
+            all_masks = collect_legal_masks(state)
+            return all_masks.any(axis=0).flatten().astype(BOARD_DTYPE)
 
-                    size = jnp.prod(jnp.array(shape))
-                    if size > action_size:
-                        action_size = size
-                        action_space = shape
-
-                elif self.game_info.action_type == ActionTypes.FROM_TO:
-                    # All distinct move types can be combined into a single "from-to" action space
-                    if len(set(move_types)) == len(move_types):
-                        shape = (1, self.game_info.board_size, self.game_info.board_size)
-                    else:
-                        shape = (len(move_types), self.game_info.board_size, self.game_info.board_size)
-
-                    size = jnp.prod(jnp.array(shape))
-                    if size > action_size:
-                        action_size = size
-                        action_space = shape
-
-                else:
-                    raise ValueError(f"Unsupported action type for action space shape computation: {self.game_info.action_type}!")
-                
-        return action_space
-
-    def _combine_move_fns(self, action_space_shape, move_types, legal_action_mask_fns, apply_action_fns):
-        '''
-        Combine a list of legal action mask functions into a single function
-        based on the game's overall action type and the specific move types
-        '''
-
-        if self.game_info.action_type == ActionTypes.FROM_DIR:
-
-            # Special case for hop and step moves -- these can be combined into a single array
-            # since it's not possible to both hop and step in the same direction from the same 
-            # position. This is relevant in Checkers / Draughts, for instance
-            if list(sorted(move_types)) == [MoveTypes.HOP, MoveTypes.STEP]:
-                # Reorder the legal action mask functions so that hop is first
-                if move_types[0] == MoveTypes.STEP:
-                    legal_action_mask_fns = [legal_action_mask_fns[1], legal_action_mask_fns[0]]
-                    apply_action_fns = [apply_action_fns[1], apply_action_fns[0]]
-
-                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
-                def sub_legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.any(axis=0).astype(BOARD_DTYPE)
-                
-                def sub_apply_action_fn(state, action):
-
-                    start, direction = action // self.num_directions, action % self.num_directions
-                    
-                    # By construction, we know that the legal action mask computed above will be
-                    # stored in the first dimension at the 0th index and that hops are stored first
-                    all_masks = collect_legal_masks(state)
-                    is_hop = all_masks[0, start, direction] == 1
-
-                    # NOTE: An alternative possibility: Determine whether the action is a hop or a step based
-                    # on whether the board is occupied in the step direction. This won't necessarily work for
-                    # games in which you can capture with a step (since those steps would take you to an occupied
-                    # square) and doesn't empirically seem to be faster...
-                    # end_pos = self.slide_lookup[direction, start, 1]
-                    # is_hop = state.board[:, end_pos].any()
-
-                    return jax.lax.cond(
-                        is_hop,
-                        apply_action_fns[0],
-                        apply_action_fns[1],
-                        state,
-                        action
-                    )
-                
-                sub_shape = (1, self.game_info.board_size, self.num_directions)
-
-            elif len(move_types) == 1:
-                sub_legal_action_mask_fn = legal_action_mask_fns[0]
-                sub_apply_action_fn = apply_action_fns[0]
-                sub_shape = (1, self.game_info.board_size, self.num_directions)
-
-            else:
-                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
-
-                def sub_legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.astype(BOARD_DTYPE)
-                
-                def sub_apply_action_fn(state, action):
-                    move_type_idx = action // (self.game_info.board_size * self.num_directions)
-                    sub_action = action % (self.game_info.board_size * self.num_directions)
-                    return jax.lax.switch(move_type_idx, apply_action_fns, state, sub_action)
-                
-                sub_shape = (len(move_types), self.game_info.board_size, self.num_directions)
-
-            # Now check whether we need to inflate the legal mask to match the overall action space shape
-            # If it doesn't match the argument, we can assume that it is strictly smaller in the first dimension
-            if sub_shape != action_space_shape:
-                def legal_action_mask_fn(state):
-                    base_mask = sub_legal_action_mask_fn(state)
-                    inflated_mask = jnp.zeros(action_space_shape, dtype=BOARD_DTYPE)
-                    inflated_mask = inflated_mask.at[:sub_shape[0]].set(base_mask)
-                    return inflated_mask.flatten().astype(BOARD_DTYPE)
-     
-            # If it does match, we can just flatten and return
-            else:
-                def legal_action_mask_fn(state):
-                    base_mask = sub_legal_action_mask_fn(state)
-                    return base_mask.flatten().astype(BOARD_DTYPE)
-                
-            # We don't need to worry about exceeding the action space shape since those
-            # actions will already be illegal
-            apply_action_fn = sub_apply_action_fn
-                
-        else:
-
-            # Special case: hops and slides can be combined into a single "from-to" action space without an additional
-            # move type dimension since it's not possible to both hop and slide from the same position to the same position,
-            # and the same goes for Hop and Step
-            sorted_move_types = list(sorted(move_types))
-            if sorted_move_types == [MoveTypes.HOP, MoveTypes.SLIDE] or sorted_move_types == [MoveTypes.HOP, MoveTypes.STEP]:
-                # Reorder the legal action mask functions so that hop is first
-                if move_types[0] != MoveTypes.HOP:
-                    legal_action_mask_fns = [legal_action_mask_fns[1], legal_action_mask_fns[0]]
-                    apply_action_fns = [apply_action_fns[1], apply_action_fns[0]]
-
-                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
-                def sub_legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.any(axis=0).astype(BOARD_DTYPE)
-                
-                def sub_apply_action_fn(state, action):
-                    all_masks = collect_legal_masks(state)
-
-                    # Determine whether the action is a hop or not based on the legal masks
-                    start, direction = action // self.num_directions, action % self.num_directions
-                    is_hop = all_masks[0, start, direction] == 1
-
-                    return jax.lax.cond(
-                        is_hop,
-                        apply_action_fns[0],
-                        apply_action_fns[1],
-                        state,
-                        action
-                    )
-                
-                sub_shape = (1, self.game_info.board_size, self.num_directions)
-
-            elif len(move_types) == 1:
-                sub_legal_action_mask_fn = legal_action_mask_fns[0]
-                sub_apply_action_fn = apply_action_fns[0]
-                sub_shape = (1, self.game_info.board_size, self.num_directions)
-
-            else:
-                # General case: combine multiple FROM_TO move types by OR-ing masks
-                # and dispatching apply by which mask contains the action
-                collect_legal_masks = utils._get_collect_values_fn(legal_action_mask_fns)
-                def sub_legal_action_mask_fn(state):
-                    all_masks = collect_legal_masks(state)
-                    return all_masks.any(axis=0).astype(BOARD_DTYPE)
-
-                def sub_apply_action_fn(state, action):
-                    all_masks = collect_legal_masks(state)
-                    # Find which move type this action belongs to
-                    start_idx = action // self.game_info.board_size
-                    end_idx = action % self.game_info.board_size
-                    # Check each mask — first match wins
-                    move_idx = 0
-                    for i in range(len(apply_action_fns)):
-                        move_idx = jax.lax.select(all_masks[i, start_idx, end_idx] == 1, i, move_idx)
-                    return jax.lax.switch(move_idx, apply_action_fns, state, action)
-
-                sub_shape = (1, self.game_info.board_size, self.game_info.board_size)
-
-            # Now check whether we need to inflate the legal mask to match the overall action space shape
-            # If it doesn't match the argument, we can assume that it is strictly smaller in the first dimension
-            if sub_shape != action_space_shape:
-                def legal_action_mask_fn(state):
-                    base_mask = sub_legal_action_mask_fn(state)
-                    inflated_mask = jnp.zeros(action_space_shape, dtype=BOARD_DTYPE)
-                    inflated_mask = inflated_mask.at[:sub_shape[0]].set(base_mask)
-                    return inflated_mask.flatten().astype(BOARD_DTYPE)
-     
-            # If it does match, we can just flatten and return
-            else:
-                def legal_action_mask_fn(state):
-                    base_mask = sub_legal_action_mask_fn(state)
-                    return base_mask.flatten().astype(BOARD_DTYPE)
-                
-            # We don't need to worry about exceeding the action space shape since those
-            # actions will already be illegal
-            apply_action_fn = sub_apply_action_fn
+        def apply_action_fn(state, action):
+            all_masks = collect_legal_masks(state)
+            src = action // board_size
+            dst = action % board_size
+            # Dispatch to the first move type whose mask contains this action
+            move_idx = 0
+            for i in range(len(apply_action_fns)):
+                move_idx = jax.lax.select(all_masks[i, src, dst] == 1, i, move_idx)
+            return jax.lax.switch(move_idx, apply_action_fns, state, action)
 
         return legal_action_mask_fn, apply_action_fn
 
 
     def play_move(self, children):
         '''
-        TODO
+        Compile movement rules. All movement types produce (board_size, board_size) masks
+        in the unified FROM_TO action model. action = source * board_size + destination.
         '''
         move_infos, *optional_args = children
 
-        # Accommodate games with only one move type
         if not isinstance(move_infos, list):
             move_infos = [move_infos]
 
-        action_space_shape = self._determine_action_space_shape(move_infos)
-        action_size = jnp.prod(jnp.array(action_space_shape))
-        if len(action_space_shape) == 3 and action_space_shape[0] == 1:
-            self.action_space_shape = action_space_shape[1:]
-        else:
-            self.action_space_shape = action_space_shape
+        board_size = self.game_info.board_size
+        action_size = board_size * board_size
+        self.action_space_shape = (board_size, board_size)
 
         legal_fns_by_prio, apply_fns_by_prio = [], []
-        for group_by_prio in self._group_by_index(move_infos, -1): # priority is last element
-            
+        for group_by_prio in self._group_by_index(move_infos, -1):
+
             legal_fns_by_piece, apply_fns_by_piece = [], []
-            for group_by_piece in self._group_by_index(group_by_prio, 0): # piece is first element
-               
+            for group_by_piece in self._group_by_index(group_by_prio, 0):
+
                 _, move_types, legal_fns, apply_fns, _, _ = zip(*list(group_by_piece))
                 _legal_action_mask_fn, _apply_action_fn = self._combine_move_fns(
-                    action_space_shape, move_types, legal_fns, apply_fns
+                    move_types, legal_fns, apply_fns
                 )
 
                 legal_fns_by_piece.append(_legal_action_mask_fn)
                 apply_fns_by_piece.append(_apply_action_fn)
 
-            # Legal action masks from different pieces can be combined via <any> over the leading axis
-            # because only one piece can occupy a given board position at a time
             if len(legal_fns_by_piece) == 1:
                 piece_legal_action_mask_fn = legal_fns_by_piece[0]
                 piece_apply_action_fn = apply_fns_by_piece[0]
-            
             else:
-                
-                # This "build" pattern is necessary to capture the current value of legal_fns_by_piece
-                # and apply_fns_by_piece in the returned functions
+                # Multiple piece types: OR their masks, dispatch by which piece is at source
                 def build_legal(legal_fns):
                     collect_legal_masks = utils._get_collect_values_fn(legal_fns)
                     def piece_legal_action_mask_fn(state):
                         all_masks = collect_legal_masks(state)
                         return all_masks.any(axis=0).astype(BOARD_DTYPE)
-                    
                     return piece_legal_action_mask_fn
-                
-                def build_apply(apply_fns):
+
+                def build_apply(apply_fns, bs=board_size):
                     def piece_apply_action_fn(state, action):
-                        move_type, start, direction = jnp.unravel_index(action, action_space_shape)
-                        piece = state.board[:, start].argmax()
+                        src = action // bs
+                        piece = state.board[:, src].argmax()
                         return jax.lax.switch(piece, apply_fns, state, action)
-                    
                     return piece_apply_action_fn
 
                 piece_legal_action_mask_fn = build_legal(legal_fns_by_piece)
@@ -996,10 +808,9 @@ class GameRuleParser(Transformer):
 
     def move_hop(self, children):
         '''
-        Move a piece from one position to another by jumping over a piece. Optional arguments can specify a direction,
-        a specific piece to hop over, and which player's pieces can be hopped over (by default: "any" for both args)
+        Hop over a piece to land beyond it. Always produces (board_size, board_size) FROM_TO mask.
+        Uses hop_between_lookup to find the cell being hopped over for captures.
         '''
-
         piece, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
@@ -1009,145 +820,63 @@ class GameRuleParser(Transformer):
         capture = optional_args[OptionalArgs.CAPTURE]
         priority = optional_args[OptionalArgs.PRIORITY]
 
-        # Determine the mask of pieces that can be hopped over, based on their piece type / player
         hop_over_mask_fn = utils._get_occupied_mask_fn(hop_over_piece, hop_over_player)
-        # When hopping over friendly pieces (mover), capture at destination (enemy)
         hop_over_friendly = (hop_over_player == PlayerAndMoverRefs.MOVER)
 
+        board_size = self.game_info.board_size
+        hop_between = self.hop_between_lookup  # (board_size, board_size) -> between cell
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
+        indices = jnp.repeat(jnp.arange(board_size, dtype=ACTION_DTYPE), len(p1_direction_indices))
 
-        # The legal action function and apply action function depend on the action space structure
-        # Case 1: action space is (board_size, num_directions)
-        if self.game_info.action_type == ActionTypes.FROM_DIR:
-            def legal_action_fn(state):
-                direction_indices = all_direction_indices[state.current_player]
+        def legal_action_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
+            hop_over_mask = hop_over_mask_fn(state)
 
-                piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            step_indices = self.slide_lookup[direction_indices, :, 1].T
+            can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(ACTION_DTYPE)
+            hop_indices = self.slide_lookup[direction_indices, :, 2].T
+            valid_hops = jnp.where(can_hop, hop_indices, board_size + 1).astype(ACTION_DTYPE)
 
-                hop_over_mask = hop_over_mask_fn(state)
-                hop_over_idxs = jnp.argwhere(hop_over_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+            valid_indices = jnp.stack([indices, valid_hops.flatten()], axis=1)
+            mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
+            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
 
-                step_indices = self.slide_lookup[direction_indices, :, 1].T
-                hop_indices = self.slide_lookup[direction_indices, :, 2].T
+            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            mask = jnp.where(piece_mask[:, jnp.newaxis], mask, jnp.zeros_like(mask))
 
-                valid_hops = (hop_indices < self.game_info.board_size).astype(BOARD_DTYPE)
-                # Between cell must have the hop_over piece type
-                valid_hops = valid_hops & jnp.isin(step_indices, hop_over_idxs).astype(BOARD_DTYPE)
-
-                if hop_over_friendly:
-                    # Hop-over-friendly: destination must have enemy piece (capture at destination)
-                    enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
-                    enemy_idxs = jnp.argwhere(enemy_mask, size=self.game_info.board_size, fill_value=-1).flatten()
-                    valid_hops = valid_hops & jnp.isin(hop_indices, enemy_idxs).astype(BOARD_DTYPE)
-                else:
-                    # Standard hop: destination must be empty
-                    occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-                    occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
-                    valid_hops = valid_hops & ~jnp.isin(hop_indices, occupied_idxs).astype(BOARD_DTYPE)
-
-                mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=BOARD_DTYPE)
-                mask = mask.at[:, direction_indices].set(valid_hops)
-
-                mask = jnp.where(
-                    piece_mask[:, jnp.newaxis],
-                    mask, jnp.zeros_like(mask)
-                )
-
-                return mask
-
-            if capture:
-                def apply_action_fn(state, action):
-                    start, direction = action // self.num_directions, action % self.num_directions
-                    step_index = self.slide_lookup[direction, start, 1]
-                    end_index = self.slide_lookup[direction, start, 2]
-
-                    board = state.board.at[piece, start].set(EMPTY)
-
-                    if hop_over_friendly:
-                        # Capture at destination: clear all pieces at end_index, place mover
-                        board = board.at[:, end_index].set(EMPTY)
-                        board = board.at[piece, end_index].set(state.current_player)
-                        captured_mask = jnp.zeros_like(state.captured).at[end_index].set(True)
-                    else:
-                        # Standard: move to empty end, capture the hopped-over piece
-                        board = board.at[piece, end_index].set(state.current_player)
-                        board = board.at[:, step_index].set(EMPTY)
-                        captured_mask = jnp.zeros_like(state.captured).at[step_index].set(True)
-                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_index))
-
-                    return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
-                
+            if hop_over_friendly:
+                enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
+                mask = jnp.where(enemy_mask[jnp.newaxis, :], mask, jnp.zeros_like(mask))
             else:
-                def apply_action_fn(state, action):
-                    start, direction = action // self.num_directions, action % self.num_directions
-                    end_index = self.slide_lookup[direction, start, 2]
+                mask = jnp.where(occupied_mask[jnp.newaxis, :], jnp.zeros_like(mask), mask)
 
-                    board = state.board.at[piece, end_index].set(state.current_player)
-                    board = board.at[piece, start].set(EMPTY)
+            return mask
 
-                    previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_index))
-
-                    return state._replace(board=board, previous_actions=previous_actions)
-                
-        else:
-            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=ACTION_DTYPE), len(p1_direction_indices))
-
-            def legal_action_fn(state):
-                direction_indices = all_direction_indices[state.current_player]
-
-                occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-                hop_over_mask = hop_over_mask_fn(state)
-
-                step_indices = self.slide_lookup[direction_indices, :, 1].T
-
-                can_hop = hop_over_mask.at[step_indices].get(mode='fill', fill_value=0).astype(ACTION_DTYPE)
-                hop_indices = self.slide_lookup[direction_indices, :, 2].T
-                valid_hops = jnp.where(
-                    can_hop,
-                    hop_indices,
-                    self.game_info.board_size + 1
-                ).astype(ACTION_DTYPE)
-
-                valid_indices = jnp.stack([indices, valid_hops.flatten()], axis=1)
-                
-                mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=BOARD_DTYPE)
-                mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
-
-                # Keep only the rows corresponding to valid starting positions
-                piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
-                mask = jnp.where(
-                    piece_mask[:, jnp.newaxis],
-                    mask, jnp.zeros_like(mask)
-                )
-
-                if hop_over_friendly:
-                    # Hop-over-friendly: destination must have enemy piece
-                    enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
-                    mask = jnp.where(
-                        enemy_mask[jnp.newaxis, :],
-                        mask,
-                        jnp.zeros_like(mask)
-                    )
-                else:
-                    # Standard hop: destination must be empty
-                    mask = jnp.where(
-                        occupied_mask[jnp.newaxis, :],
-                        jnp.zeros_like(mask),
-                        mask
-                    )
-
-                return mask
-
+        if capture:
             def apply_action_fn(state, action):
-                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
+                src, dst = action // board_size, action % board_size
+                between = hop_between[src, dst]  # precomputed between cell
 
-                board = state.board.at[piece, start_idx].set(EMPTY)
+                board = state.board.at[piece, src].set(EMPTY)
                 if hop_over_friendly:
-                    board = board.at[:, end_idx].set(EMPTY)
-                board = board.at[piece, end_idx].set(state.current_player)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
+                    board = board.at[:, dst].set(EMPTY)
+                    board = board.at[piece, dst].set(state.current_player)
+                    captured_mask = jnp.zeros_like(state.captured).at[dst].set(True)
+                else:
+                    board = board.at[piece, dst].set(state.current_player)
+                    board = board.at[:, between].set(EMPTY)
+                    captured_mask = jnp.zeros_like(state.captured).at[between].set(True)
 
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
+                return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
+        else:
+            def apply_action_fn(state, action):
+                src, dst = action // board_size, action % board_size
+                board = state.board.at[piece, dst].set(state.current_player)
+                board = board.at[piece, src].set(EMPTY)
+                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
                 return state._replace(board=board, previous_actions=previous_actions)
 
         move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
@@ -1253,11 +982,9 @@ class GameRuleParser(Transformer):
     
     def move_step(self, children):
         '''
-        Step a piece in one of the specified directions by exactly distance spaces (default 1).
-        With distance:N, the piece moves exactly N cells in a straight line (all intermediate
-        cells must be empty). Uses slide_lookup[dir, pos, distance] for the destination.
+        Step a piece by exactly `distance` cells (default 1) in a straight line.
+        Always produces (board_size, board_size) FROM_TO mask.
         '''
-
         piece, *optional_args = children
         optional_args = self._parse_optional_args(optional_args)
 
@@ -1267,106 +994,40 @@ class GameRuleParser(Transformer):
         if distance is None:
             distance = 1
 
+        board_size = self.game_info.board_size
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
+        indices = jnp.repeat(jnp.arange(board_size, dtype=BOARD_DTYPE), len(p1_direction_indices))
 
-        # The legal action function and apply action function depend on the action space structure
-        # Case 1: action space is (board_size, num_directions)
-        if self.game_info.action_type == ActionTypes.FROM_DIR:
+        def legal_action_fn(state):
+            direction_indices = all_direction_indices[state.current_player]
+            step_indices = self.slide_lookup[direction_indices, :, distance].T
+            occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
 
-            def legal_action_fn(state):
-                direction_indices = all_direction_indices[state.current_player]
-                piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
+            mask = jnp.zeros((board_size, board_size), dtype=BOARD_DTYPE)
+            mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
 
-                occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-                occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+            piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
+            mask = jnp.where(piece_mask[:, jnp.newaxis], mask, jnp.zeros_like(mask))
+            mask = jnp.where(occupied_mask[jnp.newaxis, :], jnp.zeros_like(mask), mask)
 
-                # Destination is exactly 'distance' cells away
-                step_indices = self.slide_lookup[direction_indices, :, distance].T
-                valid_steps = (step_indices < self.game_info.board_size).astype(BOARD_DTYPE)
-                valid_steps = valid_steps & ~jnp.isin(step_indices, occupied_idxs).astype(BOARD_DTYPE)
+            if distance > 1:
+                for d in range(1, distance):
+                    intermediate = self.slide_lookup[direction_indices, :, d].T
+                    inter_occ = occupied_mask.at[intermediate.clip(0, board_size - 1)].get()
+                    inter_valid = (intermediate < board_size).astype(BOARD_DTYPE)
+                    blocked = (inter_occ * inter_valid).astype(BOARD_DTYPE)
+                    mask = jnp.where(blocked[:, jnp.newaxis], jnp.zeros_like(mask), mask)
 
-                # For distance > 1, check all intermediate cells are empty
-                if distance > 1:
-                    for d in range(1, distance):
-                        intermediate = self.slide_lookup[direction_indices, :, d].T
-                        valid_steps = valid_steps & ~jnp.isin(intermediate, occupied_idxs).astype(BOARD_DTYPE)
+            return mask
 
-                mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=BOARD_DTYPE)
-                mask = mask.at[:, direction_indices].set(valid_steps)
-
-                mask = jnp.where(
-                    piece_mask[:, jnp.newaxis],
-                    mask, jnp.zeros_like(mask)
-                )
-
-                return mask
-
-            def apply_action_fn(state, action):
-                start_idx = action // self.num_directions
-                direction_idx = action % self.num_directions
-                end_idx = self.slide_lookup[direction_idx, start_idx, distance]
-
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
-
-                return state._replace(board=board, previous_actions=previous_actions)
-
-        # Case 2: action space is (from_pos, to_pos)
-        elif self.game_info.action_type == ActionTypes.FROM_TO:
-            indices = jnp.repeat(jnp.arange(self.game_info.board_size, dtype=BOARD_DTYPE), len(p1_direction_indices))
-
-            def legal_action_fn(state):
-                direction_indices = all_direction_indices[state.current_player]
-                step_indices = self.slide_lookup[direction_indices, :, distance].T
-                occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-
-                valid_indices = jnp.stack([indices, step_indices.flatten()], axis=1)
-
-                mask = jnp.zeros((self.game_info.board_size, self.game_info.board_size), dtype=BOARD_DTYPE)
-                mask = mask.at[valid_indices[:, 0], valid_indices[:, 1]].set(1)
-
-                piece_mask = (state.board[piece] == state.current_player).astype(BOARD_DTYPE)
-                mask = jnp.where(
-                    piece_mask[:, jnp.newaxis],
-                    mask, jnp.zeros_like(mask)
-                )
-
-                # Block moves to occupied squares
-                mask = jnp.where(
-                    occupied_mask[jnp.newaxis, :],
-                    jnp.zeros_like(mask),
-                    mask
-                )
-
-                # For distance > 1, check intermediate cells are empty
-                if distance > 1:
-                    for d in range(1, distance):
-                        intermediate = self.slide_lookup[direction_indices, :, d].T
-                        inter_occ = occupied_mask.at[intermediate.clip(0, self.game_info.board_size - 1)].get()
-                        inter_valid = (intermediate < self.game_info.board_size).astype(BOARD_DTYPE)
-                        blocked = (inter_occ * inter_valid).astype(BOARD_DTYPE)
-                        # Zero out mask rows where intermediate is blocked
-                        mask = jnp.where(
-                            blocked[:, jnp.newaxis],
-                            jnp.zeros_like(mask),
-                            mask
-                        )
-
-                return mask
-
-            def apply_action_fn(state, action):
-                start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
-                previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
-
-                return state._replace(board=board, previous_actions=previous_actions)
-
-        else:
-            raise ValueError(f"Move step not implemented for action space type {self.game_info.action_space_type}")
+        def apply_action_fn(state, action):
+            src, dst = action // board_size, action % board_size
+            board = state.board.at[piece, dst].set(state.current_player)
+            board = board.at[piece, src].set(EMPTY)
+            previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(dst))
+            return state._replace(board=board, previous_actions=previous_actions)
         
         move_type_idx = list(MoveTypes).index(MoveTypes.STEP)
         def can_move_again_fn(state):
@@ -1502,12 +1163,7 @@ class GameRuleParser(Transformer):
         # legal actions in the extra turn to only those that move the same piece as in the previous turn,
         # relying on the fact that the rows of the legal action mask correspond to the piece start positions
         if optional_args[OptionalArgs.SAME_PIECE] and self.game_info.move_type == "move":
-            if self.game_info.action_type == ActionTypes.FROM_DIR:
-                action_shape = (self.game_info.board_size, self.num_directions)
-            elif self.game_info.action_type == ActionTypes.FROM_TO:
-                action_shape = (self.game_info.board_size, self.game_info.board_size)
-            else:
-                raise ValueError(f"Unsupported action type {self.game_info.action_type} for piece-restricted extra turn")
+            action_shape = (self.game_info.board_size, self.game_info.board_size)
 
             def extra_turn_condition(state, legal_action_mask):
                 last_action = state.previous_actions[-1]

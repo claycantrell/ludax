@@ -47,10 +47,6 @@ def _render_selection_state():
     Returns (stage, select_idx) always reset to ("selecting_piece", None)."""
     if HANDLER.game_info.action_type == ActionTypes.TO:
         HANDLER.render(STATE)
-    elif HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-        legal_selections = STATE.legal_action_mask.reshape(
-            (ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
-        HANDLER.render(STATE, legal_actions=legal_selections)
     elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
         legal_selections = STATE.legal_action_mask.reshape(
             (ENV.board_size, ENV.board_size)).any(axis=1)
@@ -275,9 +271,7 @@ def step():
 
     # Deselect if the user clicks the already-selected piece (STATE does not advance)
     if stage == "selecting_destination" and action_idx == select_idx:
-        if HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-            legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
-        elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
+        if HANDLER.game_info.action_type == ActionTypes.FROM_TO:
             legal_selections = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size)).any(axis=1)
         else:
             legal_selections = STATE.legal_action_mask
@@ -287,16 +281,6 @@ def step():
     # Compute legal action mask for legality check
     if HANDLER.game_info.action_type == ActionTypes.TO:
         legal_action_mask = STATE.legal_action_mask
-
-    elif HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-        if stage == "selecting_piece":
-            legal_action_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions)).any(axis=1)
-        elif stage == "selecting_destination":
-            direction_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions))[select_idx]
-            valid_directions = jnp.argwhere(direction_mask).flatten()
-            valid_ends = SLIDE_LOOKUP[valid_directions, select_idx, 1]  # TODO: handle distances > 1
-            legal_action_mask = jnp.zeros(ENV.board_size)
-            legal_action_mask = legal_action_mask.at[valid_ends].set(1)
 
     elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
         if stage == "selecting_piece":
@@ -330,41 +314,16 @@ def step():
         STATE = ENV.step(STATE, action_idx)
         new_stage, new_select_idx = _render_selection_state()
 
-    # Step / hop games (board_size, num_directions)
-    elif HANDLER.game_info.action_type == ActionTypes.FROM_DIR:
-        if stage == "selecting_piece":
-            # First click: show valid destinations, do not advance STATE
-            shaped_mask = STATE.legal_action_mask.reshape((ENV.board_size, HANDLER.game_info.num_directions))
-            direction_mask = shaped_mask[action_idx]
-            valid_directions = jnp.argwhere(direction_mask).flatten()
-            valid_ends = SLIDE_LOOKUP[valid_directions, action_idx, 1]  # TODO: handle distances > 1
-            legal_moves = jnp.zeros(ENV.board_size)
-            legal_moves = legal_moves.at[valid_ends].set(1)
-            new_select_idx = action_idx
-            new_stage = "selecting_destination"
-            HANDLER.render(STATE, legal_actions=legal_moves, selected_action=action_idx)
-
-        elif stage == "selecting_destination":
-            # Second click: advance STATE
-            slide_ends = SLIDE_LOOKUP[:, select_idx, 1]  # TODO: handle distances > 1
-            direction_idx = jnp.argwhere(slide_ends == action_idx).flatten()[0]
-            final_action_idx = np.ravel_multi_index((select_idx, direction_idx), (ENV.board_size, HANDLER.game_info.num_directions))
-            STATE = ENV.step(STATE, final_action_idx)
-            new_stage, new_select_idx = _render_selection_state()
-
-    # Sliding / moving games (board_size, board_size)
+    # Movement games (board_size, board_size) — two-click: select piece, then destination
     elif HANDLER.game_info.action_type == ActionTypes.FROM_TO:
         if stage == "selecting_piece":
-            # First click: show valid destinations, do not advance STATE
             legal_moves = STATE.legal_action_mask.reshape((ENV.board_size, ENV.board_size))[action_idx]
             new_select_idx = action_idx
             new_stage = "selecting_destination"
             HANDLER.render(STATE, legal_actions=legal_moves, selected_action=action_idx)
-            # Strip last-action animation so it doesn't pulse on the selected piece
             HANDLER.rendered_svg = HANDLER.rendered_svg.replace(HANDLER.animation_snippet, "")
 
         elif stage == "selecting_destination":
-            # Second click: advance STATE
             final_action_idx = np.ravel_multi_index((select_idx, action_idx), (ENV.board_size, ENV.board_size))
             STATE = ENV.step(STATE, final_action_idx)
             new_stage, new_select_idx = _render_selection_state()

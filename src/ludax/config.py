@@ -57,9 +57,8 @@ class State():
     global_step_count: Array = ACTION_DTYPE(0)
 
 class ActionTypes(StrEnum):
-    TO = 'action_to'
-    FROM_DIR = 'action_from_dir'
-    FROM_TO = 'action_from_to'
+    TO = 'action_to'           # placement-only: action = destination
+    FROM_TO = 'action_from_to' # movement: action = source * board_size + destination
 
 class Shapes(StrEnum):
     SQUARE = 'square_shape'

@@ -91,11 +91,11 @@ class GameInfoExtractor(Visitor):
                 else:
                     self.rendering_info.piece_shape_mapping[piece_name] = list(PieceShapes)[0]
 
-        # Determine the action space type based on the used mechanics
-        if MoveTypes.SLIDE in self.used_mechanics or MoveTypes.LEAP in self.used_mechanics:
+        # Determine the action space type: FROM_TO for any movement, TO for placement-only
+        has_movement = any(m in self.used_mechanics for m in
+                          [MoveTypes.STEP, MoveTypes.HOP, MoveTypes.SLIDE, MoveTypes.LEAP])
+        if has_movement:
             self.game_info.action_type = ActionTypes.FROM_TO
-        elif MoveTypes.HOP in self.used_mechanics or MoveTypes.STEP in self.used_mechanics:
-            self.game_info.action_type = ActionTypes.FROM_DIR
         else:
             self.game_info.action_type = ActionTypes.TO
 

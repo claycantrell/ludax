@@ -425,6 +425,28 @@ def _pop_stack(state, cell):
     return new_state, piece_type, owner
 
 
+def _get_hop_between_lookup(game_info: GameInfo, slide_lookup):
+    """Precompute the 'between' cell for each (start, dest) hop pair.
+
+    Returns array shape (board_size, board_size). hop_between[start, dest] = the cell
+    hopped over, or board_size (sentinel) if no hop connects start to dest.
+    """
+    board_size = game_info.board_size
+    directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
+    sentinel = board_size
+
+    lookup = np.full((board_size, board_size), sentinel, dtype=np.int16)
+
+    for dir_idx in range(len(directions)):
+        for start in range(board_size):
+            between = int(slide_lookup[dir_idx, start, 1])
+            dest = int(slide_lookup[dir_idx, start, 2])
+            if between < board_size and dest < board_size:
+                lookup[start, dest] = between
+
+    return jnp.array(lookup, dtype=ACTION_DTYPE)
+
+
 def _get_mask_board_conversion_fns(game_info: GameInfo):
     '''
     Return functions for the current game that can be used to convert between a flattened
