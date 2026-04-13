@@ -488,6 +488,17 @@ class LudiiTranspiler:
         def _row(r):
             return max(0, min(r, board_h - 1))
 
+        # For 1-row boards, use cell-index placement (row-based doesn't work)
+        is_1row = board_h == 1
+        if is_1row:
+            total_cells = board_w
+            half = total_cells // 2
+            if not start_ldx and ("expand" in full_text or "sites Left" in full_text or "sites Right" in full_text or "sites Bottom" in full_text):
+                left_cells = " ".join(str(i) for i in range(half))
+                right_cells = " ".join(str(i) for i in range(total_cells - half, total_cells))
+                start_ldx.append(f'(place "{p1_piece}" P1 ({left_cells}))')
+                start_ldx.append(f'(place "{p2_piece}" P2 ({right_cells}))')
+
         # Pattern: (expand (sites Bottom/Top))
         if not start_ldx and "expand" in full_text:
             if "sites Bottom" in full_text:
@@ -495,7 +506,7 @@ class LudiiTranspiler:
             if "sites Top" in full_text:
                 start_ldx.append(f'(place "{p2_piece}" P2 ((row {_row(board_h-2)}) (row {_row(board_h-1)})))')
 
-        # Pattern: (sites Left/Right) — horizontal layout (1-row boards)
+        # Pattern: (sites Left/Right) — horizontal layout
         if not start_ldx and ("sites Left" in full_text or "sites Right" in full_text):
             if "sites Left" in full_text:
                 start_ldx.append(f'(place "{p1_piece}" P1 ((row 0)))')
@@ -683,12 +694,18 @@ class LudiiTranspiler:
         if len(self.pieces) > 1:
             piece_names = [p for p, _ in self.pieces]
 
+        # Detect hop-over-friendly: hop over own pieces to capture enemy at destination
+        # Ludii pattern: (between if:(is Friend ...)) (to if:(is Enemy ...))
+        hop_over_target = "opponent"
+        if has_hop and ("is Friend" in mt and "between" in mt):
+            hop_over_target = "mover"
+
         # Always use direction:any — specific directions cause more failures than they fix
         for pn in piece_names:
             if has_step:
                 moves.append(f'(step "{pn}" direction:any)')
             if has_hop:
-                moves.append(f'(hop "{pn}" direction:any hop_over:opponent capture:true)')
+                moves.append(f'(hop "{pn}" direction:any hop_over:{hop_over_target} capture:true)')
 
         # Only add slide for the first piece (to avoid action space explosion)
         if has_slide:

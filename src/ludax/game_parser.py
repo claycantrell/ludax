@@ -864,6 +864,8 @@ class GameRuleParser(Transformer):
 
         # Determine the mask of pieces that can be hopped over, based on their piece type / player
         hop_over_mask_fn = utils._get_occupied_mask_fn(hop_over_piece, hop_over_player)
+        # When hopping over friendly pieces (mover), capture at destination (enemy)
+        hop_over_friendly = (hop_over_player == PlayerAndMoverRefs.MOVER)
 
         p1_direction_indices, p2_direction_indices = utils._get_direction_indices(self.game_info, direction)
         all_direction_indices = jnp.array([p1_direction_indices, p2_direction_indices], dtype=BOARD_DTYPE)
@@ -879,15 +881,23 @@ class GameRuleParser(Transformer):
                 hop_over_mask = hop_over_mask_fn(state)
                 hop_over_idxs = jnp.argwhere(hop_over_mask, size=self.game_info.board_size, fill_value=-1).flatten()
 
-                occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
-                occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
-
                 step_indices = self.slide_lookup[direction_indices, :, 1].T
                 hop_indices = self.slide_lookup[direction_indices, :, 2].T
 
                 valid_hops = (hop_indices < self.game_info.board_size).astype(BOARD_DTYPE)
-                valid_hops = valid_hops & ~jnp.isin(hop_indices, occupied_idxs).astype(BOARD_DTYPE)
+                # Between cell must have the hop_over piece type
                 valid_hops = valid_hops & jnp.isin(step_indices, hop_over_idxs).astype(BOARD_DTYPE)
+
+                if hop_over_friendly:
+                    # Hop-over-friendly: destination must have enemy piece (capture at destination)
+                    enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
+                    enemy_idxs = jnp.argwhere(enemy_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+                    valid_hops = valid_hops & jnp.isin(hop_indices, enemy_idxs).astype(BOARD_DTYPE)
+                else:
+                    # Standard hop: destination must be empty
+                    occupied_mask = (state.board != EMPTY).any(axis=0).astype(BOARD_DTYPE)
+                    occupied_idxs = jnp.argwhere(occupied_mask, size=self.game_info.board_size, fill_value=-1).flatten()
+                    valid_hops = valid_hops & ~jnp.isin(hop_indices, occupied_idxs).astype(BOARD_DTYPE)
 
                 mask = jnp.zeros((self.game_info.board_size, self.num_directions), dtype=BOARD_DTYPE)
                 mask = mask.at[:, direction_indices].set(valid_hops)
@@ -905,11 +915,18 @@ class GameRuleParser(Transformer):
                     step_index = self.slide_lookup[direction, start, 1]
                     end_index = self.slide_lookup[direction, start, 2]
 
-                    board = state.board.at[piece, end_index].set(state.current_player)
-                    board = board.at[piece, start].set(EMPTY)
-                    board = board.at[:, step_index].set(EMPTY)  # Remove the hopped-over piece
+                    board = state.board.at[piece, start].set(EMPTY)
 
-                    captured_mask = jnp.zeros_like(state.captured).at[step_index].set(True)
+                    if hop_over_friendly:
+                        # Capture at destination: clear all pieces at end_index, place mover
+                        board = board.at[:, end_index].set(EMPTY)
+                        board = board.at[piece, end_index].set(state.current_player)
+                        captured_mask = jnp.zeros_like(state.captured).at[end_index].set(True)
+                    else:
+                        # Standard: move to empty end, capture the hopped-over piece
+                        board = board.at[piece, end_index].set(state.current_player)
+                        board = board.at[:, step_index].set(EMPTY)
+                        captured_mask = jnp.zeros_like(state.captured).at[step_index].set(True)
                     previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_index))
 
                     return state._replace(board=board, previous_actions=previous_actions, captured=captured_mask)
@@ -957,24 +974,35 @@ class GameRuleParser(Transformer):
                     mask, jnp.zeros_like(mask)
                 )
 
-                # Block moves to occupied squares
-                mask = jnp.where(
-                    occupied_mask[jnp.newaxis, :],
-                    jnp.zeros_like(mask),
-                    mask
-                )
+                if hop_over_friendly:
+                    # Hop-over-friendly: destination must have enemy piece
+                    enemy_mask = (state.board == (state.current_player + 1) % 2).any(axis=0).astype(BOARD_DTYPE)
+                    mask = jnp.where(
+                        enemy_mask[jnp.newaxis, :],
+                        mask,
+                        jnp.zeros_like(mask)
+                    )
+                else:
+                    # Standard hop: destination must be empty
+                    mask = jnp.where(
+                        occupied_mask[jnp.newaxis, :],
+                        jnp.zeros_like(mask),
+                        mask
+                    )
 
                 return mask
-            
+
             def apply_action_fn(state, action):
                 start_idx, end_idx = action // self.game_info.board_size, action % self.game_info.board_size
-                
-                board = state.board.at[piece, end_idx].set(state.current_player)
-                board = board.at[piece, start_idx].set(EMPTY)
+
+                board = state.board.at[piece, start_idx].set(EMPTY)
+                if hop_over_friendly:
+                    board = board.at[:, end_idx].set(EMPTY)
+                board = board.at[piece, end_idx].set(state.current_player)
                 previous_actions = state.previous_actions.at[jnp.array([state.current_player, 2])].set(ACTION_DTYPE(end_idx))
-                
+
                 return state._replace(board=board, previous_actions=previous_actions)
-        
+
         move_type_idx = list(MoveTypes).index(MoveTypes.HOP)
         def can_move_again_fn(state):
             direction_indices = all_direction_indices[state.current_player]
