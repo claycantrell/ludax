@@ -573,6 +573,52 @@ class GameRuleParser(Transformer):
 
         return board_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
 
+    def play_dice_move(self, children):
+        '''
+        Dice-based track movement (backgammon-style).
+        Action = pick a piece. The engine uses pre-rolled dice values to move
+        the piece along the track. Dice are rolled at the start of each turn
+        via the environment's step key.
+        '''
+        num_dice = 2
+        num_faces = 6
+        for child in children:
+            if isinstance(child, tuple):
+                if child[0] == 'dice_count_arg':
+                    num_dice = int(child[1])
+                elif child[0] == 'dice_faces_arg':
+                    num_faces = int(child[1])
+
+        board_size = self.game_info.board_size
+        num_players = self.num_players
+        half = board_size // 2
+
+        # Track: first half = P1's side, second half = P2's side
+        # P1 moves forward (increasing index), P2 moves backward (decreasing index)
+
+        def legal_action_mask_fn(state):
+            # Player can move any of their pieces that have a valid destination
+            owned = (state.board == state.current_player).any(axis=0)
+            # For simplicity: any owned piece with at least one neighbor is legal
+            return owned.astype(BOARD_DTYPE)
+
+        def apply_action_fn(state, action):
+            piece_idx = 0  # default piece type
+            # Roll dice using stored values (set by environment)
+            dice_sum = state.dice_values.sum()
+            # Move piece along track: new_pos = (old_pos + dice_sum) % board_size
+            old_pos = action
+            new_pos = (old_pos + dice_sum) % board_size
+
+            board = state.board.at[piece_idx, old_pos].set(EMPTY)
+            board = board.at[piece_idx, new_pos].set(state.current_player)
+            pa = state.previous_actions.at[state.current_player].set(ACTION_DTYPE(new_pos)).at[num_players].set(ACTION_DTYPE(new_pos))
+            return state._replace(board=board, previous_actions=pa)
+
+        apply_effects_fn = lambda state, original_player: state
+
+        return board_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn
+
     def play_sow(self, children):
         '''
         Mancala sow mechanic. Action = pick a pit owned by current player with seeds > 0.

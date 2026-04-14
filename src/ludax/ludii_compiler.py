@@ -819,6 +819,25 @@ class LudiiCompiler:
 
     def _build_play(self, tree) -> str:
         """Build play rules from Ludii tree."""
+        rules = _find_child(tree, "rules")
+        full_text = _get_text(rules) if rules else ""
+
+        # Dice games: any game with dice/Die in the equipment
+        is_dice = "dice" in full_text.lower() or "Die " in full_text
+        if is_dice:
+            # Extract dice count and faces
+            num_dice = 2
+            num_faces = 6
+            dice_match = re.search(r'(\d+)\s+d(\d+)', full_text)
+            if not dice_match:
+                dice_match = re.search(r'die\s+d(\d+)', full_text, re.IGNORECASE)
+                if dice_match:
+                    num_faces = int(dice_match.group(1))
+            count_match = re.search(r'num:(\d+)', full_text)
+            if count_match:
+                num_dice = int(count_match.group(1))
+            return f'(play (repeat (P1 P2) (dice_move dice:{num_dice} faces:{num_faces})))'
+
         if self.is_mancala:
             rules = _find_child(tree, "rules")
             full = _get_text(rules) if rules else ""

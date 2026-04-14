@@ -129,12 +129,13 @@ class LudaxEnvironment():
         return state
 
     def _step(self, state: State, action: Array, key) -> State:
-        # Currently, Ludax games don't have any stochastic elements, so we don't use the key
-        del key
-
-        # The game state is separate from the "environment state" and contains
-        # only the information necessary to progress the game
         game_state = state.game_state
+
+        # Roll dice if the game has dice_values in state
+        if hasattr(game_state, 'dice_values') and key is not None:
+            num_dice = game_state.dice_values.shape[0]
+            dice = jax.random.randint(key, (num_dice,), 1, 7).astype(BOARD_DTYPE)
+            game_state = game_state._replace(dice_values=dice)
 
         # Track the player who started the turn
         original_player = game_state.current_player

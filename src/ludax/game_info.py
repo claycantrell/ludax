@@ -268,6 +268,15 @@ class GameInfoExtractor(Visitor):
         elif child.data == "play_drop":
             self.game_info.move_type = "place"
 
+        elif child.data == "play_dice_move":
+            self.game_info.move_type = "dice_move"
+            bs = self.game_info.board_size
+            if "dice_values" not in self.game_state_attributes:
+                self.game_state_attributes.append("dice_values")
+                self.defaults.append(jnp.zeros(2, dtype=BOARD_DTYPE))  # 2 dice by default
+                self.game_state_attributes.append("pit_owner")
+                self.defaults.append(jnp.full(bs, -1, dtype=BOARD_DTYPE))
+
         elif child.data == "play_sow":
             self.game_info.move_type = "sow"
             # Mancala: seed_counts per cell, pit_owner per cell, sow track

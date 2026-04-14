@@ -46,7 +46,7 @@ phase_repeat: "(" "repeat" play_mover_order play_super_mechanic ")"
 play_mover_order: "(" player_reference+ ")"
 
 play_super_mechanic: play_mechanic force_pass? actions_per_turn?
-play_mechanic: play_place | play_move | play_drop | play_sow
+play_mechanic: play_place | play_move | play_drop | play_sow | play_dice_move
 force_pass: "(" "force_pass" ")"
 actions_per_turn: "(" "actions_per_turn" positive_int ")"
 
@@ -57,6 +57,12 @@ place_result_constraint: "(" "result" super_predicate ")"
 
 // ---Drop rules (place from hand/reserve)---
 play_drop: "(" "drop" piece_reference place_destination_constraint ")"
+
+// ---Dice move rules (backgammon)---
+// Roll dice, then move a piece along a track by the dice value
+play_dice_move: "(" "dice_move" dice_count_arg? dice_faces_arg? ")"
+dice_count_arg: "dice:" positive_int
+dice_faces_arg: "faces:" positive_int
 
 // ---Sow rules (mancala)---
 // Pick a pit owned by the current player and distribute seeds counter-clockwise
