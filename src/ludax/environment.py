@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 import jax
@@ -23,11 +24,17 @@ class LudaxEnvironment():
             with open(game_path, 'r') as f:
                 game_str = f.read()
 
-        parser = Lark(ludax.grammar, start='game')
+        # Detect format: Ludii uses { braces } in equipment, .ldx doesn't
+        is_ludii = bool(re.search(r'\(equipment\s*\{', game_str))
 
-        game_tree = parser.parse(game_str)
-        self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
-        game_rules = GameRuleParser(self.game_info).transform(game_tree)
+        if is_ludii:
+            from .ludii_compiler import compile_ludii
+            self.game_info, self.rendering_info, game_rules = compile_ludii(game_str)
+        else:
+            parser = Lark(ludax.grammar, start='game')
+            game_tree = parser.parse(game_str)
+            self.game_info, self.rendering_info = GameInfoExtractor()(game_tree)
+            game_rules = GameRuleParser(self.game_info).transform(game_tree)
 
         self.game_state_cls = self.game_info.game_state_class
 
