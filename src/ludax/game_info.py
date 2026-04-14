@@ -37,6 +37,10 @@ class GameInfo:
     max_hand_size: int = 0
     actions_per_turn: int = 1
 
+    # Graph board: explicit adjacency matrix (None for grid boards)
+    graph_adjacency: object = None  # jnp array (max_neighbors, board_size) or None
+    vertex_positions: object = None  # list of (x, y) for rendering, or None
+
     forward_directions: tuple[str] = ()
 
     def __repr__(self):
@@ -159,9 +163,16 @@ class GameInfoExtractor(Visitor):
             self.game_info.board_size = width * height    
             self.game_info.num_directions = 6
 
+        elif board_shape == Shapes.GRAPH:
+            size = int(shape_tree.children[0])
+            self.game_info.board_size = size
+            self.game_info.board_dims = (size, 1)
+            self.game_info.observation_shape = (size, 1, 2)
+            # num_directions set later from graph_adjacency
+
         else:
             raise NotImplementedError(f"Board shape {board_shape} not implemented yet!")
-        
+
     def pieces(self, tree):
         piece_infos = list(map(lambda x: (self._nav(x, 0), self._nav(x, 1)), tree.children))
         piece_names, piece_owners = zip(*piece_infos)

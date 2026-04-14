@@ -17,7 +17,7 @@ import jax.numpy as jnp
 
 from .config import (
     BOARD_DTYPE, ACTION_DTYPE, REWARD_DTYPE, EMPTY, P1, P2,
-    ActionTypes, MoveTypes, PlayerAndMoverRefs,
+    ActionTypes, MoveTypes, PlayerAndMoverRefs, Shapes,
 )
 from .game_info import GameInfo, RenderingInfo, GameInfoExtractor
 from .game_parser import GameRuleParser
@@ -76,11 +76,17 @@ class LudiiCompiler:
         self.piece_movements = {} # {name: raw_text}
         self.board_shape = ""
         self.board_ldx = ""
+        self.board_size = 0
         self.has_set_forward = False
         self.is_mancala = False
         self.mancala_rows = 0
         self.mancala_cols = 0
         self.regions = []
+        # Graph board data
+        self.is_graph = False
+        self.graph_vertices = []   # [(x, y), ...]
+        self.graph_edges = []      # [(v1, v2), ...]
+        self.graph_adjacency = None  # np array (max_neighbors, board_size)
 
     def compile(self, lud_text: str):
         """Compile Ludii text to (GameInfo, RenderingInfo, game_rules dict).
@@ -203,12 +209,331 @@ class LudiiCompiler:
                     self.board_shape = "square"
                 return
 
+        # Graph board: explicit vertex/edge definition
+        if shape == "graph":
+            self._parse_graph_board(content)
+            return
+
+        # Concentric board: rings of polygons
+        if shape == "concentric":
+            self._parse_concentric_board(content)
+            return
+
+        # Complete graph
+        if shape == "complete":
+            self._parse_complete_board(content)
+            return
+
+        # Spiral
+        if shape == "spiral":
+            self._parse_spiral_board(content)
+            return
+
+        # Board construction operations: merge, add, remove, shift, scale, etc.
+        # These compose sub-boards — extract all sub-boards and merge their vertices/edges
+        if any(kw in content.lower() for kw in ["merge", "add", "remove", "shift", "scale",
+                                                  "union", "keep", "trim", "skew", "dual",
+                                                  "splitcrossings", "renumber", "subdivide",
+                                                  "makefaces", "hole", "intersect"]):
+            self._parse_composite_board(content)
+            return
+
         # Last resort
-        if any(kw in content.lower() for kw in ["merge", "add", "remove", "shift", "scale"]):
-            nums = [int(t) for t in tokens if t.isdigit() and 3 <= int(t) <= 20]
+        nums = [int(t) for t in tokens if t.isdigit() and 3 <= int(t) <= 20]
+        size = max(nums) if nums else 7
+        self._setup_graph_from_grid(size, size)
+
+    def _parse_graph_board(self, content: str):
+        """Parse (graph vertices: {x0 y0 x1 y1 ...} edges: {{v0 v1} ...})."""
+        import numpy as np
+
+        # Extract vertex coordinates
+        verts_match = re.search(r'vertices:?\s*([\d\s.\-]+?)(?:edges|$)', content)
+        vertices = []
+        if verts_match:
+            nums = re.findall(r'[\d.\-]+', verts_match.group(1))
+            for i in range(0, len(nums) - 1, 2):
+                vertices.append((float(nums[i]), float(nums[i + 1])))
+
+        # Extract edges
+        edges_match = re.search(r'edges:?\s*(.*)', content, re.DOTALL)
+        edges = []
+        if edges_match:
+            edge_nums = re.findall(r'(\d+)\s+(\d+)', edges_match.group(1))
+            for v1, v2 in edge_nums:
+                edges.append((int(v1), int(v2)))
+
+        if not vertices:
+            # Fallback: count numbers and assume pairs
+            nums = re.findall(r'[\d.\-]+', content)
+            for i in range(0, len(nums) - 1, 2):
+                try:
+                    vertices.append((float(nums[i]), float(nums[i + 1])))
+                except ValueError:
+                    break
+
+        self._build_graph(vertices, edges)
+
+    def _parse_concentric_board(self, content: str):
+        """Parse concentric boards like (concentric Square rings:3) or (concentric {1 6 6 6})."""
+        import math
+
+        tokens = content.replace("(", " ").replace(")", " ").split()
+
+        # Check for explicit ring sizes: (concentric {1 6 6 6})
+        # or (concentric N M ...) where they're just numbers
+        nums = [int(t) for t in tokens if t.isdigit()]
+
+        # Detect polygon type
+        polygon = "square"
+        for t in tokens:
+            t_lower = t.lower()
+            if t_lower in ("square", "triangle", "hexagon"):
+                polygon = t_lower
+
+        # Get ring count
+        rings = 3  # default
+        rings_match = re.search(r'rings:(\d+)', content)
+        if rings_match:
+            rings = int(rings_match.group(1))
+
+        # Build vertices in concentric rings
+        vertices = [(0.0, 0.0)]  # center
+        edges = []
+
+        if nums and len(nums) >= 2 and not rings_match:
+            # Explicit ring sizes: (concentric 1 6 6 6)
+            ring_sizes = nums
+        else:
+            # Auto ring sizes based on polygon
+            sides = {"square": 4, "triangle": 3, "hexagon": 6}.get(polygon, 4)
+            ring_sizes = [1] + [sides * (r + 1) for r in range(rings)]
+
+        vertex_idx = 0
+        ring_start_indices = []
+        for ring_idx, ring_size in enumerate(ring_sizes):
+            ring_start = vertex_idx
+            ring_start_indices.append(ring_start)
+            if ring_idx == 0:
+                # Center vertex already added
+                vertex_idx += 1
+                continue
+            radius = ring_idx
+            for i in range(ring_size):
+                angle = 2 * math.pi * i / ring_size
+                x = radius * math.cos(angle)
+                y = radius * math.sin(angle)
+                vertices.append((x, y))
+                # Connect to next vertex in same ring
+                if i > 0:
+                    edges.append((vertex_idx, vertex_idx - 1))
+                vertex_idx += 1
+            # Close the ring
+            edges.append((ring_start, vertex_idx - 1))
+            # Connect to inner ring
+            inner_start = ring_start_indices[ring_idx - 1]
+            inner_size = ring_sizes[ring_idx - 1]
+            for i in range(ring_size):
+                # Connect to nearest inner vertex
+                inner_idx = inner_start + (i * inner_size // ring_size) % inner_size
+                edges.append((ring_start + i, inner_idx))
+
+        # Check for joinCorners/joinMidpoints flags
+        if "joinCorners:True" in content or "joinCorners:true" in content:
+            # Add diagonal connections between ring corners
+            pass  # Already handled by inner ring connections
+
+        self._build_graph(vertices, edges)
+
+    def _parse_complete_board(self, content: str):
+        """Parse (complete N) or (complete regular Star N)."""
+        import math
+        tokens = content.replace("(", " ").replace(")", " ").split()
+        nums = [int(t) for t in tokens if t.isdigit()]
+        n = nums[0] if nums else 5
+
+        is_star = "star" in content.lower()
+
+        vertices = []
+        edges = []
+        if is_star:
+            # Star polygon: n outer + n inner vertices
+            for i in range(n):
+                angle = 2 * math.pi * i / n - math.pi / 2
+                vertices.append((math.cos(angle), math.sin(angle)))
+                inner_angle = angle + math.pi / n
+                vertices.append((0.5 * math.cos(inner_angle), 0.5 * math.sin(inner_angle)))
+            # Connect star edges
+            for i in range(n):
+                edges.append((2 * i, 2 * i + 1))
+                edges.append((2 * i + 1, (2 * (i + 1)) % (2 * n)))
+        else:
+            # Complete graph: every vertex connected to every other
+            for i in range(n):
+                angle = 2 * math.pi * i / n
+                vertices.append((math.cos(angle), math.sin(angle)))
+            for i in range(n):
+                for j in range(i + 1, n):
+                    edges.append((i, j))
+
+        self._build_graph(vertices, edges)
+
+    def _parse_spiral_board(self, content: str):
+        """Parse (spiral turns:N sites:N)."""
+        import math
+        tokens = content.replace("(", " ").replace(")", " ").split()
+        nums = [int(t) for t in tokens if t.isdigit()]
+        n = nums[0] if nums else 20  # number of sites
+
+        vertices = []
+        edges = []
+        for i in range(n):
+            angle = 4 * math.pi * i / n
+            radius = 1 + i * 0.3
+            vertices.append((radius * math.cos(angle), radius * math.sin(angle)))
+            if i > 0:
+                edges.append((i - 1, i))
+
+        self._build_graph(vertices, edges)
+
+    def _parse_composite_board(self, content: str):
+        """Parse merge/add/remove/etc composite boards.
+
+        Strategy: find all sub-board shapes, compute their vertices with shifts,
+        then merge into one graph.
+        """
+        import math
+
+        # Extract all sub-board definitions with their shifts
+        # Pattern: (shift dx dy (shape args)) or (shape args)
+        vertices = []
+        edges = []
+
+        # Find all square/rectangle sub-boards with optional shifts
+        for m in re.finditer(r'(?:shift\s+([\d.\-]+)\s+([\d.\-]+)\s+)?(?:square|rectangle)\s+(\d+)(?:\s+(\d+))?', content):
+            dx = float(m.group(1)) if m.group(1) else 0
+            dy = float(m.group(2)) if m.group(2) else 0
+            n1 = int(m.group(3))
+            n2 = int(m.group(4)) if m.group(4) else n1
+
+            base_idx = len(vertices)
+            for row in range(n2):
+                for col in range(n1):
+                    vertices.append((dx + col, dy + row))
+                    idx = base_idx + row * n1 + col
+                    # Right neighbor
+                    if col < n1 - 1:
+                        edges.append((idx, idx + 1))
+                    # Down neighbor
+                    if row < n2 - 1:
+                        edges.append((idx, idx + n1))
+
+        # Find hex sub-boards
+        for m in re.finditer(r'(?:shift\s+([\d.\-]+)\s+([\d.\-]+)\s+)?hex(?:agon)?\s+(\d+)', content):
+            dx = float(m.group(1)) if m.group(1) else 0
+            dy = float(m.group(2)) if m.group(2) else 0
+            size = int(m.group(3))
+            base_idx = len(vertices)
+            # Simple hex grid approximation
+            for row in range(size):
+                for col in range(size):
+                    x = dx + col + (0.5 if row % 2 else 0)
+                    y = dy + row * 0.866
+                    vertices.append((x, y))
+
+        # If we found vertices, build the graph
+        if vertices:
+            # Remove duplicate vertices (from merge overlaps)
+            unique_verts = []
+            vert_map = {}
+            for i, (x, y) in enumerate(vertices):
+                # Round to avoid floating point duplicates
+                key = (round(x, 2), round(y, 2))
+                if key not in vert_map:
+                    vert_map[key] = len(unique_verts)
+                    unique_verts.append((x, y))
+                # Map old index to new
+                vert_map[i] = vert_map[key] if isinstance(vert_map.get(key), int) else vert_map[key]
+
+            # Remap edges
+            remapped_edges = set()
+            for v1, v2 in edges:
+                k1 = (round(vertices[v1][0], 2), round(vertices[v1][1], 2))
+                k2 = (round(vertices[v2][0], 2), round(vertices[v2][1], 2))
+                nv1 = vert_map[k1]
+                nv2 = vert_map[k2]
+                if nv1 != nv2:
+                    remapped_edges.add((min(nv1, nv2), max(nv1, nv2)))
+
+            # Also add adjacency for nearby vertices (from merge overlaps)
+            for i, (x1, y1) in enumerate(unique_verts):
+                for j, (x2, y2) in enumerate(unique_verts):
+                    if i >= j:
+                        continue
+                    dist = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                    if dist < 1.5:  # Adjacent threshold
+                        remapped_edges.add((i, j))
+
+            self._build_graph(unique_verts, list(remapped_edges))
+        else:
+            # Fallback: approximate as square
+            nums = [int(t) for t in content.split() if t.isdigit() and 3 <= int(t) <= 20]
             size = max(nums) if nums else 7
-            self.board_ldx = f"square {size}"
-            self.board_shape = "square"
+            self._setup_graph_from_grid(size, size)
+
+    def _build_graph(self, vertices, edges):
+        """Convert vertices + edges into graph board data."""
+        import numpy as np
+
+        n = len(vertices)
+        if n == 0:
+            self._setup_graph_from_grid(5, 5)
+            return
+
+        # Build adjacency lists
+        adj_lists = [[] for _ in range(n)]
+        for v1, v2 in edges:
+            if 0 <= v1 < n and 0 <= v2 < n:
+                if v2 not in adj_lists[v1]:
+                    adj_lists[v1].append(v2)
+                if v1 not in adj_lists[v2]:
+                    adj_lists[v2].append(v1)
+
+        max_neighbors = max(len(a) for a in adj_lists) if adj_lists else 1
+        max_neighbors = max(max_neighbors, 1)
+
+        # Build adjacency matrix: (max_neighbors, board_size)
+        adjacency = np.full((max_neighbors, n), n, dtype=np.int16)  # sentinel = n
+        for v in range(n):
+            for i, neighbor in enumerate(adj_lists[v][:max_neighbors]):
+                adjacency[i, v] = neighbor
+
+        self.is_graph = True
+        self.graph_vertices = vertices
+        self.graph_edges = edges
+        self.graph_adjacency = adjacency
+        self.board_size = n
+        self.board_shape = "graph"
+        self.board_ldx = f"graph {n}"  # placeholder for LDX
+
+    def _setup_graph_from_grid(self, rows, cols):
+        """Create a graph board from a simple grid (for fallback)."""
+        vertices = []
+        edges = []
+        for r in range(rows):
+            for c in range(cols):
+                vertices.append((c, r))
+                idx = r * cols + c
+                if c < cols - 1:
+                    edges.append((idx, idx + 1))
+                if r < rows - 1:
+                    edges.append((idx, idx + cols))
+                # Diagonals
+                if c < cols - 1 and r < rows - 1:
+                    edges.append((idx, idx + cols + 1))
+                if c > 0 and r < rows - 1:
+                    edges.append((idx, idx + cols - 1))
+        self._build_graph(vertices, edges)
 
     def _parse_mancala_board(self, content: str):
         nums = [int(t) for t in content.split() if t.isdigit()]
@@ -685,6 +1010,8 @@ def compile_ludii(lud_text: str):
     This is the main entry point. Returns the same format that
     LudaxEnvironment expects.
     """
+    import numpy as np
+
     compiler = LudiiCompiler()
     ldx = compiler.compile(lud_text)
 
@@ -695,6 +1022,16 @@ def compile_ludii(lud_text: str):
     ldx_tree = ldx_parser.parse(ldx)
 
     game_info, rendering_info = GameInfoExtractor()(ldx_tree)
+
+    # For graph boards, inject adjacency data computed by the compiler
+    if compiler.is_graph and compiler.graph_adjacency is not None:
+        game_info.graph_adjacency = jnp.array(compiler.graph_adjacency)
+        game_info.vertex_positions = compiler.graph_vertices
+        game_info.num_directions = compiler.graph_adjacency.shape[0]
+        # Update BOARD_SHAPE_TO_DIRECTIONS for this game
+        from . import utils
+        utils.BOARD_SHAPE_TO_DIRECTIONS[Shapes.GRAPH] = list(range(game_info.num_directions))
+
     game_rules = GameRuleParser(game_info).transform(ldx_tree)
 
     return game_info, rendering_info, game_rules

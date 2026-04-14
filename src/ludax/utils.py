@@ -26,10 +26,13 @@ BOARD_SHAPE_TO_DIRECTIONS = {
             Directions.DOWN_LEFT, Directions.DOWN_RIGHT
     ],
     Shapes.HEX_RECTANGLE: [
-            Directions.UP_LEFT, Directions.UP_RIGHT, 
-            Directions.LEFT, Directions.RIGHT, 
+            Directions.UP_LEFT, Directions.UP_RIGHT,
+            Directions.LEFT, Directions.RIGHT,
             Directions.DOWN_LEFT, Directions.DOWN_RIGHT
-    ]
+    ],
+    # Graph boards: directions are populated dynamically based on max_neighbors
+    # This entry is a placeholder — the actual directions list is set at compile time
+    Shapes.GRAPH: []
 }
 
 META_DIRECTION_MAPPING = {
@@ -155,6 +158,59 @@ def _get_adjacency_kernel(game_info: GameInfo, optional_args: dict):
     
     return kernel
 
+def _get_adjacency_lookup_graph(game_info: GameInfo):
+    """Build adjacency lookup for graph boards from explicit adjacency matrix.
+
+    game_info.graph_adjacency is (max_neighbors, board_size) where
+    graph_adjacency[n, v] = the nth neighbor of vertex v, or board_size (sentinel).
+
+    Returns (max_neighbors, board_size, board_size) boolean adjacency array,
+    same format as grid adjacency but with neighbor indices as "directions".
+    """
+    adj = game_info.graph_adjacency  # (max_neighbors, board_size)
+    max_neighbors = adj.shape[0]
+    board_size = game_info.board_size
+
+    adjacency_array = jnp.zeros((max_neighbors, board_size, board_size), dtype=BOARD_DTYPE)
+    for n in range(max_neighbors):
+        for v in range(board_size):
+            neighbor = int(adj[n, v])
+            if neighbor < board_size:
+                adjacency_array = adjacency_array.at[n, v, neighbor].set(1)
+
+    return adjacency_array
+
+
+def _get_slide_lookup_graph(game_info: GameInfo):
+    """Build slide lookup for graph boards.
+
+    For graph boards, sliding means following edges repeatedly.
+    slide_lookup[neighbor_idx, start, distance] = the vertex reached by
+    following the nth neighbor direction `distance` times from `start`.
+
+    This is a BFS along each neighbor direction.
+    """
+    adj = game_info.graph_adjacency  # (max_neighbors, board_size)
+    max_neighbors = adj.shape[0]
+    board_size = game_info.board_size
+    max_distance = board_size  # worst case: path visits every vertex
+
+    slide_lookup = np.full((max_neighbors, board_size, max_distance), board_size, dtype=np.int16)
+
+    for n in range(max_neighbors):
+        for start in range(board_size):
+            # Walk along this "direction" — follow the same relative neighbor index
+            pos = start
+            for d in range(max_distance):
+                slide_lookup[n, start, d] = pos
+                next_pos = int(adj[n, pos])
+                if next_pos >= board_size:
+                    break
+                pos = next_pos
+
+    return jnp.array(slide_lookup, dtype=ACTION_DTYPE)
+
+
 def _get_adjacency_lookup(game_info: GameInfo):
     '''
     Constructs an array that can be used to look up the adjacencies of any position on the board. The resulting
@@ -162,6 +218,8 @@ def _get_adjacency_lookup(game_info: GameInfo):
     and M is the number of positions on the board. The value at [c, m1, m2] indicates whether m2 is adjacent to
     m1 in direction c.
     '''
+    if game_info.board_shape == Shapes.GRAPH:
+        return _get_adjacency_lookup_graph(game_info)
 
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     mask_to_board, idx_to_pos, board_to_mask = _get_mask_board_conversion_fns(game_info)
@@ -194,6 +252,12 @@ def _get_direction_indices(game_info: GameInfo, directions: typing.Union[Directi
 
     Returns the direction indices for each player separately (which will be the same for non-relative directions)
     '''
+    # For graph boards, all "directions" are neighbor indices
+    if game_info.board_shape == Shapes.GRAPH:
+        num_neighbors = game_info.num_directions
+        all_indices = list(range(num_neighbors))
+        return all_indices, all_indices
+
     all_directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
 
     p1_query_dirs = []
@@ -211,7 +275,7 @@ def _get_direction_indices(game_info: GameInfo, directions: typing.Union[Directi
         else:
             p1_direction = direction
             p2_direction = direction
-        
+
 
         p1_query_dirs += META_DIRECTION_MAPPING.get(p1_direction, [p1_direction])
         p2_query_dirs += META_DIRECTION_MAPPING.get(p2_direction, [p2_direction])
@@ -242,6 +306,9 @@ def _get_slide_lookup(game_info: GameInfo):
     hexagonal boards), M is the number of positions on the board, and N is the maximum
     number of positions in a line in that direction.
     '''
+    if game_info.board_shape == Shapes.GRAPH:
+        return _get_slide_lookup_graph(game_info)
+
     directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
     num_board_positions = game_info.board_size
 
@@ -432,12 +499,12 @@ def _get_hop_between_lookup(game_info: GameInfo, slide_lookup):
     hopped over, or board_size (sentinel) if no hop connects start to dest.
     """
     board_size = game_info.board_size
-    directions = BOARD_SHAPE_TO_DIRECTIONS[game_info.board_shape]
+    num_dirs = game_info.num_directions
     sentinel = board_size
 
     lookup = np.full((board_size, board_size), sentinel, dtype=np.int16)
 
-    for dir_idx in range(len(directions)):
+    for dir_idx in range(num_dirs):
         for start in range(board_size):
             between = int(slide_lookup[dir_idx, start, 1])
             dest = int(slide_lookup[dir_idx, start, 2])
@@ -452,6 +519,13 @@ def _get_mask_board_conversion_fns(game_info: GameInfo):
     Return functions for the current game that can be used to convert between a flattened
     board mask and a two-dimensional board representation
     '''
+    if game_info.board_shape == Shapes.GRAPH:
+        n = game_info.board_size
+        mask_to_board = lambda mask: mask.reshape(n, 1)
+        mask_idx_to_board_pos = lambda idx: (idx, 0)
+        board_to_mask = lambda board: board.flatten()[:n]
+        return mask_to_board, mask_idx_to_board_pos, board_to_mask
+
     if game_info.board_shape == Shapes.SQUARE or game_info.board_shape == Shapes.RECTANGLE:
         mask_to_board = lambda mask: mask.reshape(game_info.board_dims)
         mask_idx_to_board_pos = lambda idx: jnp.unravel_index(idx, game_info.board_dims)
@@ -794,9 +868,10 @@ def _get_line_indices(game_info: GameInfo, n: int, orientation: Orientations):
     hexagonal boards because the width of each row changes. Recall that hexagonal boards are
     always arranged such that they have horizontal adjacencies and no vertical adjacencies.
     '''
+    indices = []
+
     if game_info.board_shape == Shapes.SQUARE or game_info.board_shape == Shapes.RECTANGLE:
         height, width = game_info.board_dims
-        indices = []
 
         if orientation in [Orientations.HORIZONTAL, Orientations.ORTHOGONAL, Orientations.ANY]:
             for row in range(height):
@@ -882,9 +957,33 @@ def _get_line_indices(game_info: GameInfo, n: int, orientation: Orientations):
                     start = row * width + col
                     indices.append(jnp.arange(start, start + n * (width - 1), width - 1))
 
+    elif game_info.board_shape == Shapes.GRAPH:
+        # For graph boards, lines follow paths along edges
+        # Use slide_lookup to find lines of N in each "direction" (neighbor index)
+        adj = game_info.graph_adjacency
+        if adj is not None:
+            max_neighbors = adj.shape[0]
+            board_size = game_info.board_size
+            for n_idx in range(max_neighbors):
+                for start in range(board_size):
+                    # Follow this neighbor direction for N steps
+                    path = [start]
+                    pos = start
+                    for step in range(n - 1):
+                        next_pos = int(adj[n_idx, pos])
+                        if next_pos >= board_size or next_pos in path:
+                            break
+                        path.append(next_pos)
+                        pos = next_pos
+                    if len(path) == n:
+                        indices.append(jnp.array(path, dtype=ACTION_DTYPE))
+
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
+    if not indices:
+        # Return empty array with correct shape
+        return jnp.zeros((0, n), dtype=ACTION_DTYPE)
     return jnp.array(indices, dtype=ACTION_DTYPE)
 
 def _get_custodial_indices(game_info: GameInfo, inner_n: int, orientation: Orientations):

@@ -13,11 +13,12 @@ p2_assignment: "(" P2 (UP | DOWN | LEFT | RIGHT) ")"
 
 // ---Equipment---
 equipment: "(" "equipment" board pieces stack_config? hand_config? regions? ")"
-board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle) ")"
+board: "(" "board" (board_square | board_rectangle | board_hexagon | board_hex_rectangle | board_graph) ")"
 ?board_square: square_shape
 ?board_rectangle: rectangle_shape
 ?board_hexagon: hexagon_shape
 ?board_hex_rectangle: hex_rectangle_shape
+?board_graph: graph_shape
 
 // ---Pieces---
 pieces: "(" "pieces" piece_definition+ ")"
@@ -257,6 +258,7 @@ shape_definition: hexagon_shape
                 | rectangle_shape
                 | square_shape
 
+graph_shape: "(" "graph" positive_int ")"
 hexagon_shape: "(" "hexagon" odd_int ")"
 hex_rectangle_shape: "(" "hex_rectangle" positive_int positive_int ")"
 rectangle_shape: "(" "rectangle" positive_int positive_int ")"

@@ -65,6 +65,7 @@ class Shapes(StrEnum):
     RECTANGLE = 'rectangle_shape'
     HEXAGON = 'hexagon_shape'
     HEX_RECTANGLE = 'hex_rectangle_shape'
+    GRAPH = 'graph_shape'
 
 class EdgeTypes(StrEnum):
     TOP = 'top'
