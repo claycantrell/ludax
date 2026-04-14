@@ -335,7 +335,7 @@ class LudiiCompiler:
             inner_size = ring_sizes[ring_idx - 1]
             for i in range(ring_size):
                 # Connect to nearest inner vertex
-                inner_idx = inner_start + (i * inner_size // ring_size) % inner_size
+                inner_idx = inner_start + ((i * inner_size // ring_size) % inner_size if inner_size > 0 else 0)
                 edges.append((ring_start + i, inner_idx))
 
         # Check for joinCorners/joinMidpoints flags
@@ -924,7 +924,8 @@ class LudiiCompiler:
 
         ldx_phases = []
         for _, phase_content in phase_blocks:
-            if "move Add" in phase_content:
+            is_placement = "move Add" in phase_content or "handSite" in phase_content or "Hand" in phase_content
+            if is_placement:
                 piece = self.pieces[0][0] if self.pieces else "token"
                 if "nextPhase" in phase_content:
                     ldx_phases.append(f'(once_through (P1 P2) (place "{piece}" (destination (empty))))')
