@@ -708,6 +708,17 @@ class LudiiCompiler:
             row = min(int(row_num), board_h - 1)
             start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
 
+        # Site-list pattern: place "Name" sites 2 3 4 ... or place "Name" (sites {2 3 4 ...})
+        for m in re.finditer(r'place\s+"([^"]+)"\s+(?:\(?sites\s+)?\{?(\d[\d\s]+)\}?', full_text):
+            pname_raw = m.group(1)
+            indices_str = m.group(2)
+            pname = re.sub(r'\d+$', '', pname_raw).lower() or piece_name
+            player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
+            indices = [int(x) for x in re.findall(r'\d+', indices_str)]
+            indices = [i for i in indices if i < (self.board_size or 9999)]
+            if indices:
+                start_ldx.append(f'(place "{pname}" {player} ({" ".join(str(i) for i in indices)}))')
+
         # Coord pattern for chess-like games
         is_chess_like = len(self.pieces) > 2 and "forEach Piece" in full_text
         if is_chess_like and ("square" in self.board_ldx or "rectangle" in self.board_ldx):

@@ -368,11 +368,12 @@ class GameRuleParser(Transformer):
         (e.g. applying a "force pass") rule
         '''
         (action_size, apply_action_fn, legal_action_mask_fn, apply_effects_fn), *optional = children
-        # force_pass returns True (from grammar), actions_per_turn returns an int
         force_pass = any(v is True for v in optional)
-        
-        # The "force_pass" rule adds an additional action which passes the turn to the next player
-        # that can only be taken (and must be taken) when no other legal moves are available
+
+        # Determine if this phase is placement-only (action_size == board_size)
+        # vs movement (action_size == board_size^2). Extra turn logic only applies to movement.
+        is_placement_phase = (action_size == self.game_info.board_size)
+
         if force_pass:
             action_size += 1
 
@@ -395,8 +396,7 @@ class GameRuleParser(Transformer):
             
             return action_size, new_apply_action_fn, new_legal_action_mask_fn, apply_effects_fn
         
-        # TODO: Is this the right place to put this?
-        elif "extra_turn_fn_idx" in self.game_info.game_state_attributes:
+        elif "extra_turn_fn_idx" in self.game_info.game_state_attributes and not is_placement_phase:
             def new_legal_action_mask_fn(state):
                 base_mask = legal_action_mask_fn(state)
                 extra_turn_idx = state.extra_turn_fn_idx
@@ -1282,7 +1282,6 @@ class GameRuleParser(Transformer):
                 start_mask = jnp.zeros(self.game_info.board_size, dtype=BOARD_DTYPE).at[last_action].set(1)[:, jnp.newaxis]
                 base_mask = legal_action_mask.reshape(action_shape)
                 new_legal_action_mask = jnp.where(start_mask, base_mask, 0).flatten()
-
                 return new_legal_action_mask
         else:
             def extra_turn_condition(state, legal_action_mask):
