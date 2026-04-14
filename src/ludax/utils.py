@@ -722,6 +722,18 @@ def _get_edge_indices(game_info: GameInfo, edge_type: EdgeTypes):
         else:
             indices = jnp.array([])
 
+    elif game_info.board_shape == Shapes.GRAPH:
+        # Graph boards: "edge" vertices are those with fewer neighbors than max
+        if game_info.graph_adjacency is not None:
+            adj = game_info.graph_adjacency
+            max_n = adj.shape[0]
+            neighbor_counts = (adj < game_info.board_size).sum(axis=0)
+            # Edge vertices have fewer than max neighbors
+            edge_verts = np.where(np.array(neighbor_counts) < max_n)[0]
+            indices = jnp.array(edge_verts) if len(edge_verts) > 0 else jnp.array([0])
+        else:
+            indices = jnp.array([0])
+
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
@@ -746,9 +758,16 @@ def _get_row_indices(game_info: GameInfo, row_idx: int):
         height, width = game_info.board_dims
         indices = jnp.arange(row_idx * width, (row_idx + 1) * width)
 
+    elif game_info.board_shape == Shapes.GRAPH:
+        # Graph boards have no geometric rows — return empty or single vertex
+        if row_idx < game_info.board_size:
+            indices = jnp.array([row_idx])
+        else:
+            indices = jnp.array([], dtype=ACTION_DTYPE)
+
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
-    
+
     return indices.astype(ACTION_DTYPE)
 
 def _get_valid_edge_types(game_info: GameInfo):
@@ -771,6 +790,9 @@ def _get_valid_edge_types(game_info: GameInfo):
             EdgeTypes.TOP, EdgeTypes.BOTTOM,
             EdgeTypes.LEFT, EdgeTypes.RIGHT
         ]
+    elif game_info.board_shape == Shapes.GRAPH:
+        # Graph boards don't have directional edges, just "edge" (boundary) vertices
+        edge_types = [EdgeTypes.TOP]  # Use TOP as a generic "boundary" marker
     else:
         raise NotImplementedError(f"Board shape {game_info.board_shape} not implemented yet!")
 
