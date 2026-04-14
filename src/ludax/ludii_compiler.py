@@ -589,6 +589,7 @@ class LudiiCompiler:
         self.pieces.append((name, owner))
 
     def _merge_symmetric_pieces(self):
+        self.piece_name_map = {}  # original_name → merged_name
         if len(self.pieces) < 2:
             return
         p1 = [(i, n) for i, (n, o) in enumerate(self.pieces) if o == "P1"]
@@ -607,6 +608,7 @@ class LudiiCompiler:
                     continue
                 if _kws(self.piece_movements.get(p1_name, "")) == _kws(self.piece_movements.get(p2_name, "")):
                     self.pieces[p1_idx] = (p1_name, "both")
+                    self.piece_name_map[p2_name] = p1_name  # policeman → suffragette
                     merged.add(p2_idx)
                     break
         for idx in sorted(merged, reverse=True):
@@ -654,6 +656,20 @@ class LudiiCompiler:
         parts.append(")")
 
         return "\n".join(parts)
+
+    def _resolve_piece_name(self, raw_name):
+        """Map a Ludii piece name to the (possibly merged) compiler piece name."""
+        name = re.sub(r'\d+$', '', raw_name).lower()
+        if not name:
+            name = raw_name.lower()
+        # Apply merge mapping (e.g. policeman → suffragette)
+        name = getattr(self, 'piece_name_map', {}).get(name, name)
+        # Verify it exists in pieces
+        valid_names = {p for p, _ in self.pieces}
+        if name not in valid_names and valid_names:
+            # Fall back to first piece
+            name = self.pieces[0][0]
+        return name
 
     def _build_start(self, tree) -> str:
         """Extract start positions — delegates to transpiler logic."""
@@ -703,7 +719,7 @@ class LudiiCompiler:
         # Row pattern
         row_matches = re.findall(r'place\s+"([^"]+)"\s+(?:\(?sites )?Row (\d+)\)?', full_text)
         for pname_raw, row_num in row_matches:
-            pname = re.sub(r'\d+$', '', pname_raw).lower() or piece_name
+            pname = self._resolve_piece_name(pname_raw)
             player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
             row = min(int(row_num), board_h - 1)
             start_ldx.append(f'(place "{pname}" {player} ((row {row})))')
@@ -712,7 +728,7 @@ class LudiiCompiler:
         for m in re.finditer(r'place\s+"([^"]+)"\s+(?:\(?sites\s+)?\{?(\d[\d\s]+)\}?', full_text):
             pname_raw = m.group(1)
             indices_str = m.group(2)
-            pname = re.sub(r'\d+$', '', pname_raw).lower() or piece_name
+            pname = self._resolve_piece_name(pname_raw)
             player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
             indices = [int(x) for x in re.findall(r'\d+', indices_str)]
             indices = [i for i in indices if i < (self.board_size or 9999)]
@@ -725,7 +741,7 @@ class LudiiCompiler:
             for m in re.finditer(r'place\s+"([^"]+)"\s+((?:coord:)?"[A-Za-z]\d+"(?:\s+"[A-Za-z]\d+")*)', full_text):
                 pname_raw = m.group(1)
                 coords_str = m.group(2)
-                pname = re.sub(r'\d+$', '', pname_raw).lower() or piece_name
+                pname = self._resolve_piece_name(pname_raw)
                 player = "P1" if pname_raw.endswith("1") else "P2" if pname_raw.endswith("2") else "P1"
                 coord_values = re.findall(r'"([A-Za-z]\d+)"', coords_str)
                 indices = []
